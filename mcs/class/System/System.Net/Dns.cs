@@ -41,9 +41,7 @@ using System.Collections;
 using System.Threading;
 using System.Runtime.CompilerServices;
 using System.Runtime.Remoting.Messaging;
-#if NET_4_5
 using System.Threading.Tasks;
-#endif
 
 #if !MOBILE
 using Mono.Net.Dns;
@@ -73,9 +71,6 @@ namespace System.Net {
 			get { return use_mono_dns; }
 		}
 #endif
-
-#if !MOONLIGHT // global remove of async methods
-
 
 		private delegate IPHostEntry GetHostByNameCallback (string hostName);
 		private delegate IPHostEntry ResolveCallback (string hostName);
@@ -129,7 +124,7 @@ namespace System.Net {
 				throw ares.Exception;
 			IPHostEntry entry = ares.HostEntry;
 			if (entry == null || entry.AddressList == null || entry.AddressList.Length == 0)
-				throw new SocketException(11001);
+				Error_11001 (entry.HostName);
 			return entry;
 		}
 #endif
@@ -283,10 +278,8 @@ namespace System.Net {
 			GetHostEntryNameCallback cb = (GetHostEntryNameCallback) async.AsyncDelegate;
 			return cb.EndInvoke(asyncResult);
 		}
-		
-#endif // !MOONLIGHT: global remove of async methods
 
-#if !TARGET_JVM
+
 		[MethodImplAttribute(MethodImplOptions.InternalCall)]
 		private extern static bool GetHostByName_internal(string host, out string h_name, out string[] h_aliases, out string[] h_addr_list);
 
@@ -295,9 +288,14 @@ namespace System.Net {
 
 		[MethodImplAttribute(MethodImplOptions.InternalCall)]
 		private extern static bool GetHostName_internal(out string h_name);
-#endif	
 
-		private static IPHostEntry hostent_to_IPHostEntry(string h_name, string[] h_aliases, string[] h_addrlist) 
+		static void Error_11001 (string hostName)
+		{
+			throw new SocketException(11001, string.Format ("Could not resolve host '{0}'", hostName));
+
+		}
+
+		private static IPHostEntry hostent_to_IPHostEntry(string originalHostName, string h_name, string[] h_aliases, string[] h_addrlist) 
 		{
 			IPHostEntry he = new IPHostEntry();
 			ArrayList addrlist = new ArrayList();
@@ -321,7 +319,7 @@ namespace System.Net {
 			}
 
 			if(addrlist.Count == 0)
-				throw new SocketException(11001);
+				Error_11001 (originalHostName);
 
 			he.AddressList = addrlist.ToArray(typeof(IPAddress)) as IPAddress[];
 			return he;
@@ -360,30 +358,10 @@ namespace System.Net {
 
 			string h_name;
 			string[] h_aliases, h_addrlist;
-#if TARGET_JVM
-			h_name = null;
-			h_aliases = null;
-			h_addrlist = null;
-            		try {
-                		java.net.InetAddress[] iaArr = 
-					java.net.InetAddress.getAllByName(address);
-		                if (iaArr != null && iaArr.Length > 0)
-                		    h_name = iaArr[0].getHostName();
-		                if (iaArr != null && iaArr.Length > 0)
-                		{
-		                    h_addrlist = new String[iaArr.Length];
-                		    for (int i = 0; i < h_addrlist.Length; i++)
-		                        h_addrlist[i] = iaArr[i].getHostAddress();
-                		}
-            		} catch (java.net.UnknownHostException jUHE) {
-		                throw new SocketException((int)SocketError.HostNotFound, jUHE.Message);
-            		}
-#else
 			bool ret = GetHostByAddr_internal(address, out h_name, out h_aliases, out h_addrlist);
 			if (!ret)
-				throw new SocketException(11001);
-#endif
-			return (hostent_to_IPHostEntry (h_name, h_aliases, h_addrlist));
+				Error_11001 (address);
+			return (hostent_to_IPHostEntry (address, h_name, h_aliases, h_addrlist));
 			
 		}
 
@@ -435,51 +413,26 @@ namespace System.Net {
 		{
 			if (hostName == null)
 				throw new ArgumentNullException ("hostName");
-#if TARGET_JVM
-			if (hostName.Length == 0)
-				hostName = "localhost";
-		        try {
-				java.net.InetAddress[] iaArr = java.net.InetAddress.getAllByName(hostName);
-				IPHostEntry host = new IPHostEntry();
-				if (iaArr != null && iaArr.Length > 0)
-                		{
-					host.HostName = iaArr[0].getHostName();
-                		    	IPAddress[] ipArr = new IPAddress[iaArr.Length];
-		                    	for (int i = 0; i < iaArr.Length; i++)
-                		        	ipArr[i] = IPAddress.Parse(iaArr[i].getHostAddress());
-
-					host.AddressList = ipArr;
-                		}
-		                return host;
-			} catch (java.net.UnknownHostException jUHE) {
-				throw new SocketException((int)SocketError.HostNotFound, jUHE.Message);
-			}
-#else
 			string h_name;
 			string[] h_aliases, h_addrlist;
 
 			bool ret = GetHostByName_internal(hostName, out h_name, out h_aliases, out h_addrlist);
 			if (ret == false)
-				throw new SocketException(11001);
+				Error_11001 (hostName);
 
-			return(hostent_to_IPHostEntry(h_name, h_aliases, h_addrlist));
-#endif
+			return(hostent_to_IPHostEntry(hostName, h_name, h_aliases, h_addrlist));
 		}
 
 		public static string GetHostName ()
 		{
-#if TARGET_JVM
-			return java.net.InetAddress.getLocalHost ().getHostName ();
-#else
 			string hostName;
 
 			bool ret = GetHostName_internal(out hostName);
 
 			if (ret == false)
-				throw new SocketException(11001);
+				Error_11001 (hostName);
 
 			return hostName;
-#endif
 		}
 
 		[Obsolete ("Use GetHostEntry instead")]
@@ -501,7 +454,6 @@ namespace System.Net {
 			return ret;
 		}
 
-#if NET_4_5
 		public static Task<IPAddress[]> GetHostAddressesAsync (string hostNameOrAddress)
 		{
 			return Task<IPAddress[]>.Factory.FromAsync (BeginGetHostAddresses, EndGetHostAddresses, hostNameOrAddress, null);
@@ -516,7 +468,6 @@ namespace System.Net {
 		{
 			return Task<IPHostEntry>.Factory.FromAsync (BeginGetHostEntry, EndGetHostEntry, hostNameOrAddress, null);
 		}
-#endif
 	}
 }
 

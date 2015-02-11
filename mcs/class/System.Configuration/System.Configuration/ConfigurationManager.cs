@@ -26,7 +26,7 @@
 //
 // Copyright (C) 2004 Novell, Inc (http://www.novell.com)
 //
-#if NET_2_0
+
 using System;
 using System.Collections;
 using System.Runtime.CompilerServices;
@@ -119,9 +119,6 @@ namespace System.Configuration {
 			return ConfigurationFactory.Create (typeof(ExeConfigurationHost), map, userLevel);
 		}
 
-#if TARGET_JVM
-		[MonoLimitation ("Supported only when the userLevel parameter is set to ConfigurationUserLevel.None. Other values are not supported because Environment.GetFolderPath method is not implemented.")]
-#endif
 		public static Configuration OpenExeConfiguration (ConfigurationUserLevel userLevel)
 		{
 			return OpenExeConfigurationInternal (userLevel, Assembly.GetEntryAssembly () ?? Assembly.GetCallingAssembly (), null);
@@ -177,7 +174,6 @@ namespace System.Configuration {
 			}
 		}
 
-		[MonoTODO]
 		public static ConnectionStringSettingsCollection ConnectionStrings {
 			get {
 				ConnectionStringsSection connectionStrings = (ConnectionStringsSection) GetSection ("connectionStrings");
@@ -209,5 +205,3 @@ namespace System.Configuration {
 		}
 	}
 }
-
-#endif

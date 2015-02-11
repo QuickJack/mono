@@ -42,8 +42,11 @@ namespace System.Reflection {
 	[ComDefaultInterfaceAttribute (typeof (_MethodBase))]
 	[Serializable]
 	[ClassInterface(ClassInterfaceType.None)]
+#if MOBILE
+	public abstract class MethodBase: MemberInfo {
+#else
 	public abstract class MethodBase: MemberInfo, _MethodBase {
-
+#endif
 		[MethodImplAttribute (MethodImplOptions.InternalCall)]
 		public extern static MethodBase GetCurrentMethod ();
 
@@ -87,10 +90,18 @@ namespace System.Reflection {
 		//
 		// This is a quick version for our own use. We should override
 		// it where possible so that it does not allocate an array.
+		// They cannot be abstract otherwise we break public contract
 		//
-		internal virtual int GetParameterCount ()
+		internal virtual ParameterInfo[] GetParametersInternal ()
 		{
-			throw new NotImplementedException ("must be implemented");
+			// Override me
+			return GetParameters ();
+		}
+
+		internal virtual int GetParametersCount ()
+		{
+			// Override me
+			return GetParametersInternal ().Length;
 		}
 
 		internal virtual Type GetParameterType (int pos) {
@@ -231,7 +242,6 @@ namespace System.Reflection {
 			throw new NotSupportedException ();
 		}
 
-#if NET_4_0
 		public override bool Equals (object obj)
 		{
 			return obj == (object) this;
@@ -277,12 +287,22 @@ namespace System.Reflection {
 				throw new NotImplementedException ();
 			}
 		}
-#endif
 
+		public virtual MethodImplAttributes MethodImplementationFlags {
+			get { return GetMethodImplementationFlags (); }
+		}
+
+#if !MOBILE
 		void _MethodBase.GetIDsOfNames ([In] ref Guid riid, IntPtr rgszNames, uint cNames, uint lcid, IntPtr rgDispId)
 		{
 			throw new NotImplementedException ();
 		}
+
+		Type _MethodBase.GetType ()
+		{
+			// Required or object::GetType becomes virtual final
+			return base.GetType ();
+		}		
 
 		void _MethodBase.GetTypeInfo (uint iTInfo, uint lcid, IntPtr ppTInfo)
 		{
@@ -298,5 +318,6 @@ namespace System.Reflection {
 		{
 			throw new NotImplementedException ();
 		}
+#endif
 	}
 }

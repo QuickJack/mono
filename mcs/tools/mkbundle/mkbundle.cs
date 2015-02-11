@@ -11,18 +11,20 @@
 using System;
 using System.Diagnostics;
 using System.Xml;
-using System.Collections;
-using System.Reflection;
+using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Runtime.InteropServices;
 using System.Text;
-using Mono.Unix;
-using ICSharpCode.SharpZipLib.Zip.Compression.Streams;
+using IKVM.Reflection;
+
+
+using System.Threading.Tasks;
 
 class MakeBundle {
 	static string output = "a.out";
 	static string object_out = null;
-	static ArrayList link_paths = new ArrayList ();
+	static List<string> link_paths = new List<string> ();
 	static bool autodeps = false;
 	static bool keeptemp = false;
 	static bool compile_only = false;
@@ -33,10 +35,13 @@ class MakeBundle {
 	static string style = "linux";
 	static bool compress;
 	static bool nomain;
+	static bool? use_dos2unix = null;
+	static bool skip_scan;
+	static string ctor_func;
 	
 	static int Main (string [] args)
 	{
-		ArrayList sources = new ArrayList ();
+		List<string> sources = new List<string> ();
 		int top = args.Length;
 		link_paths.Add (".");
 
@@ -88,10 +93,6 @@ class MakeBundle {
 				keeptemp = true;
 				break;
 			case "--static":
-				if (style == "windows") {
-					Console.Error.WriteLine ("The option `{0}' is not supported on this platform.", args [i]);
-					return 1;
-				}
 				static_link = true;
 				Console.WriteLine ("Note that statically linking the LGPL Mono runtime has more licensing restrictions than dynamically linking.");
 				Console.WriteLine ("See http://www.mono-project.com/Licensing for details on licensing.");
@@ -128,9 +129,41 @@ class MakeBundle {
 			case "--nomain":
 				nomain = true;
 				break;
+			case "--style":
+				if (i+1 == top) {
+					Help ();
+					return 1;
+				}
+				style = args [++i];
+				switch (style) {
+				case "windows":
+				case "mac":
+				case "linux":
+					break;
+				default:
+					Console.Error.WriteLine ("Invalid style '{0}' - only 'windows', 'mac' and 'linux' are supported for --style argument", style);
+					return 1;
+				}
+					
+				break;
+			case "--skip-scan":
+				skip_scan = true;
+				break;
+			case "--static-ctor":
+				if (i+1 == top) {
+					Help ();
+					return 1;
+				}
+				ctor_func = args [++i];
+				break;
 			default:
 				sources.Add (args [i]);
 				break;
+			}
+			
+			if (static_link && style == "windows") {
+				Console.Error.WriteLine ("The option `{0}' is not supported on this platform.", args [i]);
+				return 1;
 			}
 		}
 
@@ -140,28 +173,12 @@ class MakeBundle {
 			Environment.Exit (1);
 		}
 
-		ArrayList assemblies = LoadAssemblies (sources);
-		ArrayList files = new ArrayList ();
-		foreach (Assembly a in assemblies)
-			QueueAssembly (files, a.CodeBase);
+		List<string> assemblies = LoadAssemblies (sources);
+		List<string> files = new List<string> ();
+		foreach (string file in assemblies)
+			if (!QueueAssembly (files, file))
+				return 1;
 			
-		// Special casing mscorlib.dll: any specified mscorlib.dll cannot be loaded
-		// by Assembly.ReflectionFromLoadFrom(). Instead the fx assembly which runs
-		// mkbundle.exe is loaded, which is not what we want.
-		// So, replace it with whatever actually specified.
-		foreach (string srcfile in sources) {
-			if (Path.GetFileName (srcfile) == "mscorlib.dll") {
-				foreach (string file in files) {
-					if (Path.GetFileName (new Uri (file).LocalPath) == "mscorlib.dll") {
-						files.Remove (file);
-						files.Add (new Uri (Path.GetFullPath (srcfile)).LocalPath);
-						break;
-					}
-				}
-				break;
-			}
-		}
-
 		GenerateBundles (files);
 		//GenerateJitWrapper ();
 		
@@ -210,18 +227,26 @@ class MakeBundle {
 		// Preallocate the strings we need.
 		if (chars [0] == null) {
 			for (int i = 0; i < chars.Length; i++)
-				chars [i] = string.Format ("\t.byte {0}\n", i.ToString ());
+				chars [i] = string.Format ("{0}", i.ToString ());
 		}
 
 		while ((n = stream.Read (buffer, 0, buffer.Length)) != 0) {
-			for (int i = 0; i < n; i++)
+			int count = 0;
+			for (int i = 0; i < n; i++) {
+				if (count % 32 == 0) {
+					ts.Write ("\n\t.byte ");
+				} else {
+					ts.Write (",");
+				}
 				ts.Write (chars [buffer [i]]);
+				count ++;
+			}
 		}
 
 		ts.WriteLine ();
 	}
 	
-	static void GenerateBundles (ArrayList files)
+	static void GenerateBundles (List<string> files)
 	{
 		string temp_s = "temp.s"; // Path.GetTempFileName ();
 		string temp_c = "temp.c";
@@ -233,17 +258,29 @@ class MakeBundle {
 			temp_o = object_out;
 		
 		try {
-			ArrayList c_bundle_names = new ArrayList ();
-			ArrayList config_names = new ArrayList ();
-			byte [] buffer = new byte [8192];
+			List<string> c_bundle_names = new List<string> ();
+			List<string[]> config_names = new List<string[]> ();
 
 			using (StreamWriter ts = new StreamWriter (File.Create (temp_s))) {
 			using (StreamWriter tc = new StreamWriter (File.Create (temp_c))) {
 			string prog = null;
 
+#if XAMARIN_ANDROID
 			tc.WriteLine ("/* This source code was produced by mkbundle, do not edit */");
+			tc.WriteLine ("\n#ifndef NULL\n#define NULL (void *)0\n#endif");
+			tc.WriteLine (@"
+typedef struct {
+	const char *name;
+	const unsigned char *data;
+	const unsigned int size;
+} MonoBundledAssembly;
+void          mono_register_bundled_assemblies (const MonoBundledAssembly **assemblies);
+void          mono_register_config_for_assembly (const char* assembly_name, const char* config_xml);
+");
+#else
 			tc.WriteLine ("#include <mono/metadata/mono-config.h>");
 			tc.WriteLine ("#include <mono/metadata/assembly.h>\n");
+#endif
 
 			if (compress) {
 				tc.WriteLine ("typedef struct _compressed_data {");
@@ -252,32 +289,59 @@ class MakeBundle {
 				tc.WriteLine ("} CompressedAssembly;\n");
 			}
 
-			foreach (string url in files){
+			object monitor = new object ();
+
+			var streams = new Dictionary<string, Stream> ();
+			var sizes = new Dictionary<string, long> ();
+
+			// Do the file reading and compression in parallel
+			Action<string> body = delegate (string url) {
+				string fname = new Uri (url).LocalPath;
+				Stream stream = File.OpenRead (fname);
+
+				long real_size = stream.Length;
+				int n;
+				if (compress) {
+					byte[] cbuffer = new byte [8192];
+					MemoryStream ms = new MemoryStream ();
+					GZipStream deflate = new GZipStream (ms, CompressionMode.Compress, leaveOpen:true);
+					while ((n = stream.Read (cbuffer, 0, cbuffer.Length)) != 0){
+						deflate.Write (cbuffer, 0, n);
+					}
+					stream.Close ();
+					deflate.Close ();
+					byte [] bytes = ms.GetBuffer ();
+					stream = new MemoryStream (bytes, 0, (int) ms.Length, false, false);
+				}
+
+				lock (monitor) {
+					streams [url] = stream;
+					sizes [url] = real_size;
+				}
+			};
+
+			//#if NET_4_5
+#if FALSE
+			Parallel.ForEach (files, body);
+#else
+			foreach (var url in files)
+				body (url);
+#endif
+
+			// The non-parallel part
+			byte [] buffer = new byte [8192];
+			foreach (var url in files) {
 				string fname = new Uri (url).LocalPath;
 				string aname = Path.GetFileName (fname);
 				string encoded = aname.Replace ("-", "_").Replace (".", "_");
 
 				if (prog == null)
 					prog = aname;
-				
-				Console.WriteLine ("   embedding: " + fname);
-				
-				Stream stream = File.OpenRead (fname);
 
-				// Compression can be parallelized
-				long real_size = stream.Length;
-				int n;
-				if (compress) {
-					MemoryStream ms = new MemoryStream ();
-					DeflaterOutputStream deflate = new DeflaterOutputStream (ms);
-					while ((n = stream.Read (buffer, 0, buffer.Length)) != 0){
-						deflate.Write (buffer, 0, n);
-					}
-					stream.Close ();
-					deflate.Finish ();
-					byte [] bytes = ms.GetBuffer ();
-					stream = new MemoryStream (bytes, 0, (int) ms.Length, false, false);
-				}
+				var stream = streams [url];
+				var real_size = sizes [url];
+
+				Console.WriteLine ("   embedding: " + fname);
 
 				WriteSymbol (ts, "assembly_data_" + encoded, stream.Length);
 			
@@ -286,14 +350,14 @@ class MakeBundle {
 				if (compress) {
 					tc.WriteLine ("extern const unsigned char assembly_data_{0} [];", encoded);
 					tc.WriteLine ("static CompressedAssembly assembly_bundle_{0} = {{{{\"{1}\"," +
-							" assembly_data_{0}, {2}}}, {3}}};",
-						      encoded, aname, real_size, stream.Length);
+								  " assembly_data_{0}, {2}}}, {3}}};",
+								  encoded, aname, real_size, stream.Length);
 					double ratio = ((double) stream.Length * 100) / real_size;
 					Console.WriteLine ("   compression ratio: {0:.00}%", ratio);
 				} else {
 					tc.WriteLine ("extern const unsigned char assembly_data_{0} [];", encoded);
 					tc.WriteLine ("static const MonoBundledAssembly assembly_bundle_{0} = {{\"{1}\", assembly_data_{0}, {2}}};",
-						      encoded, aname, real_size);
+								  encoded, aname, real_size);
 				}
 				stream.Close ();
 
@@ -310,8 +374,8 @@ class MakeBundle {
 				} catch (FileNotFoundException) {
 					/* we ignore if the config file doesn't exist */
 				}
-
 			}
+
 			if (config_file != null){
 				FileStream conf;
 				try {
@@ -367,6 +431,12 @@ class MakeBundle {
 			tc.WriteLine ("\tNULL\n};\n");
 			tc.WriteLine ("static char *image_name = \"{0}\";", prog);
 
+			if (ctor_func != null) {
+				tc.WriteLine ("\nextern void {0} (void);", ctor_func);
+				tc.WriteLine ("\n__attribute__ ((constructor)) static void mono_mkbundle_ctor (void)");
+				tc.WriteLine ("{{\n\t{0} ();\n}}", ctor_func);
+			}
+
 			tc.WriteLine ("\nstatic void install_dll_config_files (void) {\n");
 			foreach (string[] ass in config_names){
 				tc.WriteLine ("\tmono_register_config_for_assembly (\"{0}\", assembly_config_{1});\n", ass [0], ass [1]);
@@ -384,9 +454,9 @@ class MakeBundle {
 
 			Stream template_stream;
 			if (compress) {
-				template_stream = Assembly.GetAssembly (typeof(MakeBundle)).GetManifestResourceStream ("template_z.c");
+				template_stream = System.Reflection.Assembly.GetAssembly (typeof(MakeBundle)).GetManifestResourceStream ("template_z.c");
 			} else {
-				template_stream = Assembly.GetAssembly (typeof(MakeBundle)).GetManifestResourceStream ("template.c");
+				template_stream = System.Reflection.Assembly.GetAssembly (typeof(MakeBundle)).GetManifestResourceStream ("template.c");
 			}
 
 			StreamReader s = new StreamReader (template_stream);
@@ -394,7 +464,7 @@ class MakeBundle {
 			tc.Write (template);
 
 			if (!nomain) {
-				Stream template_main_stream = Assembly.GetAssembly (typeof(MakeBundle)).GetManifestResourceStream ("template_main.c");
+				Stream template_main_stream = System.Reflection.Assembly.GetAssembly (typeof(MakeBundle)).GetManifestResourceStream ("template_main.c");
 				StreamReader st = new StreamReader (template_main_stream);
 				string maintemplate = st.ReadToEnd ();
 				tc.Write (maintemplate);
@@ -407,7 +477,7 @@ class MakeBundle {
 
 			string zlib = (compress ? "-lz" : "");
 			string debugging = "-g";
-			string cc = GetEnv ("CC", IsUnix ? "cc" : "gcc -mno-cygwin");
+			string cc = GetEnv ("CC", IsUnix ? "cc" : "i686-pc-mingw32-gcc");
 
 			if (style == "linux")
 				debugging = "-ggdb";
@@ -448,20 +518,29 @@ class MakeBundle {
 		}
 	}
 	
-	static ArrayList LoadAssemblies (ArrayList sources)
+	static List<string> LoadAssemblies (List<string> sources)
 	{
-		ArrayList assemblies = new ArrayList ();
+		List<string> assemblies = new List<string> ();
 		bool error = false;
 		
 		foreach (string name in sources){
-			Assembly a = LoadAssembly (name);
+			try {
+				Assembly a = LoadAssembly (name);
 
-			if (a == null){
-				error = true;
-				continue;
-			}
+				if (a == null){
+					error = true;
+					continue;
+				}
 			
-			assemblies.Add (a);
+				assemblies.Add (a.CodeBase);
+			} catch (Exception e) {
+				if (skip_scan) {
+					Console.WriteLine ("File will not be scanned: {0}", name);
+					assemblies.Add (new Uri (new FileInfo (name).FullName).ToString ());
+				} else {
+					throw;
+				}
+			}
 		}
 
 		if (error)
@@ -470,21 +549,42 @@ class MakeBundle {
 		return assemblies;
 	}
 	
-	static void QueueAssembly (ArrayList files, string codebase)
+	static readonly Universe universe = new Universe ();
+	static readonly Dictionary<string, string> loaded_assemblies = new Dictionary<string, string> ();
+	
+	static bool QueueAssembly (List<string> files, string codebase)
 	{
+		// Console.WriteLine ("CODE BASE IS {0}", codebase);
 		if (files.Contains (codebase))
-			return;
+			return true;
+
+		var path = new Uri(codebase).LocalPath;
+		var name = Path.GetFileName (path);
+		string found;
+		if (loaded_assemblies.TryGetValue (name, out found)) {
+			Error (string.Format ("Duplicate assembly name `{0}'. Both `{1}' and `{2}' use same assembly name.", name, path, found));
+			return false;
+		}
+
+		loaded_assemblies.Add (name, path);
 
 		files.Add (codebase);
-		Assembly a = Assembly.LoadFrom (new Uri(codebase).LocalPath);
-
 		if (!autodeps)
-			return;
-		
-		foreach (AssemblyName an in a.GetReferencedAssemblies ()) {
-			a = Assembly.Load (an);
-			QueueAssembly (files, a.CodeBase);
+			return true;
+		try {
+			Assembly a = universe.LoadFile (path);
+
+			foreach (AssemblyName an in a.GetReferencedAssemblies ()) {
+				a = universe.Load (an.FullName);
+				if (!QueueAssembly (files, a.CodeBase))
+					return false;
+			}
+		} catch (Exception e) {
+			if (!skip_scan)
+				throw;
 		}
+
+		return true;
 	}
 
 	static Assembly LoadAssembly (string assembly)
@@ -495,12 +595,12 @@ class MakeBundle {
 			char[] path_chars = { '/', '\\' };
 			
 			if (assembly.IndexOfAny (path_chars) != -1) {
-				a = Assembly.LoadFrom (assembly);
+				a = universe.LoadFile (assembly);
 			} else {
 				string ass = assembly;
 				if (ass.EndsWith (".dll"))
 					ass = assembly.Substring (0, assembly.Length - 4);
-				a = Assembly.Load (ass);
+				a = universe.Load (ass);
 			}
 			return a;
 		} catch (FileNotFoundException){
@@ -512,7 +612,7 @@ class MakeBundle {
 					full_path += ".dll";
 				
 				try {
-					a = Assembly.LoadFrom (full_path);
+					a = universe.LoadFile (full_path);
 					return a;
 				} catch (FileNotFoundException ff) {
 					total_log += ff.FusionLog;
@@ -521,10 +621,12 @@ class MakeBundle {
 			}
 			Error ("Cannot find assembly `" + assembly + "'" );
 			Console.WriteLine ("Log: \n" + total_log);
-		} catch (BadImageFormatException f) {
-			Error ("Cannot load assembly (bad file format)" + f.FusionLog);
+		} catch (IKVM.Reflection.BadImageFormatException f) {
+			if (skip_scan)
+				throw;
+			Error ("Cannot load assembly (bad file format) " + f.Message);
 		} catch (FileLoadException f){
-			Error ("Cannot load assembly " + f.FusionLog);
+			Error ("Cannot load assembly " + f.Message);
 		} catch (ArgumentNullException){
 			Error("Cannot load assembly (null argument)");
 		}
@@ -533,7 +635,7 @@ class MakeBundle {
 
 	static void Error (string msg)
 	{
-		Console.Error.WriteLine (msg);
+		Console.Error.WriteLine ("ERROR: " + msg);
 		Environment.Exit (1);
 	}
 
@@ -554,6 +656,8 @@ class MakeBundle {
 				   "    --static            Statically link to mono libs\n" +
 				   "    --nomain            Don't include a main() function, for libraries\n" +
 				   "    -z                  Compress the assemblies before embedding.\n" +
+				   "    --skip-scan         Skip scanning assemblies that could not be loaded (but still embed them).\n" +
+				   "    --static-ctor ctor  Add a constructor call to the supplied function.\n" +
 				   "                        You need zlib development headers and libraries.\n");
 	}
 
@@ -570,10 +674,10 @@ class MakeBundle {
 			return;
 		}
 
-		IntPtr buf = UnixMarshal.AllocHeap(8192);
+		IntPtr buf = Marshal.AllocHGlobal (8192);
 		if (uname (buf) != 0){
 			Console.WriteLine ("Warning: Unable to detect OS");
-			UnixMarshal.FreeHeap(buf);
+			Marshal.FreeHGlobal (buf);
 			return;
 		}
 		string os = Marshal.PtrToStringAnsi (buf);
@@ -581,7 +685,7 @@ class MakeBundle {
 		if (os == "Darwin")
 			style = "osx";
 		
-		UnixMarshal.FreeHeap(buf);
+		Marshal.FreeHGlobal (buf);
 	}
 
 	static bool IsUnix {
@@ -597,18 +701,60 @@ class MakeBundle {
 			Console.WriteLine (cmdLine);
 			return system (cmdLine);
 		}
-
+		
+#if XAMARIN_ANDROID
 		// on Windows, we have to pipe the output of a
 		// `cmd` interpolation to dos2unix, because the shell does not
 		// strip the CRLFs generated by the native pkg-config distributed
 		// with Mono.
+		//
+		// But if it's *not* on cygwin, just skip it.
+		
+		// check if dos2unix is applicable.
+		if (use_dos2unix == null) {
+			use_dos2unix = false;
+			try {
+				var info = new ProcessStartInfo ("dos2unix");
+				info.CreateNoWindow = true;
+				info.RedirectStandardInput = true;
+				info.UseShellExecute = false;
+				var dos2unix = Process.Start (info);
+				dos2unix.StandardInput.WriteLine ("aaa");
+				dos2unix.StandardInput.WriteLine ("\u0004");
+				dos2unix.StandardInput.Close ();
+				dos2unix.WaitForExit ();
+				if (dos2unix.ExitCode == 0)
+					use_dos2unix = true;
+			} catch {
+				// ignore
+			}
+		}
+		// and if there is no dos2unix, just run cmd /c.
+		if (use_dos2unix == false) {
+#endif
+			Console.WriteLine (cmdLine);
+			ProcessStartInfo dos2unix = new ProcessStartInfo ();
+			dos2unix.UseShellExecute = false;
+			dos2unix.FileName = "cmd";
+			dos2unix.Arguments = String.Format ("/c \"{0}\"", cmdLine);
+
+			using (Process p = Process.Start (dos2unix)) {
+				p.WaitForExit ();
+				return p.ExitCode;
+			}
+#if XAMARIN_ANDROID
+		}
+#endif
+
 		StringBuilder b = new StringBuilder ();
 		int count = 0;
 		for (int i = 0; i < cmdLine.Length; i++) {
 			if (cmdLine [i] == '`') {
+#if XAMARIN_ANDROID
 				if (count % 2 != 0) {
 					b.Append ("|dos2unix");
 				}
+#endif
 				count++;
 			}
 			b.Append (cmdLine [i]);

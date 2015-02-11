@@ -7,7 +7,6 @@
 // (C)2004 Novell Inc.
 //
 
-#if NET_2_0
 using System;
 using System.IO;
 using System.Text;
@@ -47,6 +46,7 @@ namespace MonoTests.System.Xml
 		}
 
 		[Test]
+		[Category ("MobileNotWorking")]
 		public void EncodingTest ()
 		{
 			// For Stream it makes sense
@@ -412,4 +412,3 @@ namespace MonoTests.System.Xml
 
 	}
 }
-#endif

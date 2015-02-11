@@ -27,7 +27,6 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if NET_2_0
 
 using NUnit.Framework;
 
@@ -283,6 +282,7 @@ namespace MonoTests.System.Security.Cryptography.X509Certificates {
 			Assert.AreEqual (0, copy.PathLengthConstraint, "PathLengthConstraint");
 		}
 
+#if !MOBILE
 		[Test]
 		public void CreateViaCryptoConfig ()
 		{
@@ -294,7 +294,7 @@ namespace MonoTests.System.Security.Cryptography.X509Certificates {
 			Assert.AreEqual (0, bc.PathLengthConstraint, "PathLengthConstraint");
 			Assert.AreEqual ("30-00", BitConverter.ToString (bc.RawData), "RawData");
 		}
+#endif
 	}
 }
 
-#endif

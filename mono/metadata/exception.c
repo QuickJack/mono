@@ -87,10 +87,12 @@ mono_exception_from_name_domain (MonoDomain *domain, MonoImage *image,
 MonoException *
 mono_exception_from_token (MonoImage *image, guint32 token)
 {
+	MonoError error;
 	MonoClass *klass;
 	MonoObject *o;
 
-	klass = mono_class_get (image, token);
+	klass = mono_class_get_checked (image, token, &error);
+	g_assert (mono_error_ok (&error)); /* FIXME handle the error. */
 
 	o = mono_object_new (mono_domain_get (), klass);
 	g_assert (o != NULL);
@@ -197,7 +199,9 @@ MonoException *
 mono_exception_from_token_two_strings (MonoImage *image, guint32 token,
 									   MonoString *a1, MonoString *a2)
 {
-	MonoClass *klass = mono_class_get (image, token);
+	MonoError error;
+	MonoClass *klass = mono_class_get_checked (image, token, &error);
+	g_assert (mono_error_ok (&error)); /* FIXME handle the error. */
 
 	return create_exception_two_strings (klass, a1, a2);
 }
@@ -574,14 +578,16 @@ mono_get_exception_type_initialization (const gchar *type_name, MonoException *i
 
 	mono_class_init (klass);
 
-	/* TypeInitializationException only has 1 ctor with 2 args */
 	iter = NULL;
 	while ((method = mono_class_get_methods (klass, &iter))) {
-		if (!strcmp (".ctor", mono_method_get_name (method)) && mono_method_signature (method)->param_count == 2)
-			break;
+		if (!strcmp (".ctor", mono_method_get_name (method))) {
+			MonoMethodSignature *sig = mono_method_signature (method);
+
+			if (sig->param_count == 2 && sig->params [0]->type == MONO_TYPE_STRING && mono_class_from_mono_type (sig->params [1]) == mono_defaults.exception_class)
+				break;
+		}
 		method = NULL;
 	}
-
 	g_assert (method);
 
 	args [0] = mono_string_new (mono_domain_get (), type_name);
@@ -738,12 +744,23 @@ mono_get_exception_reflection_type_load (MonoArray *types, MonoArray *exceptions
 	gpointer args [2];
 	MonoObject *exc;
 	MonoMethod *method;
+	gpointer iter;
 
 	klass = mono_class_from_name (mono_get_corlib (), "System.Reflection", "ReflectionTypeLoadException");
 	g_assert (klass);
 	mono_class_init (klass);
 
-	method = mono_class_get_method_from_name (klass, ".ctor", 2);
+	/* Find the Type[], Exception[] ctor */
+	iter = NULL;
+	while ((method = mono_class_get_methods (klass, &iter))) {
+		if (!strcmp (".ctor", mono_method_get_name (method))) {
+			MonoMethodSignature *sig = mono_method_signature (method);
+
+			if (sig->param_count == 2 && sig->params [0]->type == MONO_TYPE_SZARRAY && sig->params [1]->type == MONO_TYPE_SZARRAY)
+				break;
+		}
+		method = NULL;
+	}
 	g_assert (method);
 
 	args [0] = types;
@@ -758,13 +775,56 @@ mono_get_exception_reflection_type_load (MonoArray *types, MonoArray *exceptions
 MonoException *
 mono_get_exception_runtime_wrapped (MonoObject *wrapped_exception)
 {
-	MonoRuntimeWrappedException *ex = (MonoRuntimeWrappedException*)
-		mono_exception_from_name (mono_get_corlib (), "System.Runtime.CompilerServices",
-								  "RuntimeWrappedException");
+	MonoClass *klass;
+	MonoObject *o;
+	MonoMethod *method;
+	MonoDomain *domain = mono_domain_get ();
+	gpointer params [16];
 
-   MONO_OBJECT_SETREF (ex, wrapped_exception, wrapped_exception);
-   return (MonoException*)ex;
+	klass = mono_class_from_name (mono_get_corlib (), "System.Runtime.CompilerServices", "RuntimeWrappedException");
+	g_assert (klass);
+
+	o = mono_object_new (domain, klass);
+	g_assert (o != NULL);
+
+	method = mono_class_get_method_from_name (klass, ".ctor", 1);
+	g_assert (method);
+
+	params [0] = wrapped_exception;
+	mono_runtime_invoke (method, o, params, NULL);
+
+	return (MonoException *)o;
 }	
+
+static gboolean
+append_frame_and_continue (MonoMethod *method, gpointer ip, size_t native_offset, gboolean managed, gpointer user_data)
+{
+	MonoDomain *domain = mono_domain_get ();
+	GString *text = (GString*)user_data;
+
+	if (method) {
+		char *msg = mono_debug_print_stack_frame (method, native_offset, domain);
+		g_string_append_printf (text, "%s\n", msg);
+		g_free (msg);
+	} else {
+		g_string_append_printf (text, "<unknown native frame 0x%x>\n", ip);
+	}
+
+	return FALSE;
+}
+
+char *
+mono_exception_get_managed_backtrace (MonoException *exc)
+{
+	GString *text;
+
+	text = g_string_new_len (NULL, 20);
+
+	if (!mono_get_eh_callbacks ()->mono_exception_walk_trace (exc, append_frame_and_continue, text))
+		g_string_append (text, "managed backtrace not available\n");
+
+	return g_string_free (text, FALSE);
+}
 
 char *
 mono_exception_get_native_backtrace (MonoException *exc)
@@ -788,7 +848,7 @@ mono_exception_get_native_backtrace (MonoException *exc)
 		gpointer ip = mono_array_get (arr, gpointer, i);
 		MonoJitInfo *ji = mono_jit_info_table_find (mono_domain_get (), ip);
 		if (ji) {
-			char *msg = mono_debug_print_stack_frame (ji->method, (char*)ip - (char*)ji->code_start, domain);
+			char *msg = mono_debug_print_stack_frame (mono_jit_info_get_method (ji), (char*)ip - (char*)ji->code_start, domain);
 			g_string_append_printf (text, "%s\n", msg);
 			g_free (msg);
 		} else {

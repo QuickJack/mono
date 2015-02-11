@@ -94,6 +94,8 @@ namespace System.Net
 			WebRequestMethods.Ftp.UploadFileWithUniqueName // STUR
 			};
 
+		Encoding dataEncoding = Encoding.UTF8;
+
 		internal FtpWebRequest (Uri uri) 
 		{
 			this.requestUri = uri;
@@ -173,6 +175,7 @@ namespace System.Net
 			}
 		}
 
+#if !NET_2_1
 		[MonoTODO]
 		public static new RequestCachePolicy DefaultCachePolicy
 		{
@@ -183,6 +186,7 @@ namespace System.Net
 				throw GetMustImplement ();
 			}
 		}
+#endif
 
 		public bool EnableSsl {
 			get {
@@ -547,7 +551,12 @@ namespace System.Net
 				if (local_path [0] == '/')
 					local_path = local_path.Substring (1);
 
-				Uri initial = new Uri ("ftp://dummy-host" + initial_path);
+				UriBuilder initialBuilder = new UriBuilder () {
+					Scheme  = "ftp",
+					Host    = "dummy-host",
+					Path    = initial_path,
+				};
+				Uri initial = initialBuilder.Uri;
 				result = new Uri (initial, local_path).LocalPath;
 			}
 
@@ -786,7 +795,11 @@ namespace System.Net
 
 			Authenticate ();
 			FtpStatus status = SendCommand ("OPTS", "utf8", "on");
-			// ignore status for OPTS
+			if ((int)status.StatusCode < 200 || (int)status.StatusCode > 300)
+				dataEncoding = Encoding.Default;
+			else
+				dataEncoding = Encoding.UTF8;
+
 			status = SendCommand (WebRequestMethods.Ftp.PrintWorkingDirectory);
 			initial_path = GetInitialPath (status);
 		}
@@ -1073,7 +1086,7 @@ namespace System.Net
 				commandString += " " + String.Join (" ", parameters);
 
 			commandString += EOL;
-			cmd = Encoding.ASCII.GetBytes (commandString);
+			cmd = dataEncoding.GetBytes (commandString);
 			try {
 				controlStream.Write (cmd, 0, cmd.Length);
 			} catch (IOException) {
@@ -1158,10 +1171,7 @@ namespace System.Net
 #endif
 
 		internal bool ChangeToSSLSocket (ref Stream stream) {
-#if TARGET_JVM
-			stream.ChangeToSSLSocket ();
-			return true;
-#elif SECURITY_DEP
+#if   SECURITY_DEP
 			SslStream sslStream = new SslStream (stream, true, callback, null);
 			//sslStream.AuthenticateAsClient (Host, this.ClientCertificates, SslProtocols.Default, false);
 			//TODO: client certificates

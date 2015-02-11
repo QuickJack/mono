@@ -117,8 +117,18 @@ namespace Mono.XBuild.CommandLine {
 			AddGeneralSettings (file, p);
 
 			StreamReader reader = new StreamReader (file);
+
 			string slnVersion = GetSlnFileVersion (reader);
-			if (slnVersion == "11.00")
+
+			if (slnVersion == "12.00")
+#if XBUILD_14
+				p.DefaultToolsVersion = "14.0";
+#elif XBUILD_12
+				p.DefaultToolsVersion = "12.0";
+#else
+				p.DefaultToolsVersion = "4.0";
+#endif
+			else if (slnVersion == "11.00")
 				p.DefaultToolsVersion = "4.0";
 			else if (slnVersion == "10.00")
 				p.DefaultToolsVersion = "3.5";
@@ -254,6 +264,10 @@ namespace Mono.XBuild.CommandLine {
 					if (info != null)
 						projectInfo.Dependencies [info.Guid] = info;
 				}
+
+				// unload the project after reading info from it
+				// it'll be reloaded with proper context when building the solution
+				p.ParentEngine.UnloadProject (currentProject);
 			}
 
 			// fill in the project info for deps found in the .sln file
@@ -339,11 +353,9 @@ namespace Mono.XBuild.CommandLine {
 
 		void EmitBeforeImports (Project p, string file)
 		{
-#if NET_4_0
 			p.AddNewImport ("$(MSBuildExtensionsPath)\\$(MSBuildToolsVersion)\\SolutionFile\\ImportBefore\\*",
 					"'$(ImportByWildcardBeforeSolution)' != 'false' and " +
 					"Exists('$(MSBuildExtensionsPath)\\$(MSBuildToolsVersion)\\SolutionFile\\ImportBefore')");
-#endif
 
 			string before_filename = Path.Combine (Path.GetDirectoryName (file), "before." + Path.GetFileName (file) + ".targets");
 			p.AddNewImport (before_filename, String.Format ("Exists ('{0}')", before_filename));
@@ -351,11 +363,9 @@ namespace Mono.XBuild.CommandLine {
 
 		void EmitAfterImports (Project p, string file)
 		{
-#if NET_4_0
 			p.AddNewImport ("$(MSBuildExtensionsPath)\\$(MSBuildToolsVersion)\\SolutionFile\\ImportAfter\\*",
 					"'$(ImportByWildcardAfterSolution)' != 'false' and " +
 					"Exists('$(MSBuildExtensionsPath)\\$(MSBuildToolsVersion)\\SolutionFile\\ImportAfter')");
-#endif
 
 			string after_filename = Path.Combine (Path.GetDirectoryName (file), "after." + Path.GetFileName (file) + ".targets");
 			p.AddNewImport (after_filename, String.Format ("Exists ('{0}')", after_filename));

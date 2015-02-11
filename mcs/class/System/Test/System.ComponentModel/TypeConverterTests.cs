@@ -44,9 +44,6 @@ namespace MonoTests.System.ComponentModel
 		}
 
 		[Test]
-#if TARGET_JVM
-		[Ignore ("TD BUG ID: 7229")]
-#endif
 		public void GetProperties ()
 		{
 			PropertyDescriptorCollection properties = null;
@@ -193,6 +190,13 @@ namespace MonoTests.System.ComponentModel
 		{
 			MockTypeConverter converter = new MockTypeConverter ();
 			converter.GetConvertToException ("B", (Type) null);
+		}
+
+		[Test]
+		public void IsValid ()
+		{
+			var tc = new TypeConverter ();
+			Assert.IsFalse (tc.IsValid (null));
 		}
 	}
 

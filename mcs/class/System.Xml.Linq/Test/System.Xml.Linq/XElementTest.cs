@@ -32,6 +32,7 @@ using System.Linq;
 using System.Threading;
 using System.Xml;
 using System.Xml.Linq;
+using System.Xml.Serialization;
 
 using NUnit.Framework;
 
@@ -907,7 +908,7 @@ namespace MonoTests.System.Xml.Linq
 			Assert.IsNotNull ((double?) new XElement (m), "m:double?:null");
 			Assert.AreEqual (double.NegativeInfinity, ((double?) new XElement (m)).Value, "m:double?:value");
 			Assert.IsNotNull ((double?) new XElement (n), "n:double?:null");
-			Assert.IsNaN (((double?) new XElement (n)).Value, "n:double?:value");
+			Assert.AreEqual (double.NaN, ((double?) new XElement (n)).Value, "n:double?:value");
 			Assert.IsNotNull ((float?) new XElement (a), "a:float?:null");
 			Assert.AreEqual (7f, ((float?) new XElement (a)).Value, "a:float?:value");
 			Assert.IsNotNull ((float?) new XElement (b), "b:float?:null");
@@ -929,7 +930,7 @@ namespace MonoTests.System.Xml.Linq
 			Assert.IsNotNull ((float?) new XElement (m), "m:float?:null");
 			Assert.AreEqual (float.NegativeInfinity, ((float?) new XElement (m)).Value, "m:float?:value");
 			Assert.IsNotNull ((float?) new XElement (n), "n:float?:null");
-			Assert.IsNaN (((float?) new XElement (n)).Value, "n:float?:value");
+			Assert.AreEqual (float.NaN, ((float?) new XElement (n)).Value, "n:float?:value");
 			AssertThrows<FormatException> (() => { Guid? z = (Guid?) new XElement (a); }, "a:Guid?");
 			AssertThrows<FormatException> (() => { Guid? z = (Guid?) new XElement (b); }, "b:Guid?");
 			AssertThrows<FormatException> (() => { Guid? z = (Guid?) new XElement (c); }, "c:Guid?");
@@ -1085,7 +1086,7 @@ namespace MonoTests.System.Xml.Linq
 			Assert.AreEqual (double.PositiveInfinity, (double) new XElement (i), "i:double");
 			Assert.AreEqual (double.NegativeInfinity, (double) new XElement (M), "M:double");
 			Assert.AreEqual (double.NegativeInfinity, (double) new XElement (m), "m:double");
-			Assert.IsNaN (((double) new XElement (n)), "n:double");
+			Assert.AreEqual (double.NaN, ((double) new XElement (n)), "n:double");
 			Assert.AreEqual (7f, (float) new XElement (a), "a:float");
 			Assert.AreEqual (42f, (float) new XElement (b), "b:float");
 			Assert.AreEqual (13f, (float) new XElement (c), "c:float");
@@ -1096,7 +1097,7 @@ namespace MonoTests.System.Xml.Linq
 			Assert.AreEqual (float.PositiveInfinity, (float) new XElement (i), "i:float");
 			Assert.AreEqual (float.NegativeInfinity, (float) new XElement (M), "M:float");
 			Assert.AreEqual (float.NegativeInfinity, (float) new XElement (m), "m:float");
-			Assert.IsNaN (((float) new XElement (n)), "n:float");
+			Assert.AreEqual (float.NaN, ((float) new XElement (n)), "n:float");
 			AssertThrows<FormatException> (() => { Guid z = (Guid) new XElement (a); }, "a:Guid");
 			AssertThrows<FormatException> (() => { Guid z = (Guid) new XElement (b); }, "b:Guid");
 			AssertThrows<FormatException> (() => { Guid z = (Guid) new XElement (c); }, "c:Guid");
@@ -2049,6 +2050,60 @@ namespace MonoTests.System.Xml.Linq
 			XNamespace ns = "http://jabber.org/protocol/geoloc";
 			XElement newElement = new XElement(ns + "geoloc");
 			Assert.AreEqual ("<geoloc xmlns=\"http://jabber.org/protocol/geoloc\" />", newElement.ToString (), "#1");
+		}
+		
+		[Test] // bug #10194
+		public void SetElementValueNullOnNonExistingElement ()
+		{
+			var xd = XDocument.Parse ("<foo />");
+			xd.Root.SetElementValue (XName.Get ("bar"), null);
+		}
+		
+		[Test] // bug #11298
+		public void ReplaceAttributesIteratesContentsFirstThenRemove ()
+		{
+			var xmlString = "<Class Id='1' Name='' Cluster='' xmlns='urn:x' />";
+			var e = XDocument.Parse (xmlString).Root;
+			var attrs = e.Attributes ()
+				.Where (a => !a.IsNamespaceDeclaration)
+				.Select (a => a.Name.Namespace != XNamespace.None ?
+						 new XAttribute (XName.Get(a.Name.LocalName), a.Value) : a);
+			e.ReplaceAttributes (attrs);
+			Assert.IsNotNull (e.Attribute ("Id"), "#1");
+			Assert.IsNotNull (e.Attribute ("Name"), "#2");
+			Assert.IsNotNull (e.Attribute ("Cluster"), "#3");
+		}
+
+		[XmlType ("Root")]
+		public class SerializableClass
+		{
+			[XmlAnyElement]
+			public XElement Content;
+		}
+
+#if NET_4_5
+		[Test]
+		// Bug #12571
+		public void DeserializeXElement ()
+		{
+			var xmlString = "<Root><Data /></Root>";
+
+			var serializer = new XmlSerializer (typeof (SerializableClass));
+			var res = serializer.Deserialize (new StringReader (xmlString));
+
+			Assert.IsNotNull (res, "#1");
+			Assert.AreEqual (typeof (SerializableClass), res.GetType (), "#2");
+			var xe = (SerializableClass)res;
+			Assert.AreEqual (xe.Content.ToString (), "<Data />", "#3");
+		}
+#endif
+
+		[Test] // Bug #20151
+		public void XElementFromArrayWithNullValuesAsObject ()
+		{
+			string[] content = {null, "content1", null, "content2"};
+			var el = new XElement ("test", (object)content);
+			Assert.AreEqual ("<test>content1content2</test>", el.ToString ());
 		}
 	}
 }

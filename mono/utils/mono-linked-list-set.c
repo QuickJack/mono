@@ -16,8 +16,7 @@
 
 #include <mono/utils/mono-linked-list-set.h>
 
-/*atomics.*/
-#include <mono/io-layer/io-layer.h>
+#include <mono/utils/atomic.h>
 
 static inline gpointer
 mask (gpointer n, uintptr_t bit)
@@ -189,7 +188,7 @@ mono_lls_remove (MonoLinkedListSet *list, MonoThreadHazardPointers *hp, MonoLink
 			continue;
 		/* The second CAS must happen before the first. */
 		mono_memory_write_barrier ();
-		if (InterlockedCompareExchangePointer ((volatile gpointer*)prev, next, cur) == cur) {
+		if (InterlockedCompareExchangePointer ((volatile gpointer*)prev, mono_lls_pointer_unmask (next), cur) == cur) {
 			/* The CAS must happen before the hazard pointer clear. */
 			mono_memory_write_barrier ();
 			mono_hazard_pointer_clear (hp, 1);

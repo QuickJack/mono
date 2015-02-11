@@ -1,4 +1,3 @@
-#if NET_4_0
 // 
 // ConcurrentBagTests.cs
 //  
@@ -25,6 +24,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+#if NET_4_0
+
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -35,6 +36,7 @@ using System.Linq;
 
 using NUnit;
 using NUnit.Framework;
+using NUnit.Framework.Constraints;
 
 namespace MonoTests.System.Collections.Concurrent
 {
@@ -95,14 +97,15 @@ namespace MonoTests.System.Collections.Concurrent
 				threads[i].Start ();
 			}
 			foreach (var t in threads)
-				Assert.IsTrue (t.Join (200));
+				Assert.IsTrue (t.Join (2000));
 
 			Assert.IsFalse (bag.IsEmpty);
 			Assert.AreEqual (threads.Length, bag.Count);
 
 			var array = bag.ToArray ();
 			Assert.AreEqual (threads.Length, array.Length);
-			CollectionAssert.AreEqual (Enumerable.Repeat (1, 10).ToArray (), array);
+
+			Assert.That (array, new CollectionEquivalentConstraint (Enumerable.Repeat (1, 10).ToArray ()), "#1, same");
 
 			int result;
 			for (int i = 0; i < threads.Length; i++) {
@@ -188,6 +191,50 @@ namespace MonoTests.System.Collections.Concurrent
 
 			Assert.IsTrue (valid, "Aggregate test");
 		}
+
+        [Test]
+        public void BasicRemoveEmptyTest ()
+        {
+            int result;
+            Assert.IsTrue(bag.IsEmpty);
+            Assert.IsFalse(bag.TryTake(out result));
+        }
+
+        [Test]
+        public void BasicRemoveTwiceTest()
+        {
+            bag.Add (1);
+            Assert.IsFalse (bag.IsEmpty);
+            Assert.AreEqual (1, bag.Count);
+
+            int result;
+            Assert.IsTrue (bag.TryTake (out result));
+            Assert.AreEqual (1, result);
+            Assert.IsTrue (bag.IsEmpty);
+            Assert.IsFalse (bag.TryTake (out result));
+            Assert.IsFalse (bag.TryTake (out result));
+        }
+
+        [Test]
+        public void AddRemoveAddTest()
+        {
+            bag.Add (1);
+            Assert.IsFalse (bag.IsEmpty);
+            Assert.AreEqual (1, bag.Count);
+
+            int result;
+            Assert.IsTrue (bag.TryTake (out result));
+            Assert.AreEqual (1, result);
+            Assert.IsTrue (bag.IsEmpty);
+
+            bag.Add (1);
+            Assert.IsFalse (bag.IsEmpty);
+            Assert.AreEqual (1, bag.Count);
+
+            Assert.IsTrue (bag.TryTake (out result));
+            Assert.AreEqual (1, result);
+            Assert.IsTrue (bag.IsEmpty);
+        }
 		
 		[Test]
 		public void AddStressTest ()
@@ -199,6 +246,22 @@ namespace MonoTests.System.Collections.Concurrent
 		public void RemoveStressTest ()
 		{
 			CollectionStressTestHelper.RemoveStressTest (bag, CheckOrderingType.DontCare);
+		}
+
+		[Test]
+		public void Bug24213 ()
+		{
+			var size = 2049;
+			var bag = new ConcurrentBag<int> ();
+			for (int i = 0; i < size; i++)
+				bag.Add (i);
+
+			var array = bag.ToArray ();
+
+			Assert.AreEqual (size, array.Length, "#1");
+
+			for (int i = 0; i < size; i++)
+				Assert.AreEqual (size - 1 - i, array [i], "#C" + i);
 		}
 	}
 }

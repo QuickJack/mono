@@ -164,7 +164,11 @@ namespace System.Data
 		{
 			switch (_dataView.RowStateFilter) {
 			case DataViewRowState.Added:
-				return DataRowVersion.Proposed;
+				if (IsNew) //"last added" was not completed on this row
+					return DataRowVersion.Proposed;
+				else
+					return DataRowVersion.Current;
+				
 			case DataViewRowState.ModifiedOriginal:
 			case DataViewRowState.Deleted:
 			case DataViewRowState.Unchanged:
@@ -296,7 +300,6 @@ namespace System.Data
 		}
 	}
 
-#if NET_2_0
 	partial class DataRowView : INotifyPropertyChanged {
 		public event PropertyChangedEventHandler PropertyChanged;
 
@@ -308,5 +311,4 @@ namespace System.Data
 			}
 		}
 	}
-#endif
 }

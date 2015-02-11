@@ -5,22 +5,21 @@
     <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
     <ProductVersion>9.0.30729</ProductVersion>
     <SchemaVersion>2.0</SchemaVersion>
-    <ProjectGuid>{155AEF28-C81F-405D-9072-9D52780E3E70}</ProjectGuid>
+    <ProjectGuid>{4B6B2285-AE59-4E3A-8692-1E0479688BA1}</ProjectGuid>
     <OutputType>Library</OutputType>
     <NoWarn>1699</NoWarn>
-    <OutputPath>.\</OutputPath>
-    <NoStdLib>true</NoStdLib>
+    <OutputPath>bin\Debug\Mono.Options-tests-net_4_5</OutputPath>
+    <NoStdLib>True</NoStdLib>
+    <NoConfig>False</NoConfig>
     
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace></RootNamespace>
+    <RootNamespace>
+    </RootNamespace>
     <AssemblyName>Mono.Options_test_net_4_5</AssemblyName>
     <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
-    <!-- Filter out System.Core added by: Microsoft.NETFramework.props  -->
-    <AddAdditionalExplicitAssemblyReferences>false</AddAdditionalExplicitAssemblyReferences>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
-    <PlatformTarget>AnyCPU</PlatformTarget>
     <DebugSymbols>true</DebugSymbols>
     <DebugType>full</DebugType>
     <NoWarn>1699</NoWarn>
@@ -28,29 +27,30 @@
     <DefineConstants>DEBUG;TRACE;NET_1_1;NET_2_0;NET_3_0;NET_3_5;NET_4_0;NET_4_5</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
-    <AdditionalLibPaths>./../../class/lib/net_4_5</AdditionalLibPaths>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
-    <PlatformTarget>AnyCPU</PlatformTarget>  
     <DebugType>pdbonly</DebugType>
     <NoWarn>1699</NoWarn>
     <Optimize>true</Optimize>
     <DefineConstants>NET_1_1;NET_2_0;NET_3_0;NET_3_5;NET_4_0;NET_4_5</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
-    <AdditionalLibPaths>./../../class/lib/net_4_5</AdditionalLibPaths>
+  </PropertyGroup>
+  <!-- Set AddAdditionalExplicitAssemblyReferences to false, otherwise if targetting .NET4.0, 
+  Microsoft.NETFramework.props will force a dependency on the assembly System.Core. This
+  is a problem to compile the Mono mscorlib.dll -->
+  <PropertyGroup>
+    <AddAdditionalExplicitAssemblyReferences>false</AddAdditionalExplicitAssemblyReferences>
   </PropertyGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <ItemGroup>
-   <Compile Include="Test\Mono.Options\BaseRocksFixture.cs" />
-   <Compile Include="Test\Mono.Options\CollectionContract.cs" />
-   <Compile Include="Test\Mono.Options\ListContract.cs" />
-   <Compile Include="Test\Mono.Options\OptionContextTest.cs" />
-   <Compile Include="Test\Mono.Options\OptionSetTest.cs" />
-   <Compile Include="Test\Mono.Options\OptionTest.cs" />
-   <Compile Include="Test\Mono.Options\Utils.cs" />
-
-  </ItemGroup>
+    <Compile Include="Test\Mono.Options\BaseRocksFixture.cs" />
+    <Compile Include="Test\Mono.Options\CollectionContract.cs" />
+    <Compile Include="Test\Mono.Options\ListContract.cs" />
+    <Compile Include="Test\Mono.Options\OptionContextTest.cs" />
+    <Compile Include="Test\Mono.Options\OptionSetTest.cs" />
+    <Compile Include="Test\Mono.Options\OptionTest.cs" />
+    <Compile Include="Test\Mono.Options\Utils.cs" />  </ItemGroup>
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.
   <Target Name="BeforeBuild">
@@ -59,35 +59,41 @@
   </Target>
   -->
   <PropertyGroup>
-    <PreBuildEvent></PreBuildEvent>
+    <PreBuildEvent>
+
+    </PreBuildEvent>
+    <PostBuildEvent Condition=" '$(OS)' != 'Windows_NT' ">
+
+    </PostBuildEvent>
+    <PostBuildEvent Condition=" '$(OS)' == 'Windows_NT' ">
+
+    </PostBuildEvent>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="mscorlib.dll">
-      <SpecificVersion>False</SpecificVersion>
-      <HintPath>mscorlib.dll</HintPath>
-    </Reference>
-    <Reference Include="./../../class/lib/net_4_5/Mono.Options.dll">
-      <SpecificVersion>False</SpecificVersion>
-      <HintPath>./../../class/lib/net_4_5/Mono.Options.dll</HintPath>
-    </Reference>
-    <Reference Include="Mono.Posix.dll">
-      <SpecificVersion>False</SpecificVersion>
-      <HintPath>Mono.Posix.dll</HintPath>
-    </Reference>
-    <Reference Include="System.dll">
-      <SpecificVersion>False</SpecificVersion>
-      <HintPath>System.dll</HintPath>
-    </Reference>
-    <Reference Include="System.Core.dll">
-      <SpecificVersion>False</SpecificVersion>
-      <HintPath>System.Core.dll</HintPath>
-    </Reference>
-    <Reference Include="nunit.framework" />
-
+    <Reference Include="..\lib\net_4_5\nunit.framework.dll" />
+    <ProjectReference Include="..\corlib\corlib-net_4_5.csproj">
+      <Project>{33BF0182-AC5C-464C-995B-C9CFE74E1A95}</Project>
+      <Name>corlib\corlib-net_4_5</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\Mono.Options\Mono.Options-net_4_5.csproj">
+      <Project>{6DAA3E35-6FC9-477B-9D4D-538D9ECE7283}</Project>
+      <Name>Mono.Options\Mono.Options-net_4_5</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\Mono.Posix\Mono.Posix-net_4_5.csproj">
+      <Project>{85A9B29B-58FF-4FBE-8998-B0A89AC22880}</Project>
+      <Name>Mono.Posix\Mono.Posix-net_4_5</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\System\System-net_4_5-2.csproj">
+      <Project>{5C605B73-19DA-4FB7-AB39-C7EF9A8B19FE}</Project>
+      <Name>System\System-net_4_5-2</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\System.Core\System.Core-net_4_5.csproj">
+      <Project>{D92530F4-3F2B-4351-BD21-9D6BEE6D2A4E}</Project>
+      <Name>System.Core\System.Core-net_4_5</Name>
+    </ProjectReference>
   </ItemGroup>
   <ItemGroup>
     <Folder Include="Properties\" />
   </ItemGroup>
-  
 </Project>
 

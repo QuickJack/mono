@@ -8,10 +8,12 @@ using System.Runtime.CompilerServices;
 struct S
 {
 	public int Value;
+	public S2 s2;
 	
 	public S (int a1, string a2)
 	{
 		Value = a1;
+		s2 = new S2 ();
 	}
 	
 	public void SetValue (int value)
@@ -30,6 +32,11 @@ struct S
 			Value = a.Value + b.Value
 		};
 	}
+}
+
+struct S2
+{
+	public int Value;
 }
 
 enum E
@@ -270,6 +277,21 @@ class Tester : Base
 		return 0;
 	}
 
+	async Task<bool> ArrayAccessTest_10 ()
+	{
+		var b = new bool [1] { true };
+		
+		var r = b [await Task.Factory.StartNew (() => 0)];
+		return r;
+	}
+
+	async Task<bool> ArrayAccessTest_11 ()
+	{
+		var a = new S [1];
+ 		a [await Task.Factory.StartNew (() => 0)].s2.Value += 5;
+		return a [await Task.Factory.StartNew(() => 0)].s2.Value == 5;
+	}
+
 	async Task<int> AssignTest_1 ()
 	{
 		field_int = await Task.Factory.StartNew (() => 0);
@@ -351,6 +373,15 @@ class Tester : Base
 			return 2;
 		
 		return 0;
+	}
+
+	async Task<bool> BinaryTest_6 ()
+	{
+		var t = Task.Delay (1);
+		if (t == await Task.WhenAny(new [] { t }))
+			return true;
+
+		return false;
 	}
 
 	async Task<int> CallTest_1 ()
@@ -576,6 +607,18 @@ class Tester : Base
 		var s = new S (await Task.Factory.StartNew (() => 77), await Task.Factory.StartNew (() => "b"));
 		return s.Value == 77;
 	}
+
+	async Task<int> NewDelegate_1 ()
+	{
+		var f = new Func<int> (await NewDelegate_1_0 ());
+		return f ();
+	}
+
+	static async Task<Func<int>> NewDelegate_1_0 ()
+	{
+		await Task.Factory.StartNew (() => { });
+		return () => 0;		
+	}
 	
 	async Task<int> NewInitTest_1 ()
 	{
@@ -669,6 +712,12 @@ class Tester : Base
 		return a.Length == 13;
 	}
 	
+	async Task<bool> NewArrayInitTest_7 ()
+	{
+		var res = new [] { "a", new [] { "1", await Task.FromResult ("2") } [1], "b" };
+		return res [1] == "2";
+	}
+
 	async Task<bool> PropertyTest_1 ()
 	{
 		PropertyInt = await Task.Factory.StartNew (() => 6);

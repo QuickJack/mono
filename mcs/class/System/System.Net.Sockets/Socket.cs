@@ -11,7 +11,6 @@
 //    http://www.myelin.co.nz
 // (c) 2004-2011 Novell, Inc. (http://www.novell.com)
 //
-
 //
 // Permission is hereby granted, free of charge, to any person obtaining
 // a copy of this software and associated documentation files (the
@@ -45,9 +44,7 @@ using System.IO;
 using System.Net.Configuration;
 using System.Text;
 using System.Timers;
-#if !MOONLIGHT
 using System.Net.NetworkInformation;
-#endif
 
 namespace System.Net.Sockets 
 {
@@ -56,6 +53,8 @@ namespace System.Net.Sockets
 		private bool islistening;
 		private bool useoverlappedIO;
 		private const int SOCKET_CLOSED = 10004;
+
+		private static readonly string timeout_exc_msg = "A connection attempt failed because the connected party did not properly respond after a period of time, or established connection failed because connected host has failed to respond";
 
 		static void AddSockets (List<Socket> sockets, IList list, string name)
 		{
@@ -69,12 +68,10 @@ namespace System.Net.Sockets
 
 			sockets.Add (null);
 		}
-#if !TARGET_JVM
 		[MethodImplAttribute(MethodImplOptions.InternalCall)]
 		private extern static void Select_internal (ref Socket [] sockets,
 							int microSeconds,
 							out int error);
-#endif
 		public static void Select (IList checkRead, IList checkWrite, IList checkError, int microSeconds)
 		{
 			var list = new List<Socket> ();
@@ -201,11 +198,9 @@ namespace System.Net.Sockets
 		}
 #endif
 	
-#if !TARGET_JVM
 		// Returns the amount of data waiting to be read on socket
 		[MethodImplAttribute(MethodImplOptions.InternalCall)]
 		private extern static int Available_internal(IntPtr socket, out int error);
-#endif
 
 		public int Available {
 			get {
@@ -405,11 +400,9 @@ namespace System.Net.Sockets
 			}
 		}
 
-#if !TARGET_JVM
 		// Returns the local endpoint details in addr and port
 		[MethodImplAttribute(MethodImplOptions.InternalCall)]
 		private extern static SocketAddress LocalEndPoint_internal(IntPtr socket, int family, out int error);
-#endif
 
 		// Wish:  support non-IP endpoints.
 		public EndPoint LocalEndPoint {
@@ -499,7 +492,6 @@ namespace System.Net.Sockets
 			}
 		}
 
-#if !MOONLIGHT
 		public bool AcceptAsync (SocketAsyncEventArgs e)
 		{
 			// NO check is made whether e != null in MS.NET (NRE is thrown in such case)
@@ -533,7 +525,6 @@ namespace System.Net.Sockets
 				socket_pool_queue (Worker.Dispatcher, w.result);
 			return true;
 		}
-#endif
 		// Creates a new system socket, returning the handle
 		[MethodImplAttribute(MethodImplOptions.InternalCall)]
 		private extern static IntPtr Accept_internal(IntPtr sock, out int error, bool blocking);
@@ -1058,7 +1049,10 @@ namespace System.Net.Sockets
 				throw new FileNotFoundException ();
 
 			SendFileHandler d = new SendFileHandler (SendFile);
-			return new SendFileAsyncResult (d, d.BeginInvoke (fileName, preBuffer, postBuffer, flags, callback, state));
+			return new SendFileAsyncResult (d, d.BeginInvoke (fileName, preBuffer, postBuffer, flags, ar => {
+				SendFileAsyncResult sfar = new SendFileAsyncResult (d, ar);
+				callback (sfar);
+			}, state));
 		}
 
 		public IAsyncResult BeginSendTo(byte[] buffer, int offset,
@@ -1173,7 +1167,6 @@ namespace System.Net.Sockets
 			Connect (addresses, port);
 		}
 
-#if !MOONLIGHT
 		public bool DisconnectAsync (SocketAsyncEventArgs e)
 		{
 			// NO check is made whether e != null in MS.NET (NRE is thrown in such case)
@@ -1185,7 +1178,6 @@ namespace System.Net.Sockets
 			socket_pool_queue (Worker.Dispatcher, e.Worker.result);
 			return true;
 		}
-#endif
 
 		[MethodImplAttribute(MethodImplOptions.InternalCall)]
 		extern static void Disconnect_internal(IntPtr sock, bool reuse, out int error);
@@ -1296,7 +1288,6 @@ namespace System.Net.Sockets
 			req.CheckIfThrowDelayedException();
 		}
 
-#if !MOONLIGHT
 		public void EndDisconnect (IAsyncResult asyncResult)
 		{
 			if (disposed && closed)
@@ -1316,7 +1307,6 @@ namespace System.Net.Sockets
 
 			req.CheckIfThrowDelayedException ();
 		}
-#endif
 
 		[MonoTODO]
 		public int EndReceiveMessageFrom (IAsyncResult asyncResult,
@@ -1357,7 +1347,6 @@ namespace System.Net.Sockets
 			ares.Delegate.EndInvoke (ares.Original);
 		}
 
-#if !MOONLIGHT
 		public int EndSendTo (IAsyncResult result)
 		{
 			if (disposed && closed)
@@ -1378,7 +1367,6 @@ namespace System.Net.Sockets
 			req.CheckIfThrowDelayedException();
 			return req.Total;
 		}
-#endif
 
 		[MethodImplAttribute(MethodImplOptions.InternalCall)]
 		private extern static void GetSocketOption_arr_internal(IntPtr socket,
@@ -1501,20 +1489,7 @@ namespace System.Net.Sockets
 
 		public int Receive (byte [] buffer)
 		{
-			if (disposed && closed)
-				throw new ObjectDisposedException (GetType ().ToString ());
-
-			if (buffer == null)
-				throw new ArgumentNullException ("buffer");
-
-			SocketError error;
-
-			int ret = Receive_nochecks (buffer, 0, buffer.Length, SocketFlags.None, out error);
-			
-			if (error != SocketError.Success)
-				throw new SocketException ((int) error);
-
-			return ret;
+			return Receive (buffer, SocketFlags.None);
 		}
 
 		public int Receive (byte [] buffer, SocketFlags flags)
@@ -1531,7 +1506,7 @@ namespace System.Net.Sockets
 			
 			if (error != SocketError.Success) {
 				if (error == SocketError.WouldBlock && blocking) // This might happen when ReceiveTimeout is set
-					throw new SocketException ((int) error, "Operation timed out.");
+					throw new SocketException ((int) error, timeout_exc_msg);
 				throw new SocketException ((int) error);
 			}
 
@@ -1554,7 +1529,7 @@ namespace System.Net.Sockets
 			
 			if (error != SocketError.Success) {
 				if (error == SocketError.WouldBlock && blocking) // This might happen when ReceiveTimeout is set
-					throw new SocketException ((int) error, "Operation timed out.");
+					throw new SocketException ((int) error, timeout_exc_msg);
 				throw new SocketException ((int) error);
 			}
 
@@ -1577,7 +1552,7 @@ namespace System.Net.Sockets
 			
 			if (error != SocketError.Success) {
 				if (error == SocketError.WouldBlock && blocking) // This might happen when ReceiveTimeout is set
-					throw new SocketException ((int) error, "Operation timed out.");
+					throw new SocketException ((int) error, timeout_exc_msg);
 				throw new SocketException ((int) error);
 			}
 
@@ -1597,7 +1572,6 @@ namespace System.Net.Sockets
 			return Receive_nochecks (buffer, offset, size, flags, out error);
 		}
 
-#if !MOONLIGHT
 		public bool ReceiveFromAsync (SocketAsyncEventArgs e)
 		{
 			if (disposed && closed)
@@ -1626,7 +1600,6 @@ namespace System.Net.Sockets
 				socket_pool_queue (Worker.Dispatcher, res);
 			return true;
 		}
-#endif
 
 		public int ReceiveFrom (byte [] buffer, ref EndPoint remoteEP)
 		{
@@ -1718,7 +1691,7 @@ namespace System.Net.Sockets
 					connected = false;
 				else if (err == SocketError.WouldBlock && blocking) { // This might happen when ReceiveTimeout is set
 					if (throwOnError)	
-						throw new SocketException ((int) SocketError.TimedOut, "Operation timed out");
+						throw new SocketException ((int) SocketError.TimedOut, timeout_exc_msg);
 					error = (int) SocketError.TimedOut;
 					return 0;
 				}
@@ -1917,7 +1890,6 @@ namespace System.Net.Sockets
 			}
 		}
 
-#if !MOONLIGHT
 		public bool SendToAsync (SocketAsyncEventArgs e)
 		{
 			// NO check is made whether e != null in MS.NET (NRE is thrown in such case)
@@ -1946,7 +1918,6 @@ namespace System.Net.Sockets
 				socket_pool_queue (Worker.Dispatcher, res);
 			return true;
 		}
-#endif
 		
 		public int SendTo (byte [] buffer, EndPoint remote_end)
 		{

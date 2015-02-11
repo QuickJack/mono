@@ -27,8 +27,6 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#if NET_2_0
-
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -55,7 +53,6 @@ namespace Microsoft.Build.Tasks {
 		bool		findRelatedFiles;
 		bool		findSatellites;
 		bool		findSerializationAssemblies;
-		string[]	installedAssemblyTables;
 		ITaskItem[]	relatedFiles;
 		ITaskItem[]	resolvedDependencyFiles;
 		ITaskItem[]	resolvedFiles;
@@ -158,13 +155,13 @@ namespace Microsoft.Build.Tasks {
 
 				LogWithPrecedingNewLine (MessageImportance.Low, "Primary Reference {0}", item.ItemSpec);
 				ResolvedReference resolved_ref = ResolveReference (item, searchPaths, true);
+				if (resolved_ref == null)
+					resolved_ref = ResolveWithAlternateName (item, allowedAssemblyExtensions ?? default_assembly_extensions);
+
 				if (resolved_ref == null) {
 					Log.LogWarning ("Reference '{0}' not resolved", item.ItemSpec);
 					assembly_resolver.LogSearchLoggerMessages (MessageImportance.Normal);
 				} else {
-					if (Environment.GetEnvironmentVariable ("XBUILD_LOG_REFERENCE_RESOLVER") != null)
-						assembly_resolver.LogSearchLoggerMessages (MessageImportance.Low);
-
 					Log.LogMessage (MessageImportance.Low,
 							"\tReference {0} resolved to {1}. CopyLocal = {2}",
 							item.ItemSpec, resolved_ref.TaskItem,
@@ -173,6 +170,8 @@ namespace Microsoft.Build.Tasks {
 					Log.LogMessage (MessageImportance.Low,
 							"\tReference found at search path {0}",
 							resolved_ref.FoundInSearchPathAsString);
+
+					assembly_resolver.LogSearchLoggerMessages (MessageImportance.Low);
 
 					if (TryAddNewReference (tempResolvedFiles, resolved_ref) &&
 						!IsFromGacOrTargetFramework (resolved_ref) &&
@@ -183,6 +182,19 @@ namespace Microsoft.Build.Tasks {
 					}
 				}
 			}
+		}
+
+
+		ResolvedReference ResolveWithAlternateName (ITaskItem item, string[] extensions)
+		{
+			foreach (string extn in extensions) {
+				if (item.ItemSpec.EndsWith (extn)) {
+					ITaskItem altitem = new TaskItem (item.ItemSpec.Substring (0, item.ItemSpec.Length - extn.Length));
+					item.CopyMetadataTo (altitem);
+					return ResolveReference (altitem, searchPaths, true);
+				}
+			}
+			return null;
 		}
 
 		// Use @search_paths to resolve the reference
@@ -289,8 +301,7 @@ namespace Microsoft.Build.Tasks {
 					continue;
 				}
 
-				if (Environment.GetEnvironmentVariable ("XBUILD_LOG_REFERENCE_RESOLVER") != null)
-					assembly_resolver.LogSearchLoggerMessages (MessageImportance.Low);
+				assembly_resolver.LogSearchLoggerMessages (MessageImportance.Low);
 
 				ResolvedReference rr = assembly_resolver.GetResolvedReference (item, item.ItemSpec, aname, true,
 						SearchPath.RawFileName);
@@ -334,10 +345,9 @@ namespace Microsoft.Build.Tasks {
 						continue;
 
 					ResolvedReference resolved_ref = ResolveDependencyByAssemblyName (
-							aname, asm.FullName, parent_copy_local);
+						aname, asm.FullName, parent_copy_local);
 
-					if (resolved_ref != null && !IsFromGacOrTargetFramework (resolved_ref)
-							&& resolved_ref.FoundInSearchPath != SearchPath.PkgConfig) {
+					if (IncludeDependencies (resolved_ref, aname.FullName)) {
 						tempResolvedDepFiles[resolved_ref.AssemblyName.FullName] = resolved_ref.TaskItem;
 						dependencies.Enqueue (resolved_ref.TaskItem.ItemSpec);
 					}
@@ -365,15 +375,14 @@ namespace Microsoft.Build.Tasks {
 			resolved_ref = ResolveReference (item, dependency_search_paths, false);
 
 			if (resolved_ref != null) {
-				if (Environment.GetEnvironmentVariable ("XBUILD_LOG_REFERENCE_RESOLVER") != null)
-						assembly_resolver.LogSearchLoggerMessages (MessageImportance.Low);
-
 				Log.LogMessage (MessageImportance.Low, "\tReference {0} resolved to {1}.",
 					aname, resolved_ref.TaskItem.ItemSpec);
 
 				Log.LogMessage (MessageImportance.Low,
 						"\tReference found at search path {0}",
 						resolved_ref.FoundInSearchPathAsString);
+
+				assembly_resolver.LogSearchLoggerMessages (MessageImportance.Low);
 
 				if (resolved_ref.FoundInSearchPath == SearchPath.Directory) {
 					// override CopyLocal with parent's val
@@ -390,14 +399,14 @@ namespace Microsoft.Build.Tasks {
 				} else {
 					//gac or tgtfmwk
 					Log.LogMessage (MessageImportance.Low,
-							"\tThis is CopyLocal false as it is in the gac," +
+							"\tThis is CopyLocal false as it is in the GAC," +
 							"target framework directory or provided by a package.");
 
 					TryAddNewReference (tempResolvedFiles, resolved_ref);
 				}
 			} else {
-				Log.LogWarning ("Reference '{0}' not resolved", aname);
-				assembly_resolver.LogSearchLoggerMessages (MessageImportance.Normal);
+				Log.LogMessage (MessageImportance.Low, "Could not resolve the assembly \"{0}\".", aname);
+				assembly_resolver.LogSearchLoggerMessages (MessageImportance.Low);
 			}
 
 			return resolved_ref;
@@ -409,7 +418,7 @@ namespace Microsoft.Build.Tasks {
 				return;
 
 			foreach (string ext in allowedRelatedFileExtensions) {
-				string rfile = filename + ext;
+				string rfile = Path.ChangeExtension (filename, ext);
 				if (File.Exists (rfile)) {
 					ITaskItem item = new TaskItem (rfile);
 					SetCopyLocal (item, parent_copy_local);
@@ -529,6 +538,15 @@ namespace Microsoft.Build.Tasks {
 				rr.FoundInSearchPath == SearchPath.TargetFrameworkDirectory;
 		}
 
+		bool IncludeDependencies (ResolvedReference rr, string aname)
+		{
+			if (rr == null)
+				return false;
+			if (aname.Equals ("System.Runtime, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a"))
+				return true;
+			return !IsFromGacOrTargetFramework (rr) && rr.FoundInSearchPath != SearchPath.PkgConfig;
+		}
+
 		void LogTaskParameters ()
 		{
 			Log.LogMessage (MessageImportance.Low, "TargetFrameworkDirectories:");
@@ -607,12 +625,11 @@ namespace Microsoft.Build.Tasks {
 			get { return findSerializationAssemblies; }
 			set { findSerializationAssemblies = value; }
 		}
-		
-		public string[] InstalledAssemblyTables {
-			get { return installedAssemblyTables; }
-			set { installedAssemblyTables = value; }
-		}
-		
+
+		public
+		ITaskItem[]
+		InstalledAssemblyTables { get; set; }
+
 		[Output]
 		public ITaskItem[] RelatedFiles {
 			get { return relatedFiles; }
@@ -664,11 +681,9 @@ namespace Microsoft.Build.Tasks {
 			get { return suggestedRedirects; }
 		}
 
-#if NET_4_0
 		public string TargetFrameworkMoniker { get; set; }
 
 		public string TargetFrameworkMonikerDisplayName { get; set; }
-#endif
 
 		public string TargetFrameworkVersion { get; set; }
 
@@ -723,5 +738,3 @@ namespace Microsoft.Build.Tasks {
 	}
 
 }
-
-#endif

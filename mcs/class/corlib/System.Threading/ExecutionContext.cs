@@ -4,8 +4,10 @@
 // Authors:
 //	Lluis Sanchez (lluis@novell.com)
 //	Sebastien Pouliot  <sebastien@ximian.com>
+//  Marek Safar (marek.safar@gmail.com)
 //
 // Copyright (C) 2004-2005 Novell, Inc (http://www.novell.com)
+// Copyright (C) 2014 Xamarin Inc (http://www.xamarin.com)
 //
 // Permission is hereby granted, free of charge, to any person obtaining
 // a copy of this software and associated documentation files (the
@@ -32,33 +34,76 @@ using System.Runtime.Serialization;
 using System.Security;
 using System.Security.Permissions;
 using System.Runtime.Remoting.Messaging;
+using System.Collections.Generic;
 
 namespace System.Threading {
 	[Serializable]
-	public sealed class ExecutionContext : ISerializable
-#if NET_4_0
-		, IDisposable
-#endif
+	public sealed partial class ExecutionContext : ISerializable
+           , IDisposable
 	{
-#if !MOONLIGHT
+		internal struct Switcher
+		{
+			readonly ExecutionContext ec;
+			readonly LogicalCallContext _lcc;
+			readonly bool _suppressFlow;
+			readonly bool _capture;
+			readonly Dictionary<string, object> local_data;
+			readonly bool copy_on_write;
+
+			public Switcher (ExecutionContext ec)
+			{
+				this.ec = ec;
+				this._lcc = ec._lcc;
+				this._suppressFlow = ec._suppressFlow;
+				this._capture = ec._capture;
+				this.local_data = ec.local_data;
+				this.copy_on_write = ec.CopyOnWrite;
+			}
+
+			public bool IsEmpty {
+				get {
+					return ec == null;
+				}
+			}
+
+			public void Restore (ExecutionContext ec)
+			{
+				ec._lcc = this._lcc;
+				ec._suppressFlow = this._suppressFlow;
+				ec._capture = this._capture;
+				ec.local_data = this.local_data;
+				ec.CopyOnWrite = this.copy_on_write;
+			}
+		}
+
+#if !MOBILE
 		private SecurityContext _sc;
 #endif
 		private LogicalCallContext _lcc;
 		private bool _suppressFlow;
 		private bool _capture;
+		Dictionary<string, object> local_data;
 
 		internal ExecutionContext ()
 		{
 		}
 
-		internal ExecutionContext (ExecutionContext ec)
+		private ExecutionContext (ExecutionContext ec)
 		{
-#if !MOONLIGHT
+			CloneData (ec);
+
+			_suppressFlow = ec._suppressFlow;
+			_capture = true;
+		}
+
+		void CloneData (ExecutionContext ec)
+		{
+#if !MOBILE
 			if (ec._sc != null)
 				_sc = new SecurityContext (ec._sc);
 #endif
-			_suppressFlow = ec._suppressFlow;
-			_capture = true;
+			if (ec._lcc != null)
+				_lcc = (LogicalCallContext) ec._lcc.Clone ();
 		}
 		
 		[MonoTODO]
@@ -69,22 +114,30 @@ namespace System.Threading {
 
 		public static ExecutionContext Capture ()
 		{
-			return Capture (true);
+			return Capture (true, false);
 		}
 		
-		internal static ExecutionContext Capture (bool captureSyncContext)
+		internal static ExecutionContext Capture (bool captureSyncContext, bool nullOnEmpty)
 		{
-			ExecutionContext ec = Thread.CurrentThread.ExecutionContext;
+			var thread = Thread.CurrentThread;
+			if (nullOnEmpty && !thread.HasExecutionContext)
+				return null;
+
+			var ec = thread.ExecutionContext;
 			if (ec.FlowSuppressed)
 				return null;
 
+			if (nullOnEmpty
+#if !MOBILE
+			 && ec._sc == null
+#endif
+				&& (ec._lcc == null || !ec._lcc.HasInfo))
+				return null;
+
 			ExecutionContext capture = new ExecutionContext (ec);
-#if !MOONLIGHT
+#if !MOBILE
 			if (SecurityManager.SecurityEnabled)
 				capture.SecurityContext = SecurityContext.Capture ();
-#endif
-#if !MONOTOUCH
-			capture.LogicalCallContext = CallContext.CreateLogicalCallContext (false);
 #endif
 			return capture;
 		}
@@ -97,13 +150,13 @@ namespace System.Threading {
 			return new ExecutionContext (this);
 		}
 		
-#if NET_4_0
 		public void Dispose ()
 		{
+#if !MOBILE
 			if (_sc != null)
 				_sc.Dispose ();
-		}
 #endif
+		}
 
 		[MonoTODO]
 		[ReflectionPermission (SecurityAction.Demand, MemberAccess = true)]
@@ -119,7 +172,7 @@ namespace System.Threading {
 		internal LogicalCallContext LogicalCallContext {
 			get {
 				if (_lcc == null)
-					return new LogicalCallContext ();
+					_lcc = new LogicalCallContext ();
 				return _lcc;
 			}
 			set {
@@ -127,7 +180,18 @@ namespace System.Threading {
 			}
 		}
 
-#if !MOONLIGHT
+		internal Dictionary<string, object> DataStore {
+			get {
+				if (local_data == null)
+					local_data = new Dictionary<string, object> ();
+				return local_data;
+			}
+			set {
+				local_data = value;
+			}
+		}
+
+#if !MOBILE
 		internal SecurityContext SecurityContext {
 			get {
 				if (_sc == null)
@@ -137,31 +201,33 @@ namespace System.Threading {
 			set { _sc = value; }
 		}
 #endif
+
 		internal bool FlowSuppressed {
 			get { return _suppressFlow; }
 			set { _suppressFlow = value; }
 		}
 
-		// Note: Previous to version 2.0 only the CompressedStack and (sometimes!) the WindowsIdentity
-		// were propagated to new threads. This is why ExecutionContext is internal in before NET_2_0.
-		// It also means that all newer context classes should be here (i.e. inside the #if NET_2_0).
+		internal bool CopyOnWrite { get; set; }
 
 		public static bool IsFlowSuppressed ()
 		{
-			return Thread.CurrentThread.ExecutionContext.FlowSuppressed;
+			return Current.FlowSuppressed;
 		}
 
 		public static void RestoreFlow ()
 		{
-			ExecutionContext ec = Thread.CurrentThread.ExecutionContext;
+			ExecutionContext ec = Current;
 			if (!ec.FlowSuppressed)
 				throw new InvalidOperationException ();
 
 			ec.FlowSuppressed = false;
 		}
+		
+		internal static void Run(ExecutionContext executionContext, ContextCallback callback, Object state, bool preserveSyncCtx)
+		{
+			Run (executionContext, callback, state);
+		}
 
-#if !MOONLIGHT
-		[MonoTODO ("only the SecurityContext is considered")]
 		[SecurityPermission (SecurityAction.LinkDemand, Infrastructure = true)]
 		public static void Run (ExecutionContext executionContext, ContextCallback callback, object state)
 		{
@@ -170,18 +236,13 @@ namespace System.Threading {
 					"Null ExecutionContext"));
 			}
 
-			// FIXME: supporting more than one context should be done with executionContextSwitcher
-			// and will requires a rewrite of this method
-			var callContextCallBack = new ContextCallback (new Action<object> ((ostate) => {
-				var originalCallContext = CallContext.CreateLogicalCallContext (true);
-				try {
-					CallContext.SetCurrentCallContext (executionContext.LogicalCallContext);
-					callback (ostate);
-				} finally {
-					CallContext.SetCurrentCallContext (originalCallContext);
-				}
-			}));
-			SecurityContext.Run (executionContext.SecurityContext, callContextCallBack, state);
+			var prev = Current;
+			try {
+				Thread.CurrentThread.ExecutionContext = executionContext;
+				callback (state);
+			} finally {
+				Thread.CurrentThread.ExecutionContext = prev;
+			}
 		}
 
 		public static AsyncFlowControl SuppressFlow ()
@@ -190,6 +251,44 @@ namespace System.Threading {
 			t.ExecutionContext.FlowSuppressed = true;
 			return new AsyncFlowControl (t, AsyncFlowControlType.Execution);
 		}
-#endif
+
+		internal static LogicalCallContext CreateLogicalCallContext (bool createEmpty)
+		{
+			var lcc = Current._lcc;
+			if (lcc == null) {
+				if (createEmpty)
+					lcc = new LogicalCallContext ();
+
+				return lcc;
+			}
+
+			return (LogicalCallContext) lcc.Clone ();
+		}
+
+		internal void FreeNamedDataSlot (string name)
+		{
+			if (_lcc != null)
+				_lcc.FreeNamedDataSlot (name);
+
+			if (local_data != null)
+				local_data.Remove (name);
+		}
+
+		internal static ExecutionContext Current {
+			get {
+				return Thread.CurrentThread.ExecutionContext;
+			}
+		}
+
+		internal static ExecutionContext GetCurrentWritable ()
+		{
+			var current = Thread.CurrentThread.ExecutionContext;
+			if (current.CopyOnWrite) {
+				current.CopyOnWrite = false;
+				current.CloneData (current);
+			}
+
+			return current;
+		}
 	}
 }

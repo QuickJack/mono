@@ -38,19 +38,45 @@ public static class Consts {
 	
 	public static string BinPath {
 		get {
-			if (RunningOnMono ())
-				return "../../tools/xbuild/xbuild";
-			else
+			if (RunningOnMono ()) {
+#if XBUILD_14
+				string profile = "xbuild_14";
+#elif XBUILD_12
+				string profile = "xbuild_12";
+#elif NET_4_5
+				string profile = "net_4_5";
+#elif NET_4_0
+				string profile = "net_4_0";
+#else
+				string profile = "net_2_0";
+#endif
+				var corlib = typeof (object).Assembly.Location;
+				var lib = Path.GetDirectoryName (Path.GetDirectoryName (corlib));
+				return Path.Combine (lib, profile);
+			} else {
+#if XBUILD_14
+				return ToolLocationHelper.GetPathToBuildTools ("14.0");
+#elif XBUILD_12
+				return ToolLocationHelper.GetPathToBuildTools ("12.0");
+#elif NET_4_5
+				return ToolLocationHelper.GetPathToDotNetFramework (TargetDotNetFrameworkVersion.Version45);
+#elif NET_4_0
+				return ToolLocationHelper.GetPathToDotNetFramework (TargetDotNetFrameworkVersion.Version40);
+#else
 				return ToolLocationHelper.GetPathToDotNetFramework (TargetDotNetFrameworkVersion.Version20);
+#endif
+			}
 		}
 	}
 
 	public static string ToolsVersionString {
 		get {
-#if NET_4_0
+#if XBUILD_14
+			return " ToolsVersion='14.0'";
+#elif XBUILD_12
+			return " ToolsVersion='12.0'";
+#elif NET_4_0
 			return " ToolsVersion='4.0'";
-#elif NET_3_5
-			return " ToolsVersion='3.5'";
 #else
 			return String.Empty;
 #endif
@@ -59,12 +85,14 @@ public static class Consts {
 
 	public static string GetTasksAsmPath ()
 	{
-#if NET_4_0
-		return Path.Combine (ToolLocationHelper.GetPathToDotNetFramework (TargetDotNetFrameworkVersion.Version40), "Microsoft.Build.Tasks.v4.0.dll");
-#elif NET_3_5
-		return Path.Combine (ToolLocationHelper.GetPathToDotNetFramework (TargetDotNetFrameworkVersion.Version35), "Microsoft.Build.Tasks.v3.5.dll");
+#if XBUILD_14
+		return Path.Combine (BinPath, "Microsoft.Build.Tasks.Core.dll");
+#elif XBUILD_12
+		return Path.Combine (BinPath, "Microsoft.Build.Tasks.v12.0.dll");
+#elif NET_4_0
+		return Path.Combine (BinPath, "Microsoft.Build.Tasks.v4.0.dll");
 #else
-		return Path.Combine (ToolLocationHelper.GetPathToDotNetFramework (TargetDotNetFrameworkVersion.Version20), "Microsoft.Build.Tasks.dll");
+		return Path.Combine (BinPath, "Microsoft.Build.Tasks.dll");
 #endif
 	}
 }

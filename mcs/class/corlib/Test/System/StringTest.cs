@@ -37,6 +37,13 @@ public class StringTest
 		}
 	}
 
+	class ToNullStringer
+	{
+		public override string ToString()
+		{
+			return null;
+		}
+	}
 
 	private CultureInfo orgCulture;
 
@@ -55,7 +62,6 @@ public class StringTest
 	}
 
 
-#if !TARGET_JVM
 	[Test] // ctor (Char [])
 	public unsafe void Constructor2 ()
 	{
@@ -63,7 +69,6 @@ public class StringTest
 		Assert.AreEqual (String.Empty, new String (new Char [0]), "#2");
 		Assert.AreEqual ("A", new String (new Char [1] {'A'}), "#3");
 	}
-#endif
 
 	[Test] // ctor (Char, Int32)
 	public void Constructor4 ()
@@ -162,7 +167,6 @@ public class StringTest
 		}
 	}
 
-#if !TARGET_JVM
 	[Test]
 	public unsafe void CharPtrConstructor ()
 	{
@@ -517,7 +521,6 @@ public class StringTest
 
 		Assert.AreEqual (String.Empty, new String ((sbyte*) null, 1, 0, Encoding.Default), "#F");
 	}
-#endif
 	[Test]
 	public void Length ()
 	{
@@ -1100,6 +1103,7 @@ public class StringTest
 		Assert.AreEqual ("typedef struct _MonoObject { ... } MonoObject;", String.Format ("typedef struct _{0} {{ ... }} MonoObject;", "MonoObject"), "Escaped bracket");
 		Assert.AreEqual ("Could not find file \"a/b\"", String.Format ("Could not find file \"{0}\"", "a/b"), "With Slash");
 		Assert.AreEqual ("Could not find file \"a\\b\"", String.Format ("Could not find file \"{0}\"", "a\\b"), "With BackSlash");
+		Assert.AreEqual ("{d} ", string.Format ("{{{0:d}} }", 100));
 	}
 
 	[Test] // Format (String, Object)
@@ -1207,6 +1211,13 @@ public class StringTest
 	{
 		var s = String.Format (new NullFormatter (), "{0:}", "test");
 		Assert.AreEqual ("test", s);
+	}
+
+	[Test]
+	public void Format_Arg_ToNullStringer ()
+	{
+		var s = String.Format ("{0}", new ToNullStringer ());
+		Assert.AreEqual ("", s);
 	}
 
 	[Test]
@@ -2274,7 +2285,25 @@ public class StringTest
 		Assert.IsTrue ("ABC".Contains ("ABC"));
 		Assert.IsTrue ("ABC".Contains ("AB"));
 		Assert.IsTrue (!"ABC".Contains ("AD"));
-		Assert.IsTrue (!"encyclop�dia".Contains("encyclopaedia"));
+		Assert.IsTrue (!"encyclopædia".Contains("encyclopaedia"));
+	}
+
+	[Test]
+	public void IndexOfIsCultureAwareWhileContainsIsNot ()
+	{
+		string a = "encyclopædia";
+		string b = "encyclopaedia";
+		Assert.IsFalse (a.Contains (b), "#1");
+		Assert.IsTrue (a.Contains ("æ"), "#1.1");
+		Assert.IsFalse (b.Contains ("æ"), "#1.2");
+		Assert.AreEqual (0, a.IndexOf (b), "#2");
+		Assert.AreEqual (8, a.IndexOf ('æ'), "#3");
+		Assert.AreEqual (-1, b.IndexOf ('æ'), "#4");
+		Assert.AreEqual (8, a.IndexOf ("æ"), "#5");
+		Assert.AreEqual (8, b.IndexOf ("æ"), "#6");
+
+		Assert.AreEqual (0, CultureInfo.CurrentCulture.CompareInfo.IndexOf (a, b, 0, a.Length, CompareOptions.None), "#7");
+		Assert.AreEqual (-1, CultureInfo.CurrentCulture.CompareInfo.IndexOf (a, b, 0, a.Length, CompareOptions.Ordinal), "#8");
 	}
 
 	[Test]
@@ -2610,9 +2639,7 @@ public class StringTest
 		Assert.AreEqual (-1, s1.LastIndexOf("original", s1.Length-11), "stepped string index #3");
 		Assert.AreEqual (-1, s1.LastIndexOf("translator", 2), "stepped string index #4");
 		Assert.AreEqual (0, string.Empty.LastIndexOf(string.Empty, 0), "stepped string index #5");
-#if !TARGET_JVM
 		Assert.AreEqual (-1, string.Empty.LastIndexOf("A", -1), "stepped string index #6");
-#endif
 		Assert.AreEqual (10, s1.LastIndexOf("rig", s1.Length-1, 10), "stepped limited string index #1");
 		Assert.AreEqual (-1, s1.LastIndexOf("rig", s1.Length, 3), "stepped limited string index #2");
 		Assert.AreEqual (10, s1.LastIndexOf("rig", s1.Length-2, 15), "stepped limited string index #3");
@@ -2958,6 +2985,15 @@ public class StringTest
 		}
 	}
 
+	[Test]
+	public void PadLeft_Overflow ()
+	{
+		try {
+			"x".PadLeft (int.MaxValue, '-');
+		} catch (OutOfMemoryException) {
+		}
+	}
+
 	[Test] // PadRight (Int32)
 	public void PadRight1 ()
 	{
@@ -2997,6 +3033,15 @@ public class StringTest
 	{
 		Assert.AreEqual ("100000000000", "1".PadRight (12, '0'), "#1");
 		Assert.AreEqual ("000000000000", "".PadRight (12, '0'), "#2");
+	}
+
+	[Test]
+	public void PadRight_Overflow ()
+	{
+		try {
+			"x".PadRight (int.MaxValue, '-');
+		} catch (OutOfMemoryException) {
+		}
 	}
 
 	[Test] // Remove (Int32, Int32)
@@ -3154,9 +3199,7 @@ public class StringTest
 		Assert.AreEqual (s2.Replace("..", "."), "..aaaaaaa.bbbbbbbbb,......ccccccc.u..");
 
 		// Test replacing null characters (bug #67395)
-#if !TARGET_JVM //bug #7276
 		Assert.AreEqual ("is this ok ?", "is \0 ok ?".Replace ("\0", "this"), "should not strip content after nullchar");
-#endif
 	}
 
 	[Test]
@@ -3720,7 +3763,7 @@ public class StringTest
 		Assert.AreEqual ("original", "\u0085original\u1680".Trim (), "net_2_0 additional char#2");
 
 #if NET_4_0
-		Assert.AreEqual ("", "\x9\xa\xb\xc\xd\x20\x85\xa0\x1680\x180e\x2000\x2001\x2002\x2003\x2004\x2005\x2006\x2007\x2008\x2009\x200a\x2028\x2029\x202f\x205f\x3000".Trim (), "net_4_0 changes #1");
+		Assert.AreEqual ("", "\x9\xa\xb\xc\xd\x20\x85\xa0\x1680\x2000\x2001\x2002\x2003\x2004\x2005\x2006\x2007\x2008\x2009\x200a\x2028\x2029\x202f\x205f\x3000".Trim (), "net_4_0 changes #1");
 #endif
 	}
 
@@ -3895,7 +3938,7 @@ public class StringTest
 		Assert.AreEqual (0, chunks.Length, "Zero split");
 
 #if NET_4_0
-		Assert.AreEqual (0, "\x9\xa\xb\xc\xd\x20\x85\xa0\x1680\x180e\x2000\x2001\x2002\x2003\x2004\x2005\x2006\x2007\x2008\x2009\x200a\x2028\x2029\x202f\x205f\x3000".Split ((char[]) null, StringSplitOptions.RemoveEmptyEntries).Length, "net_4_0 changes");
+		Assert.AreEqual (0, "\x9\xa\xb\xc\xd\x20\x85\xa0\x1680\x2000\x2001\x2002\x2003\x2004\x2005\x2006\x2007\x2008\x2009\x200a\x2028\x2029\x202f\x205f\x3000".Split ((char[]) null, StringSplitOptions.RemoveEmptyEntries).Length, "net_4_0 changes");
 #endif
 	}
 

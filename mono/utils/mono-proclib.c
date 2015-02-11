@@ -16,9 +16,11 @@
 
 #ifdef HOST_WIN32
 #include <windows.h>
+#include <process.h>
 #endif
 
 #if defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__)
+#include <sys/errno.h>
 #include <sys/param.h>
 #include <sys/types.h>
 #include <sys/sysctl.h>
@@ -60,17 +62,19 @@ mono_process_list (int *size)
 	struct kinfo_proc2 *processes = malloc (data_len);
 #else
 	int mib [4];
-	size_t data_len = sizeof (struct kinfo_proc) * 400;
-	struct kinfo_proc *processes = malloc (data_len);
+	size_t data_len = sizeof (struct kinfo_proc) * 16;
+	struct kinfo_proc *processes;
+	int limit = 8;
 #endif /* KERN_PROC2 */
 	void **buf = NULL;
 
 	if (size)
 		*size = 0;
+
+#ifdef KERN_PROC2
 	if (!processes)
 		return NULL;
 
-#ifdef KERN_PROC2
 	mib [0] = CTL_KERN;
 	mib [1] = KERN_PROC2;
 	mib [2] = KERN_PROC_ALL;
@@ -79,19 +83,34 @@ mono_process_list (int *size)
 	mib [5] = 400; /* XXX */
 
 	res = sysctl (mib, 6, processes, &data_len, NULL, 0);
-#else
-	mib [0] = CTL_KERN;
-	mib [1] = KERN_PROC;
-	mib [2] = KERN_PROC_ALL;
-	mib [3] = 0;
-	
-	res = sysctl (mib, 4, processes, &data_len, NULL, 0);
-#endif /* KERN_PROC2 */
-
 	if (res < 0) {
 		free (processes);
 		return NULL;
 	}
+#else
+	processes = NULL;
+	while (limit) {
+		mib [0] = CTL_KERN;
+		mib [1] = KERN_PROC;
+		mib [2] = KERN_PROC_ALL;
+		mib [3] = 0;
+
+		res = sysctl (mib, 4, NULL, &data_len, NULL, 0);
+		if (res)
+			return NULL;
+		processes = malloc (data_len);
+		res = sysctl (mib, 4, NULL, &data_len, NULL, 0);
+		if (res < 0) {
+			free (processes);
+			if (errno != ENOMEM)
+				return NULL;
+			limit --;
+		} else {
+			break;
+		}
+	}
+#endif /* KERN_PROC2 */
+
 #ifdef KERN_PROC2
 	res = data_len/sizeof (struct kinfo_proc2);
 #else
@@ -104,6 +123,10 @@ mono_process_list (int *size)
 	if (size)
 		*size = res;
 	return buf;
+#elif defined(__HAIKU__)
+	/* FIXME: Add back the code from 9185fcc305e43428d0f40f3ee37c8a405d41c9ae */
+	g_assert_not_reached ();
+	return NULL;
 #else
 	const char *name;
 	void **buf = NULL;
@@ -407,22 +430,31 @@ get_pid_status_item (int pid, const char *item, MonoProcessError *error, int mul
 	struct task_basic_info t_info;
 	mach_msg_type_number_t th_count = TASK_BASIC_INFO_COUNT;
 
-	if (task_for_pid (mach_task_self (), pid, &task) != KERN_SUCCESS)
-		RET_ERROR (MONO_PROCESS_ERROR_NOT_FOUND);
+	if (pid == getpid ()) {
+		/* task_for_pid () doesn't work on ios, even for the current process */
+		task = mach_task_self ();
+	} else {
+		if (task_for_pid (mach_task_self (), pid, &task) != KERN_SUCCESS)
+			RET_ERROR (MONO_PROCESS_ERROR_NOT_FOUND);
+	}
 	
 	if (task_info (task, TASK_BASIC_INFO, (task_info_t)&t_info, &th_count) != KERN_SUCCESS) {
-		mach_port_deallocate (mach_task_self (), task);
+		if (pid != getpid ())
+			mach_port_deallocate (mach_task_self (), task);
 		RET_ERROR (MONO_PROCESS_ERROR_OTHER);
 	}
 
-	if (strcmp (item, "VmRSS") == 0 || strcmp (item, "VmHWM") == 0)
+	if (strcmp (item, "VmRSS") == 0 || strcmp (item, "VmHWM") == 0 || strcmp (item, "VmData") == 0)
 		ret = t_info.resident_size;
 	else if (strcmp (item, "VmSize") == 0 || strcmp (item, "VmPeak") == 0)
 		ret = t_info.virtual_size;
 	else if (strcmp (item, "Threads") == 0)
 		ret = th_count;
+	else
+		ret = 0;
 
-	mach_port_deallocate (mach_task_self (), task);
+	if (pid != getpid ())
+		mach_port_deallocate (mach_task_self (), task);
 	
 	return ret;
 #else
@@ -484,6 +516,8 @@ mono_process_get_data_with_error (gpointer pid, MonoProcessData data, MonoProces
 		return get_process_stat_item (rpid, 18, FALSE, error) / get_user_hz ();
 	case MONO_PROCESS_PPID:
 		return get_process_stat_time (rpid, 0, FALSE, error);
+	case MONO_PROCESS_PAGED_BYTES:
+		return get_pid_status_item (rpid, "VmSwap", error, 1024);
 
 		/* Nothing yet */
 	case MONO_PROCESS_END:
@@ -497,6 +531,18 @@ mono_process_get_data (gpointer pid, MonoProcessData data)
 {
 	MonoProcessError error;
 	return mono_process_get_data_with_error (pid, data, &error);
+}
+
+int
+mono_process_current_pid ()
+{
+#if defined(HAVE_UNISTD_H)
+	return (int) getpid ();
+#elif defined(HOST_WIN32)
+	return (int) GetCurrentProcessId ();
+#else
+#error getpid
+#endif
 }
 
 /**
@@ -559,7 +605,7 @@ get_cpu_times (int cpu_id, gint64 *user, gint64 *systemt, gint64 *irq, gint64 *s
 	char buf [256];
 	char *s;
 	int hz = get_user_hz ();
-	long long unsigned int user_ticks, nice_ticks, system_ticks, idle_ticks, iowait_ticks, irq_ticks, sirq_ticks;
+	guint64	user_ticks = 0, nice_ticks = 0, system_ticks = 0, idle_ticks = 0, irq_ticks = 0, sirq_ticks = 0;
 	FILE *f = fopen ("/proc/stat", "r");
 	if (!f)
 		return;
@@ -576,7 +622,14 @@ get_cpu_times (int cpu_id, gint64 *user, gint64 *systemt, gint64 *irq, gint64 *s
 		} else {
 			continue;
 		}
-		sscanf (data, "%Lu %Lu %Lu %Lu %Lu %Lu %Lu", &user_ticks, &nice_ticks, &system_ticks, &idle_ticks, &iowait_ticks, &irq_ticks, &sirq_ticks);
+		
+		user_ticks = strtoull (data, &data, 10);
+		nice_ticks = strtoull (data, &data, 10);
+		system_ticks = strtoull (data, &data, 10);
+		idle_ticks = strtoull (data, &data, 10);
+		/* iowait_ticks = strtoull (data, &data, 10); */
+		irq_ticks = strtoull (data, &data, 10);
+		sirq_ticks = strtoull (data, &data, 10);
 		break;
 	}
 	fclose (f);
@@ -631,3 +684,13 @@ mono_cpu_get_data (int cpu_id, MonoCpuData data, MonoProcessError *error)
 	return value;
 }
 
+int
+mono_atexit (void (*func)(void))
+{
+#ifdef PLATFORM_ANDROID
+	/* Some versions of android libc doesn't define atexit () */
+	return 0;
+#else
+	return atexit (func);
+#endif
+}

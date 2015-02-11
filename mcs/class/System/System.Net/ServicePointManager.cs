@@ -29,8 +29,26 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
+#if SECURITY_DEP
+
+#if MONOTOUCH || MONODROID
+using Mono.Security.Protocol.Tls;
+using MSX = Mono.Security.X509;
+using Mono.Security.X509.Extensions;
+#else
+extern alias MonoSecurity;
+using MonoSecurity::Mono.Security.X509.Extensions;
+using MonoSecurity::Mono.Security.Protocol.Tls;
+using MSX = MonoSecurity::Mono.Security.X509;
+#endif
+
+using System.Text.RegularExpressions;
+#endif
+
 using System;
+using System.Threading;
 using System.Collections;
+using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Configuration;
 using System.Net.Configuration;
@@ -38,14 +56,7 @@ using System.Security.Cryptography.X509Certificates;
 
 using System.Globalization;
 using System.Net.Security;
-#if SECURITY_DEP
-using System.Text.RegularExpressions;
-using Mono.Security;
-using Mono.Security.Cryptography;
-using Mono.Security.X509.Extensions;
-using Mono.Security.Protocol.Tls;
-using MSX = Mono.Security.X509;
-#endif
+using System.Diagnostics;
 
 //
 // notes:
@@ -67,17 +78,15 @@ using MSX = Mono.Security.X509;
 
 namespace System.Net 
 {
-#if MOONLIGHT
-	internal class ServicePointManager {
-#else
-	public class ServicePointManager {
-#endif
+	public partial class ServicePointManager {
 		class SPKey {
 			Uri uri; // schema/host/port
+			Uri proxy;
 			bool use_connect;
 
-			public SPKey (Uri uri, bool use_connect) {
+			public SPKey (Uri uri, Uri proxy, bool use_connect) {
 				this.uri = uri;
+				this.proxy = proxy;
 				this.use_connect = use_connect;
 			}
 
@@ -89,8 +98,16 @@ namespace System.Net
 				get { return use_connect; }
 			}
 
+			public bool UsesProxy {
+				get { return proxy != null; }
+			}
+
 			public override int GetHashCode () {
-				return uri.GetHashCode () + ((use_connect) ? 1 : 0);
+				int hash = 23;
+				hash = hash * 31 + ((use_connect) ? 1 : 0);
+				hash = hash * 31 + uri.GetHashCode ();
+				hash = hash * 31 + (proxy != null ? proxy.GetHashCode () : 0);
+				return hash;
 			}
 
 			public override bool Equals (object obj) {
@@ -99,7 +116,13 @@ namespace System.Net
 					return false;
 				}
 
-				return (uri.Equals (other.uri) && other.use_connect == use_connect);
+				if (!uri.Equals (other.uri))
+					return false;
+				if (use_connect != other.use_connect || UsesProxy != other.UsesProxy)
+					return false;
+				if (UsesProxy && !proxy.Equals (other.proxy))
+					return false;
+				return true;
 			}
 		}
 
@@ -109,16 +132,12 @@ namespace System.Net
 		
 		private static ICertificatePolicy policy = new DefaultCertificatePolicy ();
 		private static int defaultConnectionLimit = DefaultPersistentConnectionLimit;
-		private static int maxServicePointIdleTime = 900000; // 15 minutes
+		private static int maxServicePointIdleTime = 100000; // 100 seconds
 		private static int maxServicePoints = 0;
 		private static bool _checkCRL = false;
 		private static SecurityProtocolType _securityProtocol = SecurityProtocolType.Ssl3 | SecurityProtocolType.Tls;
 
-#if TARGET_JVM
-		static bool expectContinue = false;
-#else
 		static bool expectContinue = true;
-#endif
 		static bool useNagle;
 		static RemoteCertificateValidationCallback server_cert_cb;
 		static bool tcp_keepalive;
@@ -187,6 +206,10 @@ namespace System.Net
 					throw new ArgumentOutOfRangeException ("value");
 
 				defaultConnectionLimit = value; 
+#if !NET_2_1
+                if (manager != null)
+					manager.Add ("*", defaultConnectionLimit);
+#endif
 			}
 		}
 
@@ -237,7 +260,6 @@ namespace System.Net
 					throw new ArgumentException ("value");				
 
 				maxServicePoints = value;
-				RecycleServicePoints ();
 			}
 		}
 
@@ -302,8 +324,6 @@ namespace System.Net
 			if (address == null)
 				throw new ArgumentNullException ("address");
 
-			RecycleServicePoints ();
-
 			var origAddress = new Uri (address.Scheme + "://" + address.Authority);
 			
 			bool usesProxy = false;
@@ -322,8 +342,8 @@ namespace System.Net
 			address = new Uri (address.Scheme + "://" + address.Authority);
 			
 			ServicePoint sp = null;
+			SPKey key = new SPKey (origAddress, usesProxy ? address : null, useConnect);
 			lock (servicePoints) {
-				SPKey key = new SPKey (origAddress, useConnect);
 				sp = servicePoints [key] as ServicePoint;
 				if (sp != null)
 					return sp;
@@ -331,11 +351,12 @@ namespace System.Net
 				if (maxServicePoints > 0 && servicePoints.Count >= maxServicePoints)
 					throw new InvalidOperationException ("maximum number of service points reached");
 
-				string addr = address.ToString ();
+				int limit;
 #if NET_2_1
-				int limit = defaultConnectionLimit;
+				limit = defaultConnectionLimit;
 #else
-				int limit = (int) manager.GetMaxConnections (addr);
+				string addr = address.ToString ();
+				limit = (int) manager.GetMaxConnections (addr);
 #endif
 				sp = new ServicePoint (address, limit, maxServicePointIdleTime);
 				sp.Expect100Continue = expectContinue;
@@ -348,71 +369,28 @@ namespace System.Net
 			
 			return sp;
 		}
-		
-		// Internal Methods
 
-		internal static void RecycleServicePoints ()
+		internal static void CloseConnectionGroup (string connectionGroupName)
 		{
-			ArrayList toRemove = new ArrayList ();
 			lock (servicePoints) {
-				IDictionaryEnumerator e = servicePoints.GetEnumerator ();
-				while (e.MoveNext ()) {
-					ServicePoint sp = (ServicePoint) e.Value;
-					if (sp.AvailableForRecycling) {
-						toRemove.Add (e.Key);
-					}
+				foreach (ServicePoint sp in servicePoints.Values) {
+					sp.CloseConnectionGroup (connectionGroupName);
 				}
-				
-				for (int i = 0; i < toRemove.Count; i++) 
-					servicePoints.Remove (toRemove [i]);
-
-				if (maxServicePoints == 0 || servicePoints.Count <= maxServicePoints)
-					return;
-
-				// get rid of the ones with the longest idle time
-				SortedList list = new SortedList (servicePoints.Count);
-				e = servicePoints.GetEnumerator ();
-				while (e.MoveNext ()) {
-					ServicePoint sp = (ServicePoint) e.Value;
-					if (sp.CurrentConnections == 0) {
-						while (list.ContainsKey (sp.IdleSince))
-							sp.IdleSince = sp.IdleSince.AddMilliseconds (1);
-						list.Add (sp.IdleSince, sp.Address);
-					}
-				}
-				
-				for (int i = 0; i < list.Count && servicePoints.Count > maxServicePoints; i++)
-					servicePoints.Remove (list.GetByIndex (i));
 			}
 		}
-#if MOONLIGHT && SECURITY_DEP
-		internal class ChainValidationHelper {
-			object sender;
-
-			public ChainValidationHelper (object sender)
-			{
-				this.sender = sender;
-			}
-
-			// no need to check certificates since we are either
-			// (a) loading from the site of origin (and we accepted its certificate to load from it)
-			// (b) loading from a cross-domain site and we downloaded the policy file using the browser stack
-			//     i.e. the certificate was accepted (or the policy would not be valid)
-			internal ValidationResult ValidateChain (Mono.Security.X509.X509CertificateCollection certs)
-			{
-				return new ValidationResult (true, false, 0);
-			}
-		}
-#elif SECURITY_DEP
+		
+#if SECURITY_DEP
 		internal class ChainValidationHelper {
 			object sender;
 			string host;
-			static bool is_macosx = System.IO.File.Exists (MSX.OSX509Certificates.SecurityLibrary);
+			RemoteCertificateValidationCallback cb;
+
+#if !MONOTOUCH
+			static bool is_macosx = System.IO.File.Exists (OSX509Certificates.SecurityLibrary);
 			static X509RevocationMode revocation_mode;
 
 			static ChainValidationHelper ()
 			{
-#if !MONOTOUCH
 				revocation_mode = X509RevocationMode.NoCheck;
 				try {
 					string str = Environment.GetEnvironmentVariable ("MONO_X509_REVOCATION_MODE");
@@ -421,27 +399,27 @@ namespace System.Net
 					revocation_mode = (X509RevocationMode) Enum.Parse (typeof (X509RevocationMode), str, true);
 				} catch {
 				}
-#endif
 			}
+#endif
 
-			public ChainValidationHelper (object sender)
+			public ChainValidationHelper (object sender, string hostName)
 			{
 				this.sender = sender;
+				host = hostName;
 			}
 
-			public string Host {
+			public RemoteCertificateValidationCallback ServerCertificateValidationCallback {
 				get {
-					if (host == null && sender is HttpWebRequest)
-						host = ((HttpWebRequest) sender).Address.Host;
-					return host;
+					if (cb == null)
+						cb = ServicePointManager.ServerCertificateValidationCallback;
+					return cb;
 				}
-
-				set { host = value; }
+				set { cb = value; }
 			}
 
 			// Used when the obsolete ICertificatePolicy is set to DefaultCertificatePolicy
 			// and the new ServerCertificateValidationCallback is not null
-			internal ValidationResult ValidateChain (Mono.Security.X509.X509CertificateCollection certs)
+			internal ValidationResult ValidateChain (MSX.X509CertificateCollection certs)
 			{
 				// user_denied is true if the user callback is called and returns false
 				bool user_denied = false;
@@ -449,7 +427,6 @@ namespace System.Net
 					return null;
 
 				ICertificatePolicy policy = ServicePointManager.CertificatePolicy;
-				RemoteCertificateValidationCallback cb = ServicePointManager.ServerCertificateValidationCallback;
 
 				X509Certificate2 leaf = new X509Certificate2 (certs [0].RawData);
 				int status11 = 0; // Error code passed to the obsolete ICertificatePolicy callback
@@ -462,11 +439,13 @@ namespace System.Net
 				// the certificates that the server provided (which generally does not include the root) so, only  
 				// if there's a user callback, we'll create the X509Chain but won't build it
 				// ref: https://bugzilla.xamarin.com/show_bug.cgi?id=7245
-				if (cb != null) {
+				if (ServerCertificateValidationCallback != null) {
 #endif
 				chain = new X509Chain ();
 				chain.ChainPolicy = new X509ChainPolicy ();
+#if !MONOTOUCH
 				chain.ChainPolicy.RevocationMode = revocation_mode;
+#endif
 				for (int i = 1; i < certs.Count; i++) {
 					X509Certificate2 c2 = new X509Certificate2 (certs [i].RawData);
 					chain.ChainPolicy.ExtraStore.Add (c2);
@@ -490,7 +469,7 @@ namespace System.Net
 						status11 = -2146762490; //CERT_E_PURPOSE 0x800B0106
 					}
 
-					if (!CheckServerIdentity (certs [0], Host)) {
+					if (!CheckServerIdentity (certs [0], host)) {
 						errors |= SslPolicyErrors.RemoteCertificateNameMismatch;
 						status11 = -2146762481; // CERT_E_CN_NO_MATCH 0x800B010F
 					}
@@ -498,13 +477,13 @@ namespace System.Net
 #endif
 					// Attempt to use OSX certificates
 					// Ideally we should return the SecTrustResult
-					MSX.OSX509Certificates.SecTrustResult trustResult = MSX.OSX509Certificates.SecTrustResult.Deny;
+					OSX509Certificates.SecTrustResult trustResult = OSX509Certificates.SecTrustResult.Deny;
 					try {
-						trustResult = MSX.OSX509Certificates.TrustEvaluateSsl (certs, Host);
+						trustResult = OSX509Certificates.TrustEvaluateSsl (certs, host);
 						// We could use the other values of trustResult to pass this extra information
 						// to the .NET 2 callback for values like SecTrustResult.Confirm
-						result = (trustResult == MSX.OSX509Certificates.SecTrustResult.Proceed ||
-								  trustResult == MSX.OSX509Certificates.SecTrustResult.Unspecified);
+						result = (trustResult == OSX509Certificates.SecTrustResult.Proceed ||
+								  trustResult == OSX509Certificates.SecTrustResult.Unspecified);
 					} catch {
 						// Ignore
 					}
@@ -522,7 +501,7 @@ namespace System.Net
 				}
 #endif
 
-#if MONODROID
+#if MONODROID && SECURITY_DEP
 				result = AndroidPlatform.TrustEvaluateSsl (certs, sender, leaf, chain, errors);
 				if (result) {
 					// chain.Build() + GetErrorsFromChain() (above) will ALWAYS fail on
@@ -546,8 +525,8 @@ namespace System.Net
 					user_denied = !result && !(policy is DefaultCertificatePolicy);
 				}
 				// If there's a 2.0 callback, it takes precedence
-				if (cb != null) {
-					result = cb (sender, leaf, chain, errors);
+				if (ServerCertificateValidationCallback != null) {
+					result = ServerCertificateValidationCallback (sender, leaf, chain, errors);
 					user_denied = !result;
 				}
 				return new ValidationResult (result, user_denied, status11);
@@ -682,10 +661,10 @@ namespace System.Net
 			// 2.1.		exact match is required
 			// 3.	Use of the most specific Common Name (CN=) in the Subject
 			// 3.1		Existing practice but DEPRECATED
-			static bool CheckServerIdentity (Mono.Security.X509.X509Certificate cert, string targetHost) 
+			static bool CheckServerIdentity (MSX.X509Certificate cert, string targetHost) 
 			{
 				try {
-					Mono.Security.X509.X509Extension ext = cert.Extensions ["2.5.29.17"];
+					MSX.X509Extension ext = cert.Extensions ["2.5.29.17"];
 					// 1. subjectAltName
 					if (ext != null) {
 						SubjectAltNameExtension subjectAltName = new SubjectAltNameExtension (ext);

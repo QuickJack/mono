@@ -35,10 +35,8 @@ using System.ComponentModel;
 using System.Data;
 using System.IO;
 
-#if NET_4_5
 using System.Threading;
 using System.Threading.Tasks;
-#endif
 
 namespace System.Data.Common {
 	public abstract class DbDataReader : MarshalByRefObject, IDataReader, IDataRecord, IDisposable, IEnumerable
@@ -61,11 +59,9 @@ namespace System.Data.Common {
 		public abstract object this [string name] { get; }
 		public abstract int RecordsAffected { get; }
 
-#if NET_2_0
 		public virtual int VisibleFieldCount {
 			get { return FieldCount; }
 		}
-#endif
 		#endregion // Properties
 
 		#region Methods
@@ -88,13 +84,11 @@ namespace System.Data.Common {
 			if (disposing)
 				Close ();
 		}
-#if NET_2_0
 		[EditorBrowsable (EditorBrowsableState.Never)]
 		public DbDataReader GetData (int ordinal)
 		{
 			return ((DbDataReader) this [ordinal]);
 		}
-#endif
 
 		public abstract string GetDataTypeName (int ordinal);
 		public abstract DateTime GetDateTime (int ordinal);
@@ -113,7 +107,6 @@ namespace System.Data.Common {
 		public abstract string GetName (int ordinal);
 		public abstract int GetOrdinal (string name);
 
-#if NET_2_0
 		[EditorBrowsable (EditorBrowsableState.Never)]
 		public virtual Type GetProviderSpecificFieldType (int ordinal)
 		{
@@ -136,7 +129,6 @@ namespace System.Data.Common {
 		{
 			return ((DbDataReader) this [ordinal]);
 		}
-#endif 
 
 		public abstract DataTable GetSchemaTable ();
 		public abstract string GetString (int ordinal);
@@ -188,11 +180,9 @@ namespace System.Data.Common {
 			return schemaTable;
 		}
 		
-#if NET_4_5
-		[MonoTODO]
 		public virtual T GetFieldValue<T> (int i)
 		{
-			throw new NotImplementedException ();
+			return (T) GetValue (i);
 		}
 
 		public Task<T> GetFieldValueAsync<T> (int ordinal)
@@ -200,10 +190,17 @@ namespace System.Data.Common {
 			return GetFieldValueAsync<T> (ordinal, CancellationToken.None);
 		}
 		
-		[MonoTODO]
 		public virtual Task<T> GetFieldValueAsync<T> (int ordinal, CancellationToken cancellationToken)
 		{
-			throw new NotImplementedException ();
+			if (cancellationToken.IsCancellationRequested) {
+				return TaskHelper.CreateCanceledTask<T> ();
+			}
+			
+			try {
+				return Task.FromResult<T> (GetFieldValue<T> (ordinal));
+			} catch (Exception e) {
+				return TaskHelper.CreateExceptionTask<T> (e);
+			}
 		}
 		
 		public Task<bool> NextResultAsync ()
@@ -216,28 +213,55 @@ namespace System.Data.Common {
 			return IsDBNullAsync (ordinal, CancellationToken.None);
 		}
 
-		[MonoTODO]
 		public virtual Stream GetStream (int i)
 		{
-			throw new NotImplementedException ();
+
+			long offset = 0L;
+			byte [] buffer = new byte [1024 * 8];
+			long read;
+			MemoryStream memoryStream = new MemoryStream ();
+			while ((read = this.GetBytes (i, offset, buffer, 0, buffer.Length)) > 0) {
+				memoryStream.Write (buffer, 0, (int) read);
+				offset += read;
+			}
+			memoryStream.Seek (0, SeekOrigin.Begin);
+			return memoryStream;
 		}
 		
-		[MonoTODO]
 		public virtual TextReader GetTextReader (int i)
 		{
-			throw new NotImplementedException ();	
+			String value;
+			if (IsDBNull (i))
+				value = string.Empty;
+			else
+				value = this.GetString (i);
+			return new StringReader (value);
 		}
 
-		[MonoTODO]
 		public virtual Task<bool> IsDBNullAsync (int ordinal, CancellationToken cancellationToken)
 		{
-			throw new NotImplementedException ();
+			if (cancellationToken.IsCancellationRequested) {
+				return TaskHelper.CreateCanceledTask<bool> ();
+			}
+			
+			try {
+				return Task.FromResult (IsDBNull (ordinal));
+			} catch (Exception e) {
+				return TaskHelper.CreateExceptionTask<bool> (e);
+			}
 		}
 		
-		[MonoTODO]
 		public virtual Task<bool> NextResultAsync (CancellationToken cancellationToken)
 		{
-			throw new NotImplementedException ();
+			if (cancellationToken.IsCancellationRequested) {
+				return TaskHelper.CreateCanceledTask<bool> ();
+			}
+			
+			try {
+				return Task.FromResult (NextResult ());
+			} catch (Exception e) {
+				return TaskHelper.CreateExceptionTask<bool> (e);
+			}
 		}
 		
 		public Task<bool> ReadAsync ()
@@ -245,12 +269,18 @@ namespace System.Data.Common {
 			return ReadAsync (CancellationToken.None);
 		}
 		
-		[MonoTODO]
 		public virtual Task<bool> ReadAsync (CancellationToken cancellationToken)
 		{
-			throw new NotImplementedException ();
+			if (cancellationToken.IsCancellationRequested) {
+				return TaskHelper.CreateCanceledTask<bool> ();
+			}
+			
+			try {
+				return Task.FromResult (Read ());
+			} catch (Exception e) {
+				return TaskHelper.CreateExceptionTask<bool> (e);
+			}
 		}
-#endif
 
 		#endregion // Methods
 	}

@@ -82,6 +82,7 @@ namespace System.ServiceModel.Channels
 
 		public XmlDictionaryReaderQuotas ReaderQuotas {
 			get { return quotas; }
+			set { quotas = value; }
 		}
 
 		public override IChannelFactory<TChannel> BuildChannelFactory<TChannel> (
@@ -152,5 +153,11 @@ namespace System.ServiceModel.Channels
 			assertions.Add (doc.CreateElement ("msb", "BinaryEncoding", "http://schemas.microsoft.com/ws/06/2004/mspolicy/netbinary1"));
 		}
 #endif
+
+		[MonoTODO]
+		public CompressionFormat CompressionFormat {
+			get { throw new NotImplementedException (); }
+			set { throw new NotImplementedException (); }
+		}
 	}
 }

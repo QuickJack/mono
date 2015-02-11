@@ -128,6 +128,8 @@ namespace System.Reflection {
 		/// </summary>
 		Serializable = 8192,
 
+		WindowsRuntime = 16384,
+
 		/// <summary>
 		/// </summary>
 		StringFormatMask = 196608,

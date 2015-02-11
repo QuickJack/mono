@@ -34,18 +34,7 @@
 
 #if SECURITY_DEP
 
-#if !MOONLIGHT
-extern alias PrebuiltSystem;
-using X509CertificateCollection = PrebuiltSystem::System.Security.Cryptography.X509Certificates.X509CertificateCollection;
-#endif
-
-using System;
-using System.IO;
-using System.Net;
-using System.Security.Authentication;
-using System.Security.Cryptography.X509Certificates;
-using System.Security.Principal;
-using System.Security.Cryptography;
+#if MONOTOUCH || MONODROID
 using Mono.Security.Protocol.Tls;
 
 using CipherAlgorithmType = System.Security.Authentication.CipherAlgorithmType;
@@ -56,10 +45,33 @@ using MonoCipherAlgorithmType = Mono.Security.Protocol.Tls.CipherAlgorithmType;
 using MonoHashAlgorithmType = Mono.Security.Protocol.Tls.HashAlgorithmType;
 using MonoExchangeAlgorithmType = Mono.Security.Protocol.Tls.ExchangeAlgorithmType;
 using MonoSecurityProtocolType = Mono.Security.Protocol.Tls.SecurityProtocolType;
+#else
+extern alias PrebuiltSystem;
+extern alias MonoSecurity;
 
-#if NET_4_5
-using System.Threading.Tasks;
+using X509CertificateCollection = PrebuiltSystem::System.Security.Cryptography.X509Certificates.X509CertificateCollection;
+
+using CipherAlgorithmType = System.Security.Authentication.CipherAlgorithmType;
+using HashAlgorithmType = System.Security.Authentication.HashAlgorithmType;
+using ExchangeAlgorithmType = System.Security.Authentication.ExchangeAlgorithmType;
+
+using MonoCipherAlgorithmType = MonoSecurity::Mono.Security.Protocol.Tls.CipherAlgorithmType;
+using MonoHashAlgorithmType = MonoSecurity::Mono.Security.Protocol.Tls.HashAlgorithmType;
+using MonoExchangeAlgorithmType = MonoSecurity::Mono.Security.Protocol.Tls.ExchangeAlgorithmType;
+using MonoSecurityProtocolType = MonoSecurity::Mono.Security.Protocol.Tls.SecurityProtocolType;
+
+using MonoSecurity::Mono.Security.Protocol.Tls;
 #endif
+
+using System;
+using System.IO;
+using System.Net;
+using System.Security.Authentication;
+using System.Security.Cryptography.X509Certificates;
+using System.Security.Principal;
+using System.Security.Cryptography;
+
+using System.Threading.Tasks;
 
 namespace System.Net.Security 
 {
@@ -146,11 +158,7 @@ namespace System.Net.Security
 		}
 
 		public override bool IsServer { 
-#if MOONLIGHT
-			get { return false; }
-#else
 			get { return ssl_stream is SslServerStream; }
-#endif
 		}
 
 		public override bool IsSigned { 
@@ -284,11 +292,7 @@ namespace System.Net.Security
 		public virtual X509Certificate RemoteCertificate {
 			get {
 				CheckConnectionAuthenticated ();
-#if MOONLIGHT
-				return ssl_stream.ServerCertificate;
-#else
 				return !IsServer ? ssl_stream.ServerCertificate : ((SslServerStream) ssl_stream).ClientCertificate;
-#endif
 			}
 		}
 
@@ -361,7 +365,15 @@ namespace System.Net.Security
 				return null;
 			};
 
-			if (validation_callback != null)
+#if MONOTOUCH || MONODROID
+			// Even if validation_callback is null this allows us to verify requests where the user
+			// does not provide a verification callback but attempts to authenticate with the website
+			// as a client (see https://bugzilla.xamarin.com/show_bug.cgi?id=18962 for an example)
+			var helper = new ServicePointManager.ChainValidationHelper (this, targetHost);
+			helper.ServerCertificateValidationCallback = validation_callback;
+			s.ServerCertValidation2 += new CertificateValidationCallback2 (helper.ValidateChain);
+#else
+			if (validation_callback != null) {
 				s.ServerCertValidationDelegate = delegate (X509Certificate cert, int [] certErrors) {
 					X509Chain chain = new X509Chain ();
 					X509Certificate2 x2 = (cert as X509Certificate2);
@@ -401,6 +413,8 @@ namespace System.Net.Security
 
 					return validation_callback (this, cert, chain, errors);
 				};
+			}
+#endif
 			if (selection_callback != null)
 				s.ClientCertSelectionDelegate = OnCertificateSelection;
 
@@ -415,7 +429,7 @@ namespace System.Net.Security
 
 			return ssl_stream.BeginRead (buffer, offset, count, asyncCallback, asyncState);
 		}
-#if !MOONLIGHT
+
 		public virtual IAsyncResult BeginAuthenticateAsServer (X509Certificate serverCertificate, AsyncCallback asyncCallback, object asyncState)
 		{
 			return BeginAuthenticateAsServer (serverCertificate, false, SslProtocols.Tls, false, asyncCallback, asyncState);
@@ -455,7 +469,7 @@ namespace System.Net.Security
 
 			return BeginWrite (new byte[0], 0, 0, asyncCallback, asyncState);
 		}
-#endif
+
 		MonoSecurityProtocolType GetMonoSslProtocol (SslProtocols ms)
 		{
 			switch (ms) {
@@ -487,7 +501,7 @@ namespace System.Net.Security
 			EndAuthenticateAsClient (BeginAuthenticateAsClient (
 				targetHost, clientCertificates, enabledSslProtocols, checkCertificateRevocation, null, null));
 		}
-#if !MOONLIGHT
+
 		public virtual void AuthenticateAsServer (X509Certificate serverCertificate)
 		{
 			AuthenticateAsServer (serverCertificate, false, SslProtocols.Tls, false);
@@ -498,7 +512,7 @@ namespace System.Net.Security
 			EndAuthenticateAsServer (BeginAuthenticateAsServer (
 				serverCertificate, clientCertificateRequired, enabledSslProtocols, checkCertificateRevocation, null, null));
 		}
-#endif
+
 		protected override void Dispose (bool disposing)
 		{
 			if (disposing) {
@@ -518,7 +532,7 @@ namespace System.Net.Security
 			else
 				ssl_stream.EndWrite (asyncResult);
 		}
-#if !MOONLIGHT
+
 		public virtual void EndAuthenticateAsServer (IAsyncResult asyncResult)
 		{
 			CheckConnectionAuthenticated ();
@@ -528,7 +542,7 @@ namespace System.Net.Security
 			else
 				ssl_stream.EndWrite (asyncResult);
 		}
-#endif
+
 		public override int EndRead (IAsyncResult asyncResult)
 		{
 			CheckConnectionAuthenticated ();
@@ -581,7 +595,6 @@ namespace System.Net.Security
 				throw new InvalidOperationException ("This operation is invalid until it is successfully authenticated");
 		}
 
-#if NET_4_5
 		public virtual Task AuthenticateAsClientAsync (string targetHost)
 		{
 			return Task.Factory.FromAsync (BeginAuthenticateAsClient, EndAuthenticateAsClient, targetHost, null);
@@ -611,7 +624,6 @@ namespace System.Net.Security
 				return d.Item5.BeginAuthenticateAsServer (d.Item1, d.Item2, d.Item3, d.Item4, callback, null);
 			}, EndAuthenticateAsServer, t);
 		}
-#endif
 
 		#endregion // Methods
 	}

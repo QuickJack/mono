@@ -49,11 +49,7 @@ namespace System.Data.Common {
 		public static DbProviderFactory GetFactory (DataRow providerRow)
 		{
 			string assemblyType = (string) providerRow ["AssemblyQualifiedName"];
-#if TARGET_JVM // case insensitive GetType is not supported
-			Type type = Type.GetType (assemblyType, false);
-#else
 			Type type = Type.GetType (assemblyType, false, true);
-#endif
 			if (type != null && type.IsSubclassOf (typeof (DbProviderFactory))) {
 				// Provider factories are singletons with Instance field having
 				// the sole instance
@@ -82,7 +78,6 @@ namespace System.Data.Common {
 			throw new ConfigurationErrorsException (String.Format("Failed to find or load the registered .Net Framework Data Provider '{0}'.", providerInvariantName));
 		}
 		
-#if NET_4_5
 		public static DbProviderFactory GetFactory (DbConnection connection)
 		{
 			if (connection == null)
@@ -90,7 +85,6 @@ namespace System.Data.Common {
 
 			return connection.DbProviderFactory;
 		}
-#endif
 
 		public static DataTable GetFactoryClasses ()
 		{

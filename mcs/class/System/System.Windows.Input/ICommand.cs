@@ -27,15 +27,17 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if NET_4_5 || MOBILE
+
+using System.Runtime.CompilerServices;
 
 namespace System.Windows.Input {
 	
-	public interface ICommand {
+	[TypeForwardedFrom (Consts.AssemblyPresentationCore_4_0)]
+	public interface ICommand
+	{
 		bool CanExecute (object parameter);
 		void Execute (object parameter);
 		event EventHandler CanExecuteChanged;
 	}
 }
 
-#endif

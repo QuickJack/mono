@@ -49,22 +49,35 @@ namespace Monodoc.Generators.Html
 		{
 			var args = new XsltArgumentList ();
 			args.AddExtensionObject("monodoc:///extensions", ExtObject);
+			string specialPage;
+			if (extraArgs.TryGetValue ("specialpage", out specialPage) && specialPage == "root") {
+				extraArgs.Remove ("specialpage");
+				extraArgs["show"] = "masteroverview";
+			}
+
 			foreach (var kvp in extraArgs)
 				args.AddParam (kvp.Key, string.Empty, kvp.Value);
 
-			return Htmlize(ecma_xml, args);
+			return Htmlize (ecma_xml, args);
 		}
 
 		public string Htmlize (XmlReader ecma_xml, XsltArgumentList args)
 		{
-			EnsureTransform ();
-		
-			var output = new StringBuilder ();
-			ecma_transform.Transform (ecma_xml, 
-			                          args, 
-			                          XmlWriter.Create (output, ecma_transform.OutputSettings),
-			                          CreateDocumentResolver ());
-			return output.ToString ();
+			try{
+				EnsureTransform ();
+			
+				var output = new StringBuilder ();
+				ecma_transform.Transform (ecma_xml, 
+				                          args, 
+				                          XmlWriter.Create (output, ecma_transform.OutputSettings),
+				                          CreateDocumentResolver ());
+				return output.ToString ();
+			}
+			catch(Exception x)
+			{
+				var msg = x.ToString ();
+				return msg;
+			}
 		}
 		
 		protected virtual XmlResolver CreateDocumentResolver ()
@@ -75,13 +88,14 @@ namespace Monodoc.Generators.Html
 
 		public string Export (Stream stream, Dictionary<string, string> extraArgs)
 		{
-			return Htmlize (XmlReader.Create (stream), extraArgs);
+			return Htmlize (XmlReader.Create (new StreamReader(stream)), extraArgs);
 		}
 
 		public string Export (string input, Dictionary<string, string> extraArgs)
 		{
-			return Htmlize (XmlReader.Create (new StringReader (input)), extraArgs);
+			return Htmlize (XmlReader.Create (new StringReader(input)), extraArgs);
 		}
+
 		
 		static void EnsureTransform ()
 		{
@@ -99,6 +113,7 @@ namespace Monodoc.Generators.Html
 		public class ExtensionObject
 		{
 			bool quiet = true;
+			Dictionary<string, System.Reflection.Assembly> assemblyCache = new Dictionary<string, System.Reflection.Assembly> ();
 
 			public string Colorize(string code, string lang)
 			{
@@ -202,7 +217,11 @@ namespace Monodoc.Generators.Html
 					System.Reflection.Assembly assembly = null;
 				
 					try {
-						assembly = System.Reflection.Assembly.LoadWithPartialName(assemblyname);
+						if (!assemblyCache.TryGetValue (assemblyname, out assembly)) {
+							assembly = System.Reflection.Assembly.LoadWithPartialName(assemblyname);
+							if (assembly != null)
+								assemblyCache[assemblyname] = assembly;
+						}
 					} catch (Exception) {
 						// nothing.
 					}
@@ -258,7 +277,13 @@ namespace Monodoc.Generators.Html
 					if (assemblyname == string.Empty)
 						return string.Empty;
 
-					var assembly = System.Reflection.Assembly.LoadWithPartialName(assemblyname);
+					System.Reflection.Assembly assembly;
+					if (!assemblyCache.TryGetValue (assemblyname, out assembly)) {
+						assembly = System.Reflection.Assembly.LoadWithPartialName(assemblyname);
+						if (assembly != null)
+							assemblyCache[assemblyname] = assembly;
+					}
+
 					if (assembly == null)
 						return string.Empty;
 
@@ -304,4 +329,5 @@ namespace Monodoc.Generators.Html
 			}
 		}
 	}
+		
 }

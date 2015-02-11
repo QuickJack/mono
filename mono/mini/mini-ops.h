@@ -15,12 +15,16 @@ MINI_OP(OP_VPHI,	"vphi", VREG, NONE, NONE)
 MINI_OP(OP_COMPARE,	"compare", NONE, IREG, IREG)
 MINI_OP(OP_COMPARE_IMM,	"compare_imm", NONE, IREG, NONE)
 MINI_OP(OP_FCOMPARE,	"fcompare", NONE, FREG, FREG)
+MINI_OP(OP_RCOMPARE,	"rcompare", NONE, FREG, FREG)
 MINI_OP(OP_LCOMPARE,	"lcompare", NONE, LREG, LREG)
 MINI_OP(OP_ICOMPARE,	"icompare", NONE, IREG, IREG)
 MINI_OP(OP_ICOMPARE_IMM,	"icompare_imm", NONE, IREG, NONE)
 MINI_OP(OP_LCOMPARE_IMM,	"lcompare_imm", NONE, LREG, NONE)
 MINI_OP(OP_LOCAL,	"local", NONE, NONE, NONE)
 MINI_OP(OP_ARG,		"arg", NONE, NONE, NONE)
+/* inst_imm contains the local index */
+MINI_OP(OP_GSHAREDVT_LOCAL, "gsharedvt_local", NONE, NONE, NONE)
+MINI_OP(OP_GSHAREDVT_ARG_REGOFFSET, "gsharedvt_arg_regoffset", NONE, NONE, NONE)
 /*
  * Represents passing a valuetype argument which has not been decomposed yet.
  * inst_p0 points to the call.
@@ -34,26 +38,25 @@ MINI_OP(OP_LOCALLOC, "localloc", IREG, IREG, NONE)
 MINI_OP(OP_LOCALLOC_IMM, "localloc_imm", IREG, NONE, NONE)
 MINI_OP(OP_CHECK_THIS,	"checkthis", NONE, IREG, NONE)
 MINI_OP(OP_SEQ_POINT, "seq_point", NONE, NONE, NONE)
+MINI_OP(OP_IL_SEQ_POINT, "il_seq_point", NONE, NONE, NONE)
 MINI_OP(OP_IMPLICIT_EXCEPTION, "implicit_exception", NONE, NONE, NONE)
 
 MINI_OP(OP_VOIDCALL,	"voidcall", NONE, NONE, NONE)
-MINI_OP(OP_VOIDCALLVIRT,	"voidcallvirt", NONE, NONE, NONE)
 MINI_OP(OP_VOIDCALL_REG,	"voidcall_reg", NONE, IREG, NONE)
 MINI_OP(OP_VOIDCALL_MEMBASE,	"voidcall_membase", NONE, IREG, NONE)
 MINI_OP(OP_CALL,        "call", IREG, NONE, NONE)
 MINI_OP(OP_CALL_REG,	"call_reg", IREG, IREG, NONE)
 MINI_OP(OP_CALL_MEMBASE,	"call_membase", IREG, IREG, NONE)
-MINI_OP(OP_CALLVIRT, "callvirt", IREG, NONE, NONE)
 MINI_OP(OP_FCALL,	"fcall", FREG, NONE, NONE)
-MINI_OP(OP_FCALLVIRT,	"fcallvirt", FREG, NONE, NONE)
 MINI_OP(OP_FCALL_REG,	"fcall_reg", FREG, IREG, NONE)
 MINI_OP(OP_FCALL_MEMBASE,	"fcall_membase", FREG, IREG, NONE)
+MINI_OP(OP_RCALL,	"rcall", FREG, NONE, NONE)
+MINI_OP(OP_RCALL_REG,	"rcall_reg", FREG, IREG, NONE)
+MINI_OP(OP_RCALL_MEMBASE,	"rcall_membase", FREG, IREG, NONE)
 MINI_OP(OP_LCALL,	"lcall", LREG, NONE, NONE)
-MINI_OP(OP_LCALLVIRT,	"lcallvirt", LREG, NONE, NONE)
 MINI_OP(OP_LCALL_REG,	"lcall_reg", LREG, IREG, NONE)
 MINI_OP(OP_LCALL_MEMBASE,	"lcall_membase", LREG, IREG, NONE)
 MINI_OP(OP_VCALL, 	"vcall", VREG, NONE, NONE)
-MINI_OP(OP_VCALLVIRT, 	"vcallvirt", VREG, NONE, NONE)
 MINI_OP(OP_VCALL_REG,	"vcall_reg", VREG, IREG, NONE)
 MINI_OP(OP_VCALL_MEMBASE,	"vcall_membase", VREG, IREG, NONE)
 /* Represents the decomposed vcall which doesn't return a vtype no more */
@@ -66,6 +69,11 @@ MINI_OP(OP_ICONST,	"iconst", IREG, NONE, NONE)
 MINI_OP(OP_I8CONST,	"i8const", LREG, NONE, NONE)
 MINI_OP(OP_R4CONST,	"r4const", FREG, NONE, NONE)
 MINI_OP(OP_R8CONST,	"r8const", FREG, NONE, NONE)
+MINI_OP(OP_DUMMY_ICONST, "dummy_iconst", IREG, NONE, NONE)
+MINI_OP(OP_DUMMY_I8CONST, "dummy_i8const", LREG, NONE, NONE)
+MINI_OP(OP_DUMMY_R8CONST, "dummy_r8const", FREG, NONE, NONE)
+MINI_OP(OP_DUMMY_R4CONST, "dummy_r4const", FREG, NONE, NONE)
+MINI_OP(OP_DUMMY_VZERO, "dummy_vzero", VREG, NONE, NONE)
 MINI_OP(OP_REGVAR,	"regvar", NONE, NONE, NONE)
 MINI_OP(OP_REGOFFSET,	"regoffset", NONE, NONE, NONE)
 MINI_OP(OP_VTARG_ADDR,	"vtarg_addr", NONE, NONE, NONE)
@@ -164,9 +172,20 @@ MINI_OP(OP_LOADI8_MEM,"loadi8_mem", IREG, NONE, NONE)
 MINI_OP(OP_STORE_MEM_IMM, "store_mem_imm", NONE, NONE, NONE)
 
 MINI_OP(OP_MOVE,	"move", IREG, IREG, NONE)
-MINI_OP(OP_LMOVE,	"lmove", IREG, IREG, NONE)
+MINI_OP(OP_LMOVE,	"lmove", LREG, LREG, NONE)
 MINI_OP(OP_FMOVE,	"fmove", FREG, FREG, NONE)
 MINI_OP(OP_VMOVE,   "vmove", VREG, VREG, NONE)
+MINI_OP(OP_RMOVE,	"rmove", FREG, FREG, NONE)
+
+/*
+ * All 4 of these are only available when soft float isn't active. They
+ * perform no conversions; they simply move values back and forth.
+ */
+MINI_OP(OP_MOVE_F_TO_I4, "move_f_to_i4", IREG, FREG, NONE)
+MINI_OP(OP_MOVE_I4_TO_F, "move_i4_to_f", FREG, IREG, NONE)
+/* These 2 are only available on 64-bit targets. */
+MINI_OP(OP_MOVE_F_TO_I8, "move_f_to_i8", IREG, FREG, NONE)
+MINI_OP(OP_MOVE_I8_TO_F, "move_i8_to_f", FREG, IREG, NONE)
 
 MINI_OP(OP_VZERO,   "vzero", VREG, NONE, NONE)
 
@@ -290,11 +309,11 @@ MINI_OP(OP_LCONV_TO_OVF_I8,"long_conv_to_ovf_i8", LREG, LREG, NONE)
 MINI_OP(OP_LCONV_TO_OVF_U8,"long_conv_to_ovf_u8", LREG, LREG, NONE)
 
 /* mono_decompose_long_opts () depends on the order here */
-MINI_OP(OP_LCEQ,   "long_ceq", LREG, NONE, NONE)
-MINI_OP(OP_LCGT,   "long_cgt", LREG, NONE, NONE)
-MINI_OP(OP_LCGT_UN,"long_cgt_un", LREG, NONE, NONE)
-MINI_OP(OP_LCLT,   "long_clt", LREG, NONE, NONE)
-MINI_OP(OP_LCLT_UN,"long_clt_un", LREG, NONE, NONE)
+MINI_OP(OP_LCEQ,   "long_ceq", IREG, NONE, NONE)
+MINI_OP(OP_LCGT,   "long_cgt", IREG, NONE, NONE)
+MINI_OP(OP_LCGT_UN,"long_cgt_un", IREG, NONE, NONE)
+MINI_OP(OP_LCLT,   "long_clt", IREG, NONE, NONE)
+MINI_OP(OP_LCLT_UN,"long_clt_un", IREG, NONE, NONE)
 
 MINI_OP(OP_LCONV_TO_R_UN,"long_conv_to_r_un", FREG, LREG, NONE)
 MINI_OP(OP_LCONV_TO_U,   "long_conv_to_u", IREG, LREG, NONE)
@@ -423,6 +442,12 @@ MINI_OP(OP_ICGT_UN,"int_cgt_un", IREG, NONE, NONE)
 MINI_OP(OP_ICLT,   "int_clt", IREG, NONE, NONE)
 MINI_OP(OP_ICLT_UN,"int_clt_un", IREG, NONE, NONE)
 
+MINI_OP(OP_ICNEQ,  "int_cneq", IREG, NONE, NONE)
+MINI_OP(OP_ICGE,   "int_cge", IREG, NONE, NONE)
+MINI_OP(OP_ICLE,   "int_cle", IREG, NONE, NONE)
+MINI_OP(OP_ICGE_UN,"int_cge_un", IREG, NONE, NONE)
+MINI_OP(OP_ICLE_UN,"int_cle_un", IREG, NONE, NONE)
+
 MINI_OP(OP_IBEQ,    "int_beq", NONE, NONE, NONE)
 MINI_OP(OP_IBGE,    "int_bge", NONE, NONE, NONE)
 MINI_OP(OP_IBGT,    "int_bgt", NONE, NONE, NONE)
@@ -445,6 +470,17 @@ MINI_OP(OP_FBGT_UN, "float_bgt_un", NONE, NONE, NONE)
 MINI_OP(OP_FBLE_UN, "float_ble_un", NONE, NONE, NONE)
 MINI_OP(OP_FBLT_UN, "float_blt_un", NONE, NONE, NONE)
 
+MINI_OP(OP_RBEQ,    "r4_beq", NONE, NONE, NONE)
+MINI_OP(OP_RBGE,    "r4_bge", NONE, NONE, NONE)
+MINI_OP(OP_RBGT,    "r4_bgt", NONE, NONE, NONE)
+MINI_OP(OP_RBLE,    "r4_ble", NONE, NONE, NONE)
+MINI_OP(OP_RBLT,    "r4_blt", NONE, NONE, NONE)
+MINI_OP(OP_RBNE_UN, "r4_bne_un", NONE, NONE, NONE)
+MINI_OP(OP_RBGE_UN, "r4_bge_un", NONE, NONE, NONE)
+MINI_OP(OP_RBGT_UN, "r4_bgt_un", NONE, NONE, NONE)
+MINI_OP(OP_RBLE_UN, "r4_ble_un", NONE, NONE, NONE)
+MINI_OP(OP_RBLT_UN, "r4_blt_un", NONE, NONE, NONE)
+
 /* float opcodes: must be in the same order as the matching CEE_ opcodes: binops_op_map */
 MINI_OP(OP_FADD,   "float_add", FREG, FREG, FREG)
 MINI_OP(OP_FSUB,   "float_sub", FREG, FREG, FREG)
@@ -453,6 +489,15 @@ MINI_OP(OP_FDIV,   "float_div", FREG, FREG, FREG)
 MINI_OP(OP_FDIV_UN,"float_div_un", FREG, FREG, FREG)
 MINI_OP(OP_FREM,   "float_rem", FREG, FREG, FREG)
 MINI_OP(OP_FREM_UN,"float_rem_un", FREG, FREG, FREG)
+
+/* r4 opcodes: must be in the same order as the matching CEE_ opcodes: binops_op_map */
+MINI_OP(OP_RADD,   "r4_add", FREG, FREG, FREG)
+MINI_OP(OP_RSUB,   "r4_sub", FREG, FREG, FREG)
+MINI_OP(OP_RMUL,   "r4_mul", FREG, FREG, FREG)
+MINI_OP(OP_RDIV,   "r4_div", FREG, FREG, FREG)
+MINI_OP(OP_RDIV_UN,"r4_div_un", FREG, FREG, FREG)
+MINI_OP(OP_RREM,   "r4_rem", FREG, FREG, FREG)
+MINI_OP(OP_RREM_UN,"r4_rem_un", FREG, FREG, FREG)
 
 /* float opcodes: must be in the same order as the matching CEE_ opcodes: unops_op_map */
 MINI_OP(OP_FNEG,       "float_neg", FREG, FREG, NONE)
@@ -466,12 +511,25 @@ MINI_OP(OP_FCONV_TO_R8,"float_conv_to_r8", FREG, FREG, NONE)
 MINI_OP(OP_FCONV_TO_U4,"float_conv_to_u4", IREG, FREG, NONE)
 MINI_OP(OP_FCONV_TO_U8,"float_conv_to_u8", LREG, FREG, NONE)
 
+MINI_OP(OP_RNEG,       "r4_neg", FREG, FREG, NONE)
+MINI_OP(OP_RNOT,       "r4_not", FREG, FREG, NONE)
+MINI_OP(OP_RCONV_TO_I1,"r4_conv_to_i1", IREG, FREG, NONE)
+MINI_OP(OP_RCONV_TO_I2,"r4_conv_to_i2", IREG, FREG, NONE)
+MINI_OP(OP_RCONV_TO_I4,"r4_conv_to_i4", IREG, FREG, NONE)
+MINI_OP(OP_RCONV_TO_I8,"r4_conv_to_i8", LREG, FREG, NONE)
+MINI_OP(OP_RCONV_TO_R4,"r4_conv_to_r4", FREG, FREG, NONE)
+MINI_OP(OP_RCONV_TO_R8,"r4_conv_to_r8", FREG, FREG, NONE)
+MINI_OP(OP_RCONV_TO_U4,"r4_conv_to_u4", IREG, FREG, NONE)
+MINI_OP(OP_RCONV_TO_U8,"r4_conv_to_u8", LREG, FREG, NONE)
+
+/* float opcodes: must be in the same order as the matching CEE_ opcodes: ovfops_op_map */
 MINI_OP(OP_FCONV_TO_U2,   "float_conv_to_u2", IREG, FREG, NONE)
 MINI_OP(OP_FCONV_TO_U1,   "float_conv_to_u1", IREG, FREG, NONE)
 MINI_OP(OP_FCONV_TO_I,    "float_conv_to_i", IREG, FREG, NONE)
 MINI_OP(OP_FCONV_TO_OVF_I,"float_conv_to_ovf_i", IREG, FREG, NONE)
 MINI_OP(OP_FCONV_TO_OVF_U,"float_conv_to_ovd_u", IREG, FREG, NONE)
 
+/* float opcodes: must be in the same order as the matching CEE_ opcodes: ovfops_op_map */
 MINI_OP(OP_FADD_OVF,      "float_add_ovf", FREG, FREG, FREG)
 MINI_OP(OP_FADD_OVF_UN,   "float_add_ovf_un", FREG, FREG, FREG)
 MINI_OP(OP_FMUL_OVF,      "float_mul_ovf", FREG, FREG, FREG)
@@ -506,6 +564,10 @@ MINI_OP(OP_FCGT_UN,"float_cgt_un", IREG, FREG, FREG)
 MINI_OP(OP_FCLT,   "float_clt", IREG, FREG, FREG)
 MINI_OP(OP_FCLT_UN,"float_clt_un", IREG, FREG, FREG)
 
+MINI_OP(OP_FCNEQ,  "float_cneq", IREG, FREG, FREG)
+MINI_OP(OP_FCGE,   "float_cge", IREG, FREG, FREG)
+MINI_OP(OP_FCLE,   "float_cle", IREG, FREG, FREG)
+
 MINI_OP(OP_FCEQ_MEMBASE,   "float_ceq_membase", IREG, FREG, IREG)
 MINI_OP(OP_FCGT_MEMBASE,   "float_cgt_membase", IREG, FREG, IREG)
 MINI_OP(OP_FCGT_UN_MEMBASE,"float_cgt_un_membase", IREG, FREG, IREG)
@@ -514,6 +576,52 @@ MINI_OP(OP_FCLT_UN_MEMBASE,"float_clt_un_membase", IREG, FREG, IREG)
 
 MINI_OP(OP_FCONV_TO_U,	"float_conv_to_u", IREG, FREG, NONE)
 MINI_OP(OP_CKFINITE, "ckfinite", FREG, FREG, NONE)
+
+/* r4 opcodes: must be in the same order as the matching CEE_ opcodes: ovfops_op_map */
+MINI_OP(OP_RCONV_TO_U2,   "r4_conv_to_u2", IREG, FREG, NONE)
+MINI_OP(OP_RCONV_TO_U1,   "r4_conv_to_u1", IREG, FREG, NONE)
+MINI_OP(OP_RCONV_TO_I,    "r4_conv_to_i", IREG, FREG, NONE)
+MINI_OP(OP_RCONV_TO_OVF_I,"r4_conv_to_ovf_i", IREG, FREG, NONE)
+MINI_OP(OP_RCONV_TO_OVF_U,"r4_conv_to_ovd_u", IREG, FREG, NONE)
+
+/* r4 opcodes: must be in the same order as the matching CEE_ opcodes: ovfops_op_map */
+MINI_OP(OP_RADD_OVF,      "r4_add_ovf", FREG, FREG, FREG)
+MINI_OP(OP_RADD_OVF_UN,   "r4_add_ovf_un", FREG, FREG, FREG)
+MINI_OP(OP_RMUL_OVF,      "r4_mul_ovf", FREG, FREG, FREG)
+MINI_OP(OP_RMUL_OVF_UN,   "r4_mul_ovf_un", FREG, FREG, FREG)
+MINI_OP(OP_RSUB_OVF,      "r4_sub_ovf", FREG, FREG, FREG)
+MINI_OP(OP_RSUB_OVF_UN,   "r4_sub_ovf_un", FREG, FREG, FREG)
+
+MINI_OP(OP_RCONV_TO_OVF_I1_UN,"r4_conv_to_ovf_i1_un", IREG, FREG, NONE)
+MINI_OP(OP_RCONV_TO_OVF_I2_UN,"r4_conv_to_ovf_i2_un", IREG, FREG, NONE)
+MINI_OP(OP_RCONV_TO_OVF_I4_UN,"r4_conv_to_ovf_i4_un", IREG, FREG, NONE)
+MINI_OP(OP_RCONV_TO_OVF_I8_UN,"r4_conv_to_ovf_i8_un", IREG, FREG, NONE)
+MINI_OP(OP_RCONV_TO_OVF_U1_UN,"r4_conv_to_ovf_u1_un", IREG, FREG, NONE)
+MINI_OP(OP_RCONV_TO_OVF_U2_UN,"r4_conv_to_ovf_u2_un", IREG, FREG, NONE)
+MINI_OP(OP_RCONV_TO_OVF_U4_UN,"r4_conv_to_ovf_u4_un", IREG, FREG, NONE)
+MINI_OP(OP_RCONV_TO_OVF_U8_UN,"r4_conv_to_ovf_u8_un", IREG, FREG, NONE)
+MINI_OP(OP_RCONV_TO_OVF_I_UN, "r4_conv_to_ovf_i_un", IREG, FREG, NONE)
+MINI_OP(OP_RCONV_TO_OVF_U_UN, "r4_conv_to_ovf_u_un", IREG, FREG, NONE)
+
+MINI_OP(OP_RCONV_TO_OVF_I1,"r4_conv_to_ovf_i1", IREG, FREG, NONE)
+MINI_OP(OP_RCONV_TO_OVF_U1,"r4_conv_to_ovf_u1", IREG, FREG, NONE)
+MINI_OP(OP_RCONV_TO_OVF_I2,"r4_conv_to_ovf_i2", IREG, FREG, NONE)
+MINI_OP(OP_RCONV_TO_OVF_U2,"r4_conv_to_ovf_u2", IREG, FREG, NONE)
+MINI_OP(OP_RCONV_TO_OVF_I4,"r4_conv_to_ovf_i4", IREG, FREG, NONE)
+MINI_OP(OP_RCONV_TO_OVF_U4,"r4_conv_to_ovf_u4", IREG, FREG, NONE)
+MINI_OP(OP_RCONV_TO_OVF_I8,"r4_conv_to_ovf_i8", IREG, FREG, NONE)
+MINI_OP(OP_RCONV_TO_OVF_U8,"r4_conv_to_ovf_u8", IREG, FREG, NONE)
+
+/* r4 opcodes: must be in the same order as the matching CEE_ opcodes: ceqops_op_map */
+MINI_OP(OP_RCEQ,   "r4_ceq", IREG, FREG, FREG)
+MINI_OP(OP_RCGT,   "r4_cgt", IREG, FREG, FREG)
+MINI_OP(OP_RCGT_UN,"r4_cgt_un", IREG, FREG, FREG)
+MINI_OP(OP_RCLT,   "r4_clt", IREG, FREG, FREG)
+MINI_OP(OP_RCLT_UN,"r4_clt_un", IREG, FREG, FREG)
+
+MINI_OP(OP_RCNEQ,  "r4_cneq", IREG, FREG, FREG)
+MINI_OP(OP_RCGE,   "r4_cge", IREG, FREG, FREG)
+MINI_OP(OP_RCLE,   "r4_cle", IREG, FREG, FREG)
 
 /* Return the low 32 bits of a double vreg */
 MINI_OP(OP_FGETLOW32, "float_getlow32", IREG, FREG, NONE)
@@ -573,6 +681,11 @@ MINI_OP(OP_SUB_OVF_CARRY,   "sub_ovf_carry", IREG, IREG, IREG)
 MINI_OP(OP_ADD_OVF_UN_CARRY,   "add_ovf_un_carry", IREG, IREG, IREG)
 MINI_OP(OP_SUB_OVF_UN_CARRY,   "sub_ovf_un_carry", IREG, IREG, IREG)
 
+/* instructions with explicit long arguments to deal with 64-bit ilp32 machines */
+MINI_OP(OP_LADDCC,   "laddcc", LREG, LREG, LREG)
+MINI_OP(OP_LSUBCC,   "lsubcc", LREG, LREG, LREG)
+
+
 /* FP functions usually done by the CPU */
 MINI_OP(OP_SIN,     "sin", FREG, FREG, NONE)
 MINI_OP(OP_COS,     "cos", FREG, FREG, NONE)
@@ -600,6 +713,10 @@ MINI_OP(OP_CARD_TABLE_WBARRIER, "card_table_wbarrier", NONE, IREG, IREG)
 
 /* arch-dep tls access */
 MINI_OP(OP_TLS_GET,            "tls_get", IREG, NONE, NONE)
+MINI_OP(OP_TLS_GET_REG,        "tls_get_reg", IREG, IREG, NONE)
+/* inst_offset contains the TLS offset */
+MINI_OP(OP_TLS_SET,            "tls_set", NONE, IREG, NONE)
+MINI_OP(OP_TLS_SET_REG,        "tls_set_reg", NONE, IREG, IREG)
 
 MINI_OP(OP_LOAD_GOTADDR, "load_gotaddr", IREG, NONE, NONE)
 MINI_OP(OP_DUMMY_USE, "dummy_use", NONE, IREG, NONE)
@@ -768,7 +885,7 @@ MINI_OP(OP_PSHLQ, "pshlq", XREG, XREG, NONE)
 MINI_OP(OP_PSHLQ_REG, "pshlq_reg", XREG, XREG, XREG)
 
 MINI_OP(OP_EXTRACT_I4, "extract_i4", IREG, XREG, NONE)
-MINI_OP(OP_ICONV_TO_R8_RAW, "iconv_to_r8_raw", FREG, IREG, NONE)
+MINI_OP(OP_ICONV_TO_R4_RAW, "iconv_to_r4_raw", FREG, IREG, NONE)
 
 MINI_OP(OP_EXTRACT_I2, "extract_i2", IREG, XREG, NONE)
 MINI_OP(OP_EXTRACT_U2, "extract_u2", IREG, XREG, NONE)
@@ -826,29 +943,58 @@ MINI_OP(OP_XMOVE,   "xmove", XREG, XREG, NONE)
 MINI_OP(OP_XZERO,   "xzero", XREG, NONE, NONE)
 MINI_OP(OP_XPHI,	"xphi", XREG, NONE, NONE)
 
-/* Atomic specific
+/*
+ * These are used for efficient implementation of the
+ * atomic methods on Interlocked, Volatile, and Thread.
+ * This is done only on architectures that support it,
+ * as per mono_arch_opcode_supported ().
+ *
+ * Note that while the 32-bit variants are used on
+ * both 32-bit and 64-bit systems, the 64-bit variants
+ * are only used if the system is 64-bit. If that is
+ * not the case, the fallback code in the runtime is
+ * used instead. This is done because decomposing the
+ * 64-bit variants to instructions operating on 32-bit
+ * registers is very complicated on some architectures.
+ *
+ * For memory_barrier and load/store instructions, the
+ * inst.backend.memory_barrier_kind field indicates
+ * which semantics to use.
+ *
+ * Where relevant, all of these return the new value at
+ * the given memory location after performing the
+ * operation.
+ */
 
-	Note, OP_ATOMIC_ADD_IMM_NEW_I4 and
-	OP_ATOMIC_ADD_NEW_I4 returns the new
-	value compared to OP_ATOMIC_ADD_I4 that
-	returns the old value.
-
-	OP_ATOMIC_ADD_NEW_I4 is used by
-	Interlocked::Increment and Interlocked:Decrement
-	and atomic_add_i4 by Interlocked::Add
-*/
-MINI_OP(OP_ATOMIC_ADD_I4, "atomic_add_i4", IREG, IREG, IREG)
-MINI_OP(OP_ATOMIC_ADD_NEW_I4, "atomic_add_new_i4", IREG, IREG, IREG)
-MINI_OP(OP_ATOMIC_ADD_IMM_I4, "atomic_add_imm_i4", IREG, IREG, NONE)
-MINI_OP(OP_ATOMIC_ADD_IMM_NEW_I4, "atomic_add_imm_new_i4", IREG, IREG, NONE)
-MINI_OP(OP_ATOMIC_EXCHANGE_I4, "atomic_exchange_i4", IREG, IREG, IREG)
-
-MINI_OP(OP_ATOMIC_ADD_I8, "atomic_add_i8", IREG, IREG, IREG)
-MINI_OP(OP_ATOMIC_ADD_NEW_I8, "atomic_add_new_i8", IREG, IREG, IREG)
-MINI_OP(OP_ATOMIC_ADD_IMM_I8, "atomic_add_imm_i8", IREG, IREG, NONE)
-MINI_OP(OP_ATOMIC_ADD_IMM_NEW_I8, "atomic_add_imm_new_i8", IREG, IREG, NONE)
-MINI_OP(OP_ATOMIC_EXCHANGE_I8, "atomic_exchange_i8", IREG, IREG, IREG)
 MINI_OP(OP_MEMORY_BARRIER, "memory_barrier", NONE, NONE, NONE)
+
+MINI_OP(OP_ATOMIC_LOAD_I1, "atomic_load_i1", IREG, IREG, NONE)
+MINI_OP(OP_ATOMIC_LOAD_I2, "atomic_load_i2", IREG, IREG, NONE)
+MINI_OP(OP_ATOMIC_LOAD_I4, "atomic_load_i4", IREG, IREG, NONE)
+MINI_OP(OP_ATOMIC_LOAD_I8, "atomic_load_i8", IREG, IREG, NONE)
+MINI_OP(OP_ATOMIC_LOAD_U1, "atomic_load_u1", IREG, IREG, NONE)
+MINI_OP(OP_ATOMIC_LOAD_U2, "atomic_load_u2", IREG, IREG, NONE)
+MINI_OP(OP_ATOMIC_LOAD_U4, "atomic_load_u4", IREG, IREG, NONE)
+MINI_OP(OP_ATOMIC_LOAD_U8, "atomic_load_u8", IREG, IREG, NONE)
+MINI_OP(OP_ATOMIC_LOAD_R4, "atomic_load_r4", FREG, IREG, NONE)
+MINI_OP(OP_ATOMIC_LOAD_R8, "atomic_load_r8", FREG, IREG, NONE)
+
+MINI_OP(OP_ATOMIC_STORE_I1, "atomic_store_i1", IREG, IREG, NONE)
+MINI_OP(OP_ATOMIC_STORE_I2, "atomic_store_i2", IREG, IREG, NONE)
+MINI_OP(OP_ATOMIC_STORE_I4, "atomic_store_i4", IREG, IREG, NONE)
+MINI_OP(OP_ATOMIC_STORE_I8, "atomic_store_i8", IREG, IREG, NONE)
+MINI_OP(OP_ATOMIC_STORE_U1, "atomic_store_u1", IREG, IREG, NONE)
+MINI_OP(OP_ATOMIC_STORE_U2, "atomic_store_u2", IREG, IREG, NONE)
+MINI_OP(OP_ATOMIC_STORE_U4, "atomic_store_u4", IREG, IREG, NONE)
+MINI_OP(OP_ATOMIC_STORE_U8, "atomic_store_u8", IREG, IREG, NONE)
+MINI_OP(OP_ATOMIC_STORE_R4, "atomic_store_r4", IREG, FREG, NONE)
+MINI_OP(OP_ATOMIC_STORE_R8, "atomic_store_r8", IREG, FREG, NONE)
+
+MINI_OP(OP_ATOMIC_ADD_I4, "atomic_add_i4", IREG, IREG, IREG)
+MINI_OP(OP_ATOMIC_ADD_I8, "atomic_add_i8", IREG, IREG, IREG)
+
+MINI_OP(OP_ATOMIC_EXCHANGE_I4, "atomic_exchange_i4", IREG, IREG, IREG)
+MINI_OP(OP_ATOMIC_EXCHANGE_I8, "atomic_exchange_i8", IREG, IREG, IREG)
 
 MINI_OP3(OP_ATOMIC_CAS_I4, "atomic_cas_i4", IREG, IREG, IREG, IREG)
 MINI_OP3(OP_ATOMIC_CAS_I8, "atomic_cas_i8", IREG, IREG, IREG, IREG)
@@ -920,7 +1066,7 @@ MINI_OP(OP_GC_PARAM_SLOT_LIVENESS_DEF, "gc_param_slot_liveness_def", NONE, NONE,
 /* #if defined(__native_client_codegen__) || defined(__native_client__) */
 /* We have to define these in terms of the TARGET defines, not NaCl defines */
 /* because genmdesc.pl doesn't have multiple defines per platform.          */
-#if defined(TARGET_AMD64) || defined(TARGET_X86)
+#if defined(TARGET_AMD64) || defined(TARGET_X86) || defined(TARGET_ARM)
 MINI_OP(OP_NACL_GC_SAFE_POINT,     "nacl_gc_safe_point", IREG, NONE, NONE)
 #endif
 
@@ -1012,9 +1158,11 @@ MINI_OP(OP_PPC_SUBFZE,             "ppc_subfze", IREG, IREG, NONE)
 MINI_OP(OP_CHECK_FINITE,           "ppc_check_finite", NONE, IREG, NONE)
 #endif
 
-#if defined(TARGET_ARM)
+#if defined(TARGET_ARM) || defined(TARGET_ARM64)
 MINI_OP(OP_ARM_RSBS_IMM,            "arm_rsbs_imm", IREG, IREG, NONE)
 MINI_OP(OP_ARM_RSC_IMM,             "arm_rsc_imm", IREG, IREG, NONE)
+/* Set dreg to an r4 value */
+MINI_OP(OP_ARM_SETFREG_R4,             "arm_setfreg_r4", FREG, FREG, NONE)
 #endif
 
 #if defined(__sparc__) || defined(sparc)
@@ -1054,6 +1202,9 @@ MINI_OP(OP_S390_ISUB_OVF_UN,    "s390_int_sub_ovf_un", IREG, IREG, IREG)
 #endif
 
 #if defined(__ia64__)
+MINI_OP(OP_ATOMIC_ADD_IMM_I4, "atomic_add_imm_i4", IREG, IREG, NONE)
+MINI_OP(OP_ATOMIC_ADD_IMM_I8, "atomic_add_imm_i8", IREG, IREG, NONE)
+
 MINI_OP(OP_IA64_LOAD,          "ia64_load", NONE, NONE, NONE)
 MINI_OP(OP_IA64_LOADI1,        "ia64_loadi1", NONE, NONE, NONE)
 MINI_OP(OP_IA64_LOADU1,        "ia64_loadu1", NONE, NONE, NONE)
@@ -1151,30 +1302,6 @@ MINI_OP(OP_IA64_LOADR4_MEMBASE_INC,"ia64_loadr4_membase_inc", IREG, IREG, NONE)
 MINI_OP(OP_IA64_LOADR8_MEMBASE_INC,"ia64_loadr8_membase_inc", IREG, IREG, NONE)
 #endif
 
-#if defined(__alpha__)
-MINI_OP(OP_ALPHA_CMP_EQ, "alpha_cmp_eq")
-MINI_OP(OP_ALPHA_CMP_IMM_EQ, "alpha_cmp_imm_eq")
-MINI_OP(OP_ALPHA_CMP_ULT, "alpha_cmp_ult")
-MINI_OP(OP_ALPHA_CMP_IMM_ULT, "alpha_cmp_imm_ult")
-MINI_OP(OP_ALPHA_CMP_ULE, "alpha_cmp_ule")
-MINI_OP(OP_ALPHA_CMP_IMM_ULE, "alpha_cmp_imm_ule")
-MINI_OP(OP_ALPHA_CMP_LT, "alpha_cmp_lt")
-MINI_OP(OP_ALPHA_CMP_IMM_LT, "alpha_cmp_imm_lt")
-MINI_OP(OP_ALPHA_CMP_LE, "alpha_cmp_le")
-MINI_OP(OP_ALPHA_CMP_IMM_LE, "alpha_cmp_imm_le")
-
-MINI_OP(OP_ALPHA_CMPT_EQ, "alpha_cmpt_eq")
-MINI_OP(OP_ALPHA_CMPT_EQ_SU, "alpha_cmpt_eq_su")
-MINI_OP(OP_ALPHA_CMPT_LT, "alpha_cmpt_lt")
-MINI_OP(OP_ALPHA_CMPT_LT_SU, "alpha_cmpt_lt_su")
-MINI_OP(OP_ALPHA_CMPT_LE, "alpha_cmpt_le")
-MINI_OP(OP_ALPHA_CMPT_LE_SU, "alpha_cmpt_le_su")
-MINI_OP(OP_ALPHA_CMPT_UN, "alpha_cmpt_un")
-MINI_OP(OP_ALPHA_CMPT_UN_SU, "alpha_cmpt_un_su")
-MINI_OP(OP_ALPHA_TRAPB, "alpha_trapb")
-
-#endif
-
 #if defined(__mips__)
 MINI_OP(OP_MIPS_BEQ,   "mips_beq", NONE, IREG, IREG)
 MINI_OP(OP_MIPS_BGEZ,  "mips_bgez", NONE, IREG, NONE)
@@ -1241,63 +1368,22 @@ MINI_OP(OP_MIPS_COND_EXC_INC, "mips_cond_exc_inc", NONE, IREG, IREG)
 
 #endif
 
-#if defined(__hppa)
-MINI_OP(OP_HPPA_BEQ, "hppa_beq", NONE, NONE, NONE)
-MINI_OP(OP_HPPA_BGE, "hppa_bge", NONE, NONE, NONE)
-MINI_OP(OP_HPPA_BGT, "hppa_bgt", NONE, NONE, NONE)
-MINI_OP(OP_HPPA_BLE, "hppa_ble", NONE, NONE, NONE)
-MINI_OP(OP_HPPA_BLT, "hppa_blt", NONE, NONE, NONE)
-MINI_OP(OP_HPPA_BNE, "hppa_bne", NONE, NONE, NONE)
-MINI_OP(OP_HPPA_BGE_UN, "hppa_bge_un", NONE, NONE, NONE)
-MINI_OP(OP_HPPA_BGT_UN, "hppa_bgt_un", NONE, NONE, NONE)
-MINI_OP(OP_HPPA_BLE_UN, "hppa_ble_un", NONE, NONE, NONE)
-MINI_OP(OP_HPPA_BLT_UN, "hppa_blt_un", NONE, NONE, NONE)
-
-MINI_OP(OP_HPPA_CEQ, "hppa_ceq", NONE, NONE, NONE)
-MINI_OP(OP_HPPA_CGT, "hppa_cgt", NONE, NONE, NONE)
-MINI_OP(OP_HPPA_CGT_UN, "hppa_cgt_un", NONE, NONE, NONE)
-MINI_OP(OP_HPPA_CLT, "hppa_clt", NONE, NONE, NONE)
-MINI_OP(OP_HPPA_CLT_UN, "hppa_clt_un", NONE, NONE, NONE)
-
-MINI_OP(OP_HPPA_CEQ_IMM, "hppa_ceq_imm", NONE, NONE, NONE)
-MINI_OP(OP_HPPA_CGT_IMM, "hppa_cgt_imm", NONE, NONE, NONE)
-MINI_OP(OP_HPPA_CGT_UN_IMM, "hppa_cgt_un_imm", NONE, NONE, NONE)
-MINI_OP(OP_HPPA_CLT_IMM, "hppa_clt_imm", NONE, NONE, NONE)
-MINI_OP(OP_HPPA_CLT_UN_IMM, "hppa_clt_un_imm", NONE, NONE, NONE)
-
-MINI_OP(OP_HPPA_COND_EXC_EQ, "hppa_cond_exc_eq", NONE, NONE, NONE)
-MINI_OP(OP_HPPA_COND_EXC_GE, "hppa_cond_exc_ge", NONE, NONE, NONE)
-MINI_OP(OP_HPPA_COND_EXC_GT, "hppa_cond_exc_gt", NONE, NONE, NONE)
-MINI_OP(OP_HPPA_COND_EXC_LE, "hppa_cond_exc_le", NONE, NONE, NONE)
-MINI_OP(OP_HPPA_COND_EXC_LT, "hppa_cond_exc_lt", NONE, NONE, NONE)
-MINI_OP(OP_HPPA_COND_EXC_NE_UN, "hppa_cond_exc_ne_un", NONE, NONE, NONE)
-MINI_OP(OP_HPPA_COND_EXC_GE_UN, "hppa_cond_exc_ge_un", NONE, NONE, NONE)
-MINI_OP(OP_HPPA_COND_EXC_GT_UN, "hppa_cond_exc_gt_un", NONE, NONE, NONE)
-MINI_OP(OP_HPPA_COND_EXC_LE_UN, "hppa_cond_exc_le_un", NONE, NONE, NONE)
-MINI_OP(OP_HPPA_COND_EXC_LT_UN, "hppa_cond_exc_lt_un", NONE, NONE, NONE)
-MINI_OP(OP_HPPA_COND_EXC_OV, "hppa_cond_exc_ov", NONE, NONE, NONE)
-MINI_OP(OP_HPPA_COND_EXC_NO, "hppa_cond_exc_no", NONE, NONE, NONE)
-MINI_OP(OP_HPPA_COND_EXC_C, "hppa_cond_exc_c", NONE, NONE, NONE)
-MINI_OP(OP_HPPA_COND_EXC_NC, "hppa_cond_exc_nc", NONE, NONE, NONE)
-
-MINI_OP(OP_HPPA_XMPYU, "hppa_xmpyu", NONE, NONE, NONE)
-MINI_OP(OP_HPPA_ADD_OVF, "hppa_add_ovf", NONE, NONE, NONE)
-MINI_OP(OP_HPPA_SUB_OVF, "hppa_sub_ovf", NONE, NONE, NONE)
-MINI_OP(OP_HPPA_ADDC_OVF, "hppa_addc_ovf", NONE, NONE, NONE)
-MINI_OP(OP_HPPA_SUBB_OVF, "hppa_subb_ovf", NONE, NONE, NONE)
-
-MINI_OP(OP_HPPA_OUTARG_R4CONST, "hppa_outarg_r4const", NONE, NONE, NONE)
-MINI_OP(OP_HPPA_OUTARG_REGOFFSET, "hppa_outarg_regoffset", NONE, NONE, NONE)
-
-MINI_OP(OP_HPPA_LOADR4_LEFT, "hppa_loadr4_left", NONE, NONE, NONE)
-MINI_OP(OP_HPPA_LOADR4_RIGHT, "hppa_loadr4_right", NONE, NONE, NONE)
-MINI_OP(OP_HPPA_STORER4_LEFT, "hppa_storer4_left", NONE, NONE, NONE)
-MINI_OP(OP_HPPA_STORER4_RIGHT, "hppa_storer4_right", NONE, NONE, NONE)
-
-MINI_OP(OP_HPPA_SETF4REG, "hppa_setf4reg", NONE, NONE, NONE)
+#if defined(TARGET_ARM64)
+/* Branch if sreg1 == 0 */
+MINI_OP(OP_ARM64_CBZW, "arm64_cbzw", NONE, IREG, NONE)
+MINI_OP(OP_ARM64_CBZX, "arm64_cbzx", NONE, IREG, NONE)
+/* Branch if sreg1 != 0 */
+MINI_OP(OP_ARM64_CBNZW, "arm64_cbnzw", NONE, IREG, NONE)
+MINI_OP(OP_ARM64_CBNZX, "arm64_cbnzx", NONE, IREG, NONE)
 #endif
 
 /* Same as OUTARG_VT, but has a dreg */
 #ifdef ENABLE_LLVM
 MINI_OP(OP_LLVM_OUTARG_VT,	"llvm_outarg_vt", IREG, VREG, NONE)
 #endif
+
+MINI_OP(OP_OBJC_GET_SELECTOR, "objc_get_selector", IREG, NONE, NONE)
+
+MINI_OP(OP_GET_SP, "get_sp", IREG, NONE, NONE)
+MINI_OP(OP_SET_SP, "set_sp", NONE, IREG, NONE)
+

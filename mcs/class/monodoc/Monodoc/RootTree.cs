@@ -68,7 +68,7 @@ namespace Monodoc
 		{
 			string result = ".";
 			try {
-				result = Settings.Get ("docPath") ?? ".";
+				result = Config.Get ("docPath") ?? ".";
 			} catch {}
 
 			return result;
@@ -94,7 +94,7 @@ namespace Monodoc
 		{
 			IEnumerable<string> enumerable = Enumerable.Empty<string> ();
 			try {
-				string path = Settings.Get ("docExternalPath");
+				string path = Config.Get ("docExternalPath");
 				enumerable = enumerable.Concat (System.IO.Directory.EnumerateFiles (path, "*.source"));
 			}
 			catch {}
@@ -139,10 +139,10 @@ namespace Monodoc
 				hs.RootTree = rootTree;
 				rootTree.helpSources.Add (hs);
 				string epath = "extra-help-source-" + hs.Name;
-				Node hsn = rootTree.RootNode.CreateNode (hs.Name, "root:/" + epath);
+				Node hsn = rootTree.RootNode.CreateNode (hs.Name, RootNamespace + epath);
 				rootTree.nameToHelpSource [epath] = hs;
 				hsn.EnsureNodes ();
-				foreach (Node n in hs.Tree.RootNode.Nodes)
+				foreach (Node n in hs.Tree.RootNode.ChildNodes)
 					hsn.AddNode (n);
 			}
 
@@ -214,7 +214,7 @@ namespace Monodoc
 						Console.Error.WriteLine ("node `{0}' is not defined on the documentation map", path);
 						node2 = node;
 					}
-					foreach (Node current in helpSource.Tree.RootNode.Nodes) {
+					foreach (Node current in helpSource.Tree.RootNode.ChildNodes) {
 						node2.AddNode (current);
 					}
 					node2.Sort ();
@@ -229,7 +229,7 @@ namespace Monodoc
 			if (!node.Documented)
 			{
 				List<Node> list = new List<Node> ();
-				foreach (Node current in node.Nodes)
+				foreach (Node current in node.ChildNodes)
 				{
 					bool flag = RootTree.PurgeNode (current);
 					if (flag)
@@ -237,7 +237,7 @@ namespace Monodoc
 						list.Add (current);
 					}
 				}
-				result =  (node.Nodes.Count == list.Count);
+				result =  (node.ChildNodes.Count == list.Count);
 				foreach (Node current2 in list)
 				{
 					node.DeleteNode (current2);
@@ -332,7 +332,7 @@ namespace Monodoc
 					continue;
 				}
 				string name = e.InnerText;
-				Node orCreateNode = parent.GetOrCreateNode (label, "root:/" + name);
+				Node orCreateNode = parent.GetOrCreateNode (label, RootNamespace + name);
 				orCreateNode.EnsureNodes ();
 				this.nameToNode[name] = orCreateNode;
 				XmlNodeList xmlNodeList = xmlNode.SelectNodes ("./node");
@@ -345,9 +345,8 @@ namespace Monodoc
 		public Node LookupEntryPoint (string name)
 		{
 			Node result = null;
-			if (!this.nameToNode.TryGetValue (name, out result)) {
+			if (!this.nameToNode.TryGetValue (name, out result))
 				result = null;
-			}
 			return result;
 		}
 
@@ -383,8 +382,17 @@ namespace Monodoc
 			internalId = null;
 			context = null;
 
-			if (url.StartsWith ("root:/", StringComparison.OrdinalIgnoreCase))
-				return this.GetHelpSourceAndIdFromName (url.Substring ("root:/".Length), out internalId, out node);
+			if (url == "root:") {
+				context = new Dictionary<string, string> { {"specialpage", "master-root"} };
+				internalId = url;
+				node = null;
+				// We return the first help source available since the generator will simply fetch this RootTree instance through it
+				return helpSources.FirstOrDefault ();
+			}
+			if (url.StartsWith (RootNamespace, StringComparison.OrdinalIgnoreCase)) {
+				context = new Dictionary<string, string> { {"specialpage", "root"} };
+				return GetHelpSourceAndIdFromName (url.Substring (RootNamespace.Length), out internalId, out node);
+			}
 
 			HelpSource helpSource = hintSource;
 			if (helpSource == null || string.IsNullOrEmpty (internalId = helpSource.GetInternalIdForUrl (url, out node, out context))) {
@@ -403,9 +411,9 @@ namespace Monodoc
 		public HelpSource GetHelpSourceAndIdFromName (string name, out string internalId, out Node node)
 		{
 			internalId = "root:";
-			node = this.LookupEntryPoint (name);
+			node = LookupEntryPoint (name);
 
-			return node == null ? null : node.Nodes.Select (n => n.Tree.HelpSource).Where (hs => hs != null).Distinct ().FirstOrDefault ();
+			return node == null ? null : node.ChildNodes.Select (n => n.Tree.HelpSource).FirstOrDefault (hs => hs != null);
 		}
 
 		public HelpSource GetHelpSourceFromId (int id)
@@ -521,11 +529,17 @@ namespace Monodoc
 		IEnumerable<string> GetIndexesPathPrefixes ()
 		{
 			yield return basedir;
-			yield return Settings.Get ("docPath");
-			var indexDirectory = Settings.Get ("monodocIndexDirectory");
+			yield return Config.Get ("docPath");
+			var indexDirectory = Config.Get ("monodocIndexDirectory");
 			if (!string.IsNullOrEmpty (indexDirectory))
 				yield return indexDirectory;
 			yield return Path.Combine (Environment.GetFolderPath (Environment.SpecialFolder.ApplicationData), "monodoc");
+		}
+
+		[Obsolete]
+		public string GetTitle (string url)
+		{
+			return "Mono Documentation";
 		}
 	}
 }

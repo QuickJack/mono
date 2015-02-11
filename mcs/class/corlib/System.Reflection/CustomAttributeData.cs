@@ -37,11 +37,7 @@ namespace System.Reflection {
 
 	[ComVisible (true)]
 	[Serializable]
-#if NET_4_0
 	public
-#else
-	public sealed
-#endif
 	class CustomAttributeData {
 		class LazyCAttrData {
 			internal Assembly assembly;
@@ -55,11 +51,9 @@ namespace System.Reflection {
 		LazyCAttrData lazyData;
 
 
-#if NET_4_0
 		protected CustomAttributeData ()
 		{
 		}
-#endif
 
 		internal CustomAttributeData (ConstructorInfo ctorInfo, Assembly assembly, IntPtr data, uint data_length)
 		{
@@ -82,18 +76,16 @@ namespace System.Reflection {
 			ResolveArgumentsInternal (ctorInfo, lazyData.assembly, lazyData.data, lazyData.data_length, out ctor_args, out named_args);
 
 			this.ctorArgs = Array.AsReadOnly<CustomAttributeTypedArgument>
-				(ctor_args != null ? UnboxValues<CustomAttributeTypedArgument> (ctor_args) : new CustomAttributeTypedArgument [0]);
+				(ctor_args != null ? UnboxValues<CustomAttributeTypedArgument> (ctor_args) : EmptyArray<CustomAttributeTypedArgument>.Value);
 			this.namedArgs = Array.AsReadOnly<CustomAttributeNamedArgument> 
-				(named_args != null ? UnboxValues<CustomAttributeNamedArgument> (named_args) : new CustomAttributeNamedArgument [0]);
+				(named_args != null ? UnboxValues<CustomAttributeNamedArgument> (named_args) : EmptyArray<CustomAttributeNamedArgument>.Value);
 			
 			lazyData = null;
 		}
 		
 		[ComVisible (true)]
 		public
-#if NET_4_0
 		virtual
-#endif
 		ConstructorInfo Constructor {
 			get {
 				return ctorInfo;
@@ -102,9 +94,7 @@ namespace System.Reflection {
 
 		[ComVisible (true)]
 		public
-#if NET_4_0
 		virtual
-#endif
 		IList<CustomAttributeTypedArgument> ConstructorArguments {
 			get {
 				ResolveArguments ();
@@ -113,9 +103,7 @@ namespace System.Reflection {
 		}
 
 		public
-#if NET_4_0
 		virtual
-#endif
 		IList<CustomAttributeNamedArgument> NamedArguments {
 			get {
 				ResolveArguments ();
@@ -137,6 +125,10 @@ namespace System.Reflection {
 
 		public static IList<CustomAttributeData> GetCustomAttributes (ParameterInfo target) {
 			return MonoCustomAttrs.GetCustomAttributesData (target);
+		}
+
+		public Type AttributeType {
+			get { return ctorInfo.DeclaringType; }
 		}
 
 		public override string ToString ()
@@ -197,13 +189,18 @@ namespace System.Reflection {
 
 		public override int GetHashCode ()
 		{
-			int ret = ctorInfo.GetHashCode () << 16;
+			int ret = ctorInfo == null ? 13 : (ctorInfo.GetHashCode () << 16);
 			// argument order-dependent
-			for (int i = 0; i < ctorArgs.Count; i++)
-				ret += ret ^ 7 + ctorArgs [i].GetHashCode () << (i * 4);
+			if (ctorArgs != null) {
+				for (int i = 0; i < ctorArgs.Count; i++) {
+					ret += ret ^ 7 + ctorArgs [i].GetHashCode () << (i * 4);
+				}
+			}
 			// argument order-independent
-			for (int i = 0; i < namedArgs.Count; i++)
-				ret += (namedArgs [i].GetHashCode () << 5);
+			if (namedArgs != null) {
+				for (int i = 0; i < namedArgs.Count; i++)
+					ret += (namedArgs [i].GetHashCode () << 5);
+			}
 			return ret;
 		}
 	}

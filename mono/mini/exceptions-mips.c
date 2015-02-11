@@ -174,16 +174,12 @@ mono_arch_get_call_filter (MonoTrampInfo **info, gboolean aot)
 static void
 throw_exception (MonoObject *exc, unsigned long eip, unsigned long esp, gboolean rethrow)
 {
-	static void (*restore_context) (MonoContext *);
 	MonoContext ctx;
 
 #ifdef DEBUG_EXCEPTIONS
 	g_print ("throw_exception: exc=%p eip=%p esp=%p rethrow=%d\n",
 		 exc, (void *)eip, (void *) esp, rethrow);
 #endif
-
-	if (!restore_context)
-		restore_context = mono_get_restore_context ();
 
 	/* adjust eip so that it point into the call instruction */
 	eip -= 8;
@@ -207,7 +203,7 @@ throw_exception (MonoObject *exc, unsigned long eip, unsigned long esp, gboolean
 		 (void *) ctx.sc_pc, (void *) ctx.sc_regs[mips_sp],
 		 (void *) ctx.sc_regs[mips_fp], &ctx);
 #endif
-	restore_context (&ctx);
+	mono_restore_context (&ctx);
 
 	g_assert_not_reached ();
 }
@@ -410,28 +406,20 @@ mono_arch_find_jit_info (MonoDomain *domain, MonoJitTlsData *jit_tls,
 
 		frame->type = FRAME_TYPE_MANAGED;
 
-		if (ji->from_aot)
-			unwind_info = mono_aot_get_unwind_info (ji, &unwind_info_len);
-		else
-			unwind_info = mono_get_cached_unwind_info (ji->used_regs, &unwind_info_len);
+		unwind_info = mono_jinfo_get_unwind_info (ji, &unwind_info_len);
 
 		for (i = 0; i < MONO_MAX_IREGS; ++i)
 			regs [i] = new_ctx->sc_regs [i];
 
 		mono_unwind_frame (unwind_info, unwind_info_len, ji->code_start, 
 						   (guint8*)ji->code_start + ji->code_size,
-						   ip, regs, MONO_MAX_IREGS,
+						   ip, NULL, regs, MONO_MAX_IREGS,
 						   save_locations, MONO_MAX_IREGS, &cfa);
 
 		for (i = 0; i < MONO_MAX_IREGS; ++i)
 			new_ctx->sc_regs [i] = regs [i];
 		new_ctx->sc_pc = regs [mips_ra];
 		new_ctx->sc_regs [mips_sp] = (mgreg_t)cfa;
-
-		if (*lmf && (MONO_CONTEXT_GET_SP (ctx) >= (gpointer)(*lmf)->iregs [mips_sp])) {
-			/* remove any unused lmf */
-			*lmf = (gpointer)(((gsize)(*lmf)->previous_lmf) & ~3);
-		}
 
 		/* we substract 8, so that the IP points into the call instruction */
 		MONO_CONTEXT_SET_IP (new_ctx, new_ctx->sc_pc - 8);
@@ -490,22 +478,10 @@ mono_arch_find_jit_info (MonoDomain *domain, MonoJitTlsData *jit_tls,
 	return FALSE;
 }
 
-void
-mono_arch_sigctx_to_monoctx (void *sigctx, MonoContext *mctx)
-{
-	mono_sigctx_to_monoctx (sigctx, mctx);
-}
-
-void
-mono_arch_monoctx_to_sigctx (MonoContext *mctx, void *sigctx)
-{
-	mono_monoctx_to_sigctx (mctx, sigctx);
-}
-
 gpointer
 mono_arch_ip_from_context (void *sigctx)
 {
-	return (gpointer)UCONTEXT_REG_PC (sigctx);
+	return (gpointer)(gsize)UCONTEXT_REG_PC (sigctx);
 }
 
 /*
@@ -518,16 +494,12 @@ handle_signal_exception (gpointer obj)
 {
 	MonoJitTlsData *jit_tls = mono_native_tls_get_value (mono_jit_tls_id);
 	MonoContext ctx;
-	static void (*restore_context) (MonoContext *);
-
-	if (!restore_context)
-		restore_context = mono_get_restore_context ();
 
 	memcpy (&ctx, &jit_tls->ex_ctx, sizeof (MonoContext));
 
 	mono_handle_exception (&ctx, obj);
 
-	restore_context (&ctx);
+	mono_restore_context (&ctx);
 }
 
 /*
@@ -550,7 +522,7 @@ mono_arch_handle_exception (void *ctx, gpointer obj)
 	guint64 sp = UCONTEXT_GREGS (sigctx) [mips_sp];
 
 	/* Pass the ctx parameter in TLS */
-	mono_arch_sigctx_to_monoctx (sigctx, &jit_tls->ex_ctx);
+	mono_sigctx_to_monoctx (sigctx, &jit_tls->ex_ctx);
 	/* The others in registers */
 	UCONTEXT_GREGS (sigctx)[mips_a0] = (gsize)obj;
 
@@ -565,13 +537,13 @@ mono_arch_handle_exception (void *ctx, gpointer obj)
 	MonoContext mctx;
 	gboolean result;
 
-	mono_arch_sigctx_to_monoctx (ctx, &mctx);
+	mono_sigctx_to_monoctx (ctx, &mctx);
 
 	result = mono_handle_exception (&mctx, obj);
 	/* restore the context so that returning from the signal handler will invoke
 	 * the catch clause 
 	 */
-	mono_arch_monoctx_to_sigctx (&mctx, ctx);
+	mono_monoctx_to_sigctx (&mctx, ctx);
 	return result;
 #endif
 }

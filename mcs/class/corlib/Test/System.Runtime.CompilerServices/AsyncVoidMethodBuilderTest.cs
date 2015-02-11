@@ -33,6 +33,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using NUnit.Framework;
 using System.Runtime.CompilerServices;
+using System.Runtime.ExceptionServices;
 
 namespace MonoTests.System.Runtime.CompilerServices
 {
@@ -60,9 +61,8 @@ namespace MonoTests.System.Runtime.CompilerServices
 
 			public override void Post (SendOrPostCallback d, object state)
 			{
-				if (state is Exception) {
+				if (state is ExceptionDispatchInfo) {
 					++PostCounter;
-					base.Post (d, state);
 				}
 			}
 
@@ -86,6 +86,8 @@ namespace MonoTests.System.Runtime.CompilerServices
 		public void SetException ()
 		{
 			var context = new MyContext ();
+			var old = SynchronizationContext.Current;
+
 			try {
 				SynchronizationContext.SetSynchronizationContext (context);
 				var awaiter = AsyncVoidMethodBuilder.Create ();
@@ -109,7 +111,7 @@ namespace MonoTests.System.Runtime.CompilerServices
 				Assert.AreEqual (0, context.SendCounter, "#11");
 				Assert.AreEqual (1, context.PostCounter, "#12");
 			} finally {
-				SynchronizationContext.SetSynchronizationContext (null);
+				SynchronizationContext.SetSynchronizationContext (old);
 			}
 		}
 	}

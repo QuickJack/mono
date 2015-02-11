@@ -17,6 +17,7 @@
 #include <semaphore.h>
 #endif
 #include <mono/io-layer/io-layer.h>
+#include <mono/utils/mono-publib.h>
 
 #if (defined (HAVE_SEMAPHORE_H) || defined (USE_MACH_SEMA)) && !defined(HOST_WIN32)
 #  define MONO_HAS_SEMAPHORES
@@ -37,7 +38,7 @@ typedef sem_t MonoSemType;
 #  define MONO_HAS_SEMAPHORES
 typedef HANDLE MonoSemType;
 #    define MONO_SEM_INIT(addr,initial) do {*(addr) = CreateSemaphore ( NULL,(initial),0x7FFFFFFF,NULL);} while(0)
-#    define MONO_SEM_DESTROY(sem) CloseHandle (*(sem))
+#    define MONO_SEM_DESTROY(sem) do { CloseHandle (*(sem)); (*(sem))=0; } while(0)
 #endif
 
 #define MONO_SEM_WAIT(sem) MONO_SEM_WAIT_ALERTABLE(sem, FALSE)
@@ -46,11 +47,17 @@ typedef HANDLE MonoSemType;
 #define MONO_SEM_TIMEDWAIT(sem, timeout_ms) MONO_SEM_TIMEDWAIT_ALERTABLE(sem, timeout_ms, FALSE)
 #define MONO_SEM_TIMEDWAIT_ALERTABLE(sem, timeout_ms, alertable) mono_sem_timedwait ((sem), (timeout_ms), alertable) 
 
+#define MONO_SEM_WAIT_UNITERRUPTIBLE(sem) do { \
+	while (MONO_SEM_WAIT ((sem)) != 0) {	\
+		/*if (EINTR != errno) ABORT("sem_wait failed"); */	\
+	}	\
+} while (0)
+
 G_BEGIN_DECLS
 
-int mono_sem_wait (MonoSemType *sem, gboolean alertable);
-int mono_sem_timedwait (MonoSemType *sem, guint32 timeout_ms, gboolean alertable);
-int mono_sem_post (MonoSemType *sem);
+MONO_API int mono_sem_wait (MonoSemType *sem, gboolean alertable);
+MONO_API int mono_sem_timedwait (MonoSemType *sem, guint32 timeout_ms, gboolean alertable);
+MONO_API int mono_sem_post (MonoSemType *sem);
 
 G_END_DECLS
 #endif /* _MONO_SEMAPHORE_H_ */

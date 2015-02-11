@@ -28,7 +28,6 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if NET_2_0
 
 using NUnit.Framework;
 
@@ -909,12 +908,12 @@ namespace MonoTests.System.Security.Cryptography.X509Certificates {
 			var collection = new X509Certificate2Collection ();
 
 			var found = collection.Find (X509FindType.FindBySubjectName, "SomeElse", false);
-			Assert.IsEmpty (found, "empty");
+			Assert.AreEqual (0, found.Count, "empty");
 			
 			collection.Add (cert);
 
 			collection.Find (X509FindType.FindBySubjectName, "T=SomeElse", false);
-			Assert.IsEmpty (found, "with prefix");
+			Assert.AreEqual (0, found.Count, "with prefix");
 			
 			found = collection.Find (X509FindType.FindBySubjectName, "SomeElse", false);
 			Assert.That (found.Count == 1, "full");
@@ -936,9 +935,8 @@ namespace MonoTests.System.Security.Cryptography.X509Certificates {
 			Assert.That (found [0].SubjectName.Name.Contains ("T=SomeElse"));
 			Assert.That (found [0].SubjectName.Name.Contains ("CN=MyCNName"));
 			found = collection.Find (X509FindType.FindBySubjectName, "SomeRandomStringThatDoesn'tExist", false);
-			Assert.IsEmpty (found);
+			Assert.AreEqual (0, found.Count);
 		}
 	}
 }
 
-#endif

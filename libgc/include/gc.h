@@ -61,6 +61,7 @@
   /* Win64 isn't really supported yet, but this is the first step. And	*/
   /* it might cause error messages to show up in more plausible places.	*/
   /* This needs basetsd.h, which is included by windows.h.	 	*/
+  #include <stdint.h>
   typedef unsigned __int64 GC_word;
   typedef __int64 GC_signed_word;
 #endif
@@ -428,6 +429,10 @@ GC_API size_t GC_get_total_bytes GC_PROTO((void));
 /* Return -1 otherwise. */
 int GC_get_suspend_signal GC_PROTO((void));
 
+/* Return the signal used by the gc to resume threads on posix platforms. */
+/* Return -1 otherwise. */
+int GC_get_restart_signal GC_PROTO((void));
+
 /* Disable garbage collection.  Even GC_gcollect calls will be 		*/
 /* ineffective.								*/
 GC_API void GC_disable GC_PROTO((void));
@@ -492,7 +497,7 @@ GC_API GC_PTR GC_malloc_atomic_ignore_off_page GC_PROTO((size_t lb));
 #   define GC_RETURN_ADDR (GC_word)__return_address
 #endif
 
-#ifdef __linux__
+#if defined(__linux__) || defined(__GLIBC__)
 # include <features.h>
 # if (__GLIBC__ == 2 && __GLIBC_MINOR__ >= 1 || __GLIBC__ > 2) \
      && !defined(__ia64__)
@@ -767,6 +772,15 @@ GC_API int GC_unregister_disappearing_link GC_PROTO((GC_PTR * /* link */));
 
 GC_API int GC_register_long_link GC_PROTO((GC_PTR * /* link */, GC_PTR obj));
 GC_API int GC_unregister_long_link GC_PROTO((GC_PTR * /* link */));
+
+
+/* toggleref support */
+GC_API void GC_toggleref_register_callback GC_PROTO((int (*proccess_toggleref) (GC_PTR obj)));
+GC_API void GC_toggleref_add (GC_PTR object, int strong_ref);
+
+/* finalizer callback support */
+GC_API void GC_set_finalizer_notify_proc GC_PROTO((void (*object_finalized) (GC_PTR obj)));
+
 
 /* Returns !=0  if GC_invoke_finalizers has something to do. 		*/
 GC_API int GC_should_invoke_finalizers GC_PROTO((void));

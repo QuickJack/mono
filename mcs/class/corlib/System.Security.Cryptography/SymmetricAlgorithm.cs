@@ -42,16 +42,9 @@ namespace System.Security.Cryptography {
 		protected byte[] KeyValue; 
 		protected KeySizes[] LegalBlockSizesValue; 
 		protected KeySizes[] LegalKeySizesValue; 
-#if MOONLIGHT
-		// Silverlight 2.0 only supports CBC
-		internal int FeedbackSizeValue;
-		internal CipherMode ModeValue;
-		internal PaddingMode PaddingValue;
-#else
 		protected int FeedbackSizeValue;
 		protected CipherMode ModeValue;
 		protected PaddingMode PaddingValue;
-#endif
 		private bool m_disposed;
 
 		protected SymmetricAlgorithm ()
@@ -60,11 +53,7 @@ namespace System.Security.Cryptography {
 			PaddingValue = PaddingMode.PKCS7;
 		}
 
-#if NET_4_0
 		public void Dispose ()
-#else
-		void IDisposable.Dispose () 
-#endif
 		{
 			Dispose (true);
 			GC.SuppressFinalize (this);  // Finalization is now unnecessary
@@ -186,7 +175,7 @@ namespace System.Security.Cryptography {
 		public virtual CipherMode Mode {
 			get { return this.ModeValue; }
 			set {
-				if (!Enum.IsDefined (ModeValue.GetType (), value)) {
+				if ((value < CipherMode.CBC) || (CipherMode.CFB < value)) {
 					throw new CryptographicException (
 						Locale.GetText ("Cipher mode not available"));
 				}

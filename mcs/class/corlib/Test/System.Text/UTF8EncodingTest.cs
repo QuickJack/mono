@@ -14,11 +14,7 @@ using System;
 using System.IO;
 using System.Text;
 
-#if NET_2_0
 using DecoderException = System.Text.DecoderFallbackException;
-#else
-using DecoderException = System.ArgumentException;
-#endif
 
 using AssertType = NUnit.Framework.Assert;
 
@@ -125,34 +121,36 @@ namespace MonoTests.System.Text
 		}
 
 		[Test]
-#if NET_2_0
-		[Category ("NotWorking")]
-#endif
 		public void TestMaxCharCount()
 		{
 			UTF8Encoding UTF8enc = new UTF8Encoding ();
-#if NET_2_0
-			// hmm, where is this extra 1 coming from?
+			Encoding UTF8encWithBOM = new UTF8Encoding(true);
 			Assert.AreEqual (51, UTF8enc.GetMaxCharCount(50), "UTF #1");
-#else
-			Assert.AreEqual (50, UTF8enc.GetMaxCharCount(50), "UTF #1");
-#endif
+			Assert.AreEqual (UTF8enc.GetMaxByteCount(50), UTF8encWithBOM.GetMaxByteCount(50), "UTF #2");
 		}
 
 		[Test]
-#if NET_2_0
-		[Category ("NotWorking")]
-#endif
+		public void TestMaxCharCountWithCustomFallback()
+		{
+			Encoding encoding = Encoding.GetEncoding("utf-8", new EncoderReplacementFallback("\u2047\u2047"), new DecoderReplacementFallback("\u2047\u2047"));
+			Assert.AreEqual (102, encoding.GetMaxCharCount(50), "UTF #1");
+		}
+
+		[Test]
 		public void TestMaxByteCount()
 		{
 			UTF8Encoding UTF8enc = new UTF8Encoding ();
-#if NET_2_0
-			// maybe under .NET 2.0 insufficient surrogate pair is
-			// just not handled, and 3 is Preamble size.
+			Encoding UTF8encWithBOM = new UTF8Encoding(true);
+
 			Assert.AreEqual (153, UTF8enc.GetMaxByteCount(50), "UTF #1");
-#else
-			Assert.AreEqual (200, UTF8enc.GetMaxByteCount(50), "UTF #1");
-#endif
+			Assert.AreEqual (UTF8enc.GetMaxByteCount(50), UTF8encWithBOM.GetMaxByteCount(50), "UTF #2");
+		}
+
+		[Test]
+		public void TestMaxByteCountWithCustomFallback()
+		{
+			Encoding encoding = Encoding.GetEncoding("utf-8", new EncoderReplacementFallback("\u2047\u2047"), new DecoderReplacementFallback("?"));
+			Assert.AreEqual (306, encoding.GetMaxByteCount(50), "UTF #1");
 		}
 
 		// regression for bug #59648
@@ -162,19 +160,12 @@ namespace MonoTests.System.Text
 			UTF8Encoding u = new UTF8Encoding (true, false);
 
 			byte[] data = new byte [] { 0xC0, 0xAF };
-#if NET_2_0
 			Assert.AreEqual (2, u.GetCharCount (data), "#A0");
 			string s = u.GetString (data);
 			Assert.AreEqual ("\uFFFD\uFFFD", s, "#A1");
-#else
-			Assert.AreEqual (0, u.GetCharCount (data), "#A0");
-			string s = u.GetString (data);
-			Assert.AreEqual (String.Empty, s, "#A1");
-#endif
 
 			data = new byte [] { 0x30, 0x31, 0xC0, 0xAF, 0x30, 0x32 };
 			s = u.GetString (data);
-#if NET_2_0
 			Assert.AreEqual (6, s.Length, "#B1");
 			Assert.AreEqual (0x30, (int) s [0], "#B2");
 			Assert.AreEqual (0x31, (int) s [1], "#B3");
@@ -182,13 +173,6 @@ namespace MonoTests.System.Text
 			Assert.AreEqual (0xFFFD, (int) s [3], "#B5");
 			Assert.AreEqual (0x30, (int) s [4], "#B6");
 			Assert.AreEqual (0x32, (int) s [5], "#B7");
-#else
-			Assert.AreEqual (4, s.Length, "#B1");
-			Assert.AreEqual (0x30, (int) s [0], "#B2");
-			Assert.AreEqual (0x31, (int) s [1], "#B3");
-			Assert.AreEqual (0x30, (int) s [2], "#B4");
-			Assert.AreEqual (0x32, (int) s [3], "#B5");
-#endif
 		}
 
 		// UTF8 decoding tests from http://www.cl.cam.ac.uk/~mgk25/
@@ -756,13 +740,7 @@ namespace MonoTests.System.Text
 		}
 
 		[Test]
-#if NET_2_0
 		[ExpectedException (typeof (DecoderFallbackException))]
-#else
-// MS Fx 1.1 accept this
-		[Category ("NotDotNet")]
-		[ExpectedException (typeof (DecoderException))]
-#endif
 			public void T5_IllegalCodePosition_1_UTF16Surrogates_511 () 
 		{
 			byte[] data = { 0xED, 0xA0, 0x80 };
@@ -772,13 +750,7 @@ namespace MonoTests.System.Text
 		}
 
 		[Test]
-#if NET_2_0
 		[ExpectedException (typeof (DecoderFallbackException))]
-#else
-// MS Fx 1.1 accept this
-		[Category ("NotDotNet")]
-		[ExpectedException (typeof (DecoderException))]
-#endif
 		public void T5_IllegalCodePosition_1_UTF16Surrogates_512 () 
 		{
 			byte[] data = { 0xED, 0xAD, 0xBF };
@@ -788,13 +760,7 @@ namespace MonoTests.System.Text
 		}
 
 		[Test]
-#if NET_2_0
 		[ExpectedException (typeof (DecoderFallbackException))]
-#else
-// MS Fx 1.1 accept this
-		[Category ("NotDotNet")]
-		[ExpectedException (typeof (DecoderException))]
-#endif
 		public void T5_IllegalCodePosition_1_UTF16Surrogates_513 ()
 		{
 			byte[] data = { 0xED, 0xAE, 0x80 };
@@ -804,13 +770,7 @@ namespace MonoTests.System.Text
 		}
 
 		[Test]
-#if NET_2_0
 		[ExpectedException (typeof (DecoderFallbackException))]
-#else
-// MS Fx 1.1 accept this
-		[Category ("NotDotNet")]
-		[ExpectedException (typeof (DecoderException))]
-#endif
 		public void T5_IllegalCodePosition_1_UTF16Surrogates_514 () 
 		{
 			byte[] data = { 0xED, 0xAF, 0xBF };
@@ -820,13 +780,7 @@ namespace MonoTests.System.Text
 		}
 
 		[Test]
-#if NET_2_0
 		[ExpectedException (typeof (DecoderFallbackException))]
-#else
-// MS Fx 1.1 accept this
-		[Category ("NotDotNet")]
-		[ExpectedException (typeof (DecoderException))]
-#endif
 		public void T5_IllegalCodePosition_1_UTF16Surrogates_515 ()
 		{
 			byte[] data = { 0xED, 0xB0, 0x80 };
@@ -836,13 +790,7 @@ namespace MonoTests.System.Text
 		}
 
 		[Test]
-#if NET_2_0
 		[ExpectedException (typeof (DecoderFallbackException))]
-#else
-// MS Fx 1.1 accept this
-		[Category ("NotDotNet")]
-		[ExpectedException (typeof (DecoderException))]
-#endif
 		public void T5_IllegalCodePosition_1_UTF16Surrogates_516 () 
 		{
 			byte[] data = { 0xED, 0xBE, 0x80 };
@@ -852,13 +800,7 @@ namespace MonoTests.System.Text
 		}
 
 		[Test]
-#if NET_2_0
 		[ExpectedException (typeof (DecoderFallbackException))]
-#else
-// MS Fx 1.1 accept this
-		[Category ("NotDotNet")]
-		[ExpectedException (typeof (DecoderException))]
-#endif
 		public void T5_IllegalCodePosition_1_UTF16Surrogates_517 () 
 		{
 			byte[] data = { 0xED, 0xBF, 0xBF };
@@ -868,13 +810,7 @@ namespace MonoTests.System.Text
 		}
 
 		[Test]
-#if NET_2_0
 		[ExpectedException (typeof (DecoderFallbackException))]
-#else
-// MS Fx 1.1 accept this
-		[Category ("NotDotNet")]
-		[ExpectedException (typeof (DecoderException))]
-#endif
 		public void T5_IllegalCodePosition_2_PairedUTF16Surrogates_521 () 
 		{
 			byte[] data = { 0xED, 0xA0, 0x80, 0xED, 0xB0, 0x80 };
@@ -885,13 +821,7 @@ namespace MonoTests.System.Text
 		}
 
 		[Test]
-#if NET_2_0
 		[ExpectedException (typeof (DecoderFallbackException))]
-#else
-// MS Fx 1.1 accept this
-		[Category ("NotDotNet")]
-		[ExpectedException (typeof (DecoderException))]
-#endif
 		public void T5_IllegalCodePosition_2_PairedUTF16Surrogates_522 () 
 		{
 			byte[] data = { 0xED, 0xA0, 0x80, 0xED, 0xBF, 0xBF };
@@ -902,13 +832,7 @@ namespace MonoTests.System.Text
 		}
 
 		[Test]
-#if NET_2_0
 		[ExpectedException (typeof (DecoderFallbackException))]
-#else
-// MS Fx 1.1 accept this
-		[Category ("NotDotNet")]
-		[ExpectedException (typeof (DecoderException))]
-#endif
 		public void T5_IllegalCodePosition_2_PairedUTF16Surrogates_523 () 
 		{
 			byte[] data = { 0xED, 0xAD, 0xBF, 0xED, 0xB0, 0x80 };
@@ -919,13 +843,7 @@ namespace MonoTests.System.Text
 		}
 
 		[Test]
-#if NET_2_0
 		[ExpectedException (typeof (DecoderFallbackException))]
-#else
-// MS Fx 1.1 accept this
-		[Category ("NotDotNet")]
-		[ExpectedException (typeof (DecoderException))]
-#endif
 		public void T5_IllegalCodePosition_2_PairedUTF16Surrogates_524 () 
 		{
 			byte[] data = { 0xED, 0xAD, 0xBF, 0xED, 0xBF, 0xBF };
@@ -936,13 +854,7 @@ namespace MonoTests.System.Text
 		}
 
 		[Test]
-#if NET_2_0
 		[ExpectedException (typeof (DecoderFallbackException))]
-#else
-// MS Fx 1.1 accept this
-		[Category ("NotDotNet")]
-		[ExpectedException (typeof (DecoderException))]
-#endif
 		public void T5_IllegalCodePosition_2_PairedUTF16Surrogates_525 () 
 		{
 			byte[] data = { 0xED, 0xAE, 0x80, 0xED, 0xB0, 0x80 };
@@ -953,13 +865,7 @@ namespace MonoTests.System.Text
 		}
 
 		[Test]
-#if NET_2_0
 		[ExpectedException (typeof (DecoderFallbackException))]
-#else
-// MS Fx 1.1 accept this
-		[Category ("NotDotNet")]
-		[ExpectedException (typeof (DecoderException))]
-#endif
 		public void T5_IllegalCodePosition_2_PairedUTF16Surrogates_526 () 
 		{
 			byte[] data = { 0xED, 0xAE, 0x80, 0xED, 0xBF, 0x8F };
@@ -970,13 +876,7 @@ namespace MonoTests.System.Text
 		}
 
 		[Test]
-#if NET_2_0
 		[ExpectedException (typeof (DecoderFallbackException))]
-#else
-// MS Fx 1.1 accept this
-		[Category ("NotDotNet")]
-		[ExpectedException (typeof (DecoderException))]
-#endif
 		public void T5_IllegalCodePosition_2_PairedUTF16Surrogates_527 () 
 		{
 			byte[] data = { 0xED, 0xAF, 0xBF, 0xED, 0xB0, 0x80 };
@@ -987,13 +887,7 @@ namespace MonoTests.System.Text
 		}
 
 		[Test]
-#if NET_2_0
 		[ExpectedException (typeof (DecoderFallbackException))]
-#else
-// MS Fx 1.1 accept this
-		[Category ("NotDotNet")]
-		[ExpectedException (typeof (DecoderException))]
-#endif
 		public void T5_IllegalCodePosition_2_PairedUTF16Surrogates_528 () 
 		{
 			byte[] data = { 0xED, 0xAF, 0xBF, 0xED, 0xBF, 0xBF };
@@ -1043,7 +937,6 @@ namespace MonoTests.System.Text
 			Assert.AreEqual ('A', chars [1], "#2");
 		}
 
-#if NET_2_0
 		[Test]
 		public void CloneNotReadOnly ()
 		{
@@ -1052,15 +945,9 @@ namespace MonoTests.System.Text
 			Assert.AreEqual (false, e.IsReadOnly);
 			e.EncoderFallback = new EncoderExceptionFallback ();
 		}
-#endif
 
 		[Test]
-#if NET_2_0
 		[ExpectedException (typeof (DecoderFallbackException))]
-#else
-		[ExpectedException (typeof (ArgumentException))]
-		[Category ("NotDotNet")] // MS Bug
-#endif
 		public void Bug77315 ()
 		{
 			new UTF8Encoding (false, true).GetString (
@@ -1077,22 +964,14 @@ namespace MonoTests.System.Text
 			e.GetBytes (chars, 0, 1, bytes, 0, false);
 			try {
 				int ret = e.GetBytes (chars, 1, 0, bytes, 0, true);
-#if NET_2_0
 				Assert.AreEqual (0, ret, "drop insufficient char in 2.0: char[]");
-#else
-				Assert.Fail ("ArgumentException is expected: char[]");
-#endif
 			} catch (ArgumentException) {
 			}
 
 			string s = "\uD800";
 			try {
 				int ret = Encoding.UTF8.GetBytes (s, 0, 1, bytes, 0);
-#if NET_2_0
 				Assert.AreEqual (0, ret, "drop insufficient char in 2.0: string");
-#else
-				Assert.Fail ("ArgumentException is expected: string");
-#endif
 			} catch (ArgumentException) {
 			}
 		}
@@ -1125,7 +1004,6 @@ namespace MonoTests.System.Text
 			}
 		}
 
-#if NET_2_0
 		[Test] // bug #77550
 		public void DecoderFallbackSimple ()
 		{
@@ -1154,6 +1032,7 @@ namespace MonoTests.System.Text
 		}
 
 		[Test]
+		[Category ("MobileNotWorking")]
 		public void Bug415628 ()
 		{
 			using (var f = File.Open ("Test/resources/415628.bin", FileMode.Open)) {
@@ -1162,6 +1041,120 @@ namespace MonoTests.System.Text
 				Encoding.UTF8.GetString(buf);
 			}
 		}
-#endif
+
+		[Test]
+		[ExpectedException (typeof (ArgumentException))]
+		public void Bug10788()
+		{
+			byte[] bytes = new byte[4096];
+			char[] chars = new char[10];
+
+			Encoding.UTF8.GetDecoder ().GetChars (bytes, 0, 4096, chars, 9, false);
+		}
+
+		[Test]
+		public void Bug10789()
+		{
+			byte[] bytes = new byte[4096];
+			char[] chars = new char[10];
+
+			try {
+				Encoding.UTF8.GetDecoder ().GetChars (bytes, 0, 1, chars, 10, false);
+				Assert.Fail ("ArgumentException is expected #1");
+			} catch (ArgumentException) {
+			}
+
+			try {
+				Encoding.UTF8.GetDecoder ().GetChars (bytes, 0, 1, chars, 11, false);
+				Assert.Fail ("ArgumentOutOfRangeException is expected #2");
+			} catch (ArgumentOutOfRangeException) {
+			}
+
+			int charactersWritten = Encoding.UTF8.GetDecoder ().GetChars (bytes, 0, 0, chars, 10, false);
+			Assert.AreEqual (0, charactersWritten, "#3");
+		}
+
+		[Test]
+		public void EncodingFallback ()
+		{
+		/*  Legal UTF-8 Byte Sequences
+			 *	1st		2nd		3rd		4th
+			 *	00..7F
+			 *	C2..DF	80..BF
+			 *	E0		A0..BF	80..BF
+			 *	E1..EF  80..BF	80..BF
+			 *	F0		90..BF	80..BF	80..BF
+			 *	F1..F3	80..BF	80..BF	80..BF
+			 *	F4		80..8F	80..BF	80..BF
+			 */
+
+			var t = new EncodingTester ("utf-8");
+			byte [] data;
+
+			// Invalid 1st byte
+			for (byte b = 0x80; b <= 0xC1; b++)	{
+				data = new byte [] { b };
+				t.TestDecoderFallback (data, "?", new byte [] { b });
+			}
+
+			///Invalid 2nd byte
+			//	C2..DF	80..BF
+			for (byte b = 0xC2; b <= 0xDF; b++)	{
+				data = new byte [] { b, 0x61 };
+				t.TestDecoderFallback (data, "?a", new byte [] { b });
+			}
+
+			//	E0		A0..BF
+			data =  new byte [] { 0xE0, 0x99};
+			t.TestDecoderFallback (data, "?", new byte [] { 0xE0,  0x99});
+
+			//	E1..EF  80..BF
+			for (byte b = 0xE1; b <= 0xEF; b++)	{
+				data = new byte [] { b, 0x61 };
+				t.TestDecoderFallback (data, "?a", new byte [] { b });
+			}
+
+			//	F0		90..BF
+			data =  new byte [] { 0xF0, 0x8F};
+			t.TestDecoderFallback (data, "?", new byte [] { 0xF0, 0x8F });
+
+			//	F1..F4	80..XX
+			for (byte b = 0xF1; b <= 0xF4; b++)	{
+				data = new byte [] { b, 0x61 };
+				t.TestDecoderFallback (data, "?a", new byte [] { b });
+			}
+
+			//	C2..F3	XX..BF
+			for (byte b = 0xC2; b <= 0xF3; b++)	{
+				data = new byte [] { b, 0xC0 };
+				t.TestDecoderFallback (data, "??", new byte [] { b }, new byte [] { 0xC0 });
+			}
+
+			// Invalid 3rd byte
+			//	E0..F3	90..BF	80..BF
+			for (byte b = 0xE0; b <= 0xF3; b++)	{
+				data = new byte [] { b, 0xB0, 0x61 };
+				t.TestDecoderFallback (data, "?a", new byte [] { b, 0xB0 });
+				data = new byte [] { b, 0xB0, 0xC0 };
+				t.TestDecoderFallback (data, "??", new byte [] { b, 0xB0 }, new byte [] { 0xC0 });
+			}
+
+			//	F4		80..8F	80..BF
+			data = new byte [] { 0xF4, 0x8F, 0xC0 };
+			t.TestDecoderFallback (data, "??", new byte [] { 0xF4, 0x8F }, new byte [] { 0xC0 });
+
+			// Invalid 4th byte
+			//	F0..F3	90..BF	80..BF	80..BF
+			for (byte b = 0xF0; b <= 0xF3; b++)	{
+				data = new byte [] { b, 0xB0, 0xB0, 0x61 };
+				t.TestDecoderFallback (data, "?a", new byte [] { b, 0xB0, 0xB0 });
+				data = new byte [] { b, 0xB0, 0xB0, 0xC0 };
+				t.TestDecoderFallback (data, "??", new byte [] { b, 0xB0, 0xB0 }, new byte [] { 0xC0 });
+			}
+
+			//	F4		80..8F	80..BF 80..BF
+			data = new byte [] { 0xF4, 0x8F, 0xB0, 0xC0 };
+			t.TestDecoderFallback (data, "??", new byte [] { 0xF4, 0x8F, 0xB0 }, new byte [] { 0xC0 });
+		}
 	}
 }

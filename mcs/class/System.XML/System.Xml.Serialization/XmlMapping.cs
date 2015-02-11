@@ -39,16 +39,12 @@ namespace System.Xml.Serialization
 		ObjectMap map;
 		ArrayList relatedMaps;
 		SerializationFormat format;
-#if !MOONLIGHT
 		SerializationSource source;
-#endif
 		
 		internal string _elementName;
 		internal string _namespace;
 		
-#if NET_2_0
 		string key;
-#endif		
 
 		internal XmlMapping ()
 		{
@@ -60,7 +56,6 @@ namespace System.Xml.Serialization
 			_namespace = ns;
 		}
 
-#if NET_2_0
 		[MonoTODO]
 		public string XsdElementName
 		{
@@ -86,7 +81,6 @@ namespace System.Xml.Serialization
 		{
 			return key;
 		}
-#endif
 
 		internal ObjectMap ObjectMap
 		{
@@ -106,13 +100,11 @@ namespace System.Xml.Serialization
 			set { format = value; }
 		}
 		
-#if !MOONLIGHT
 		internal SerializationSource Source
 		{
 			get { return source; }
 			set { source = value; }
 		}
-#endif
 	}
 
 	internal class ObjectMap

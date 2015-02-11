@@ -894,7 +894,7 @@ namespace System.Windows.Forms
 				if (this is MenuStrip && mouse_currently_over is ToolStripMenuItem && !(mouse_currently_over as ToolStripMenuItem).HasDropDownItems)
 					return;
 			} else {
-				this.HideMenus (true, ToolStripDropDownCloseReason.AppClicked);
+				this.Dismiss (ToolStripDropDownCloseReason.AppClicked);
 			}
 			
 			if (this is MenuStrip)
@@ -1145,13 +1145,7 @@ namespace System.Windows.Forms
 				if (tsi.Enabled && tsi.Visible && !string.IsNullOrEmpty (tsi.Text) && Control.IsMnemonic (charCode, tsi.Text))
 					return tsi.ProcessMnemonic (charCode);
 
-			string code = Char.ToUpper (charCode).ToString ();
-			
-			// If any item's text starts with our letter, it gets the message
-			if ((Control.ModifierKeys & Keys.Alt) != 0 || this is ToolStripDropDownMenu)
-				foreach (ToolStripItem tsi in this.Items)
-					if (tsi.Enabled && tsi.Visible && !string.IsNullOrEmpty (tsi.Text) && tsi.Text.ToUpper ().StartsWith (code) && !(tsi is ToolStripControlHost))
-						return tsi.ProcessMnemonic (charCode);
+			// Do not try to match any further here.  See Xamarin bug 23532.
 
 			return base.ProcessMnemonic (charCode);
 		}
@@ -1503,17 +1497,6 @@ namespace System.Windows.Forms
 			this.GetTopLevelToolStrip ().Dismiss (ToolStripDropDownCloseReason.ItemClicked);
 		}
 		
-		internal void HideMenus (bool release, ToolStripDropDownCloseReason reason)
-		{
-			if (this is MenuStrip && release && menu_selected)
-				(this as MenuStrip).FireMenuDeactivate ();
-				
-			if (release)
-				menu_selected = false;
-				
-			NotifySelectedChanged (null);
-		}
-
 		internal void NotifySelectedChanged (ToolStripItem tsi)
 		{
 			foreach (ToolStripItem tsi2 in this.DisplayedItems)

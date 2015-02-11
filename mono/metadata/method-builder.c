@@ -10,6 +10,7 @@
 
 #include "config.h"
 #include "loader.h"
+#include "mono/metadata/abi-details.h"
 #include "mono/metadata/method-builder.h"
 #include "mono/metadata/tabledefs.h"
 #include "mono/metadata/exception.h"
@@ -64,8 +65,10 @@ mono_mb_new_base (MonoClass *klass, MonoWrapperType type)
 	m->inline_info = 1;
 	m->wrapper_type = type;
 
+#ifndef DISABLE_JIT
 	mb->code_size = 40;
 	mb->code = g_malloc (mb->code_size);
+#endif
 	/* placeholder for the wrapper always at index 1 */
 	mono_mb_add_data (mb, NULL);
 
@@ -92,6 +95,7 @@ mono_mb_new (MonoClass *klass, const char *name, MonoWrapperType type)
 void
 mono_mb_free (MonoMethodBuilder *mb)
 {
+#ifndef DISABLE_JIT
 	g_list_free (mb->locals_list);
 	if (!mb->dynamic) {
 		g_free (mb->method);
@@ -99,22 +103,12 @@ mono_mb_free (MonoMethodBuilder *mb)
 			g_free (mb->name);
 		g_free (mb->code);
 	}
+#else
+	g_free (mb->method);
+	if (!mb->no_dup_name)
+		g_free (mb->name);
+#endif
 	g_free (mb);
-}
-
-int
-mono_mb_add_local (MonoMethodBuilder *mb, MonoType *type)
-{
-	int res;
-
-	g_assert (mb != NULL);
-	g_assert (type != NULL);
-
-	res = mb->locals;
-	mb->locals_list = g_list_append (mb->locals_list, type);
-	mb->locals++;
-
-	return res;
 }
 
 /**
@@ -123,12 +117,13 @@ mono_mb_add_local (MonoMethodBuilder *mb, MonoType *type)
  * Create a MonoMethod from this method builder.
  * Returns: the newly created method.
  *
- * LOCKING: Takes the loader lock.
  */
 MonoMethod *
 mono_mb_create_method (MonoMethodBuilder *mb, MonoMethodSignature *signature, int max_stack)
 {
+#ifndef DISABLE_JIT
 	MonoMethodHeader *header;
+#endif
 	MonoMethodWrapper *mw;
 	MonoImage *image;
 	MonoMethod *method;
@@ -139,7 +134,7 @@ mono_mb_create_method (MonoMethodBuilder *mb, MonoMethodSignature *signature, in
 
 	image = mb->method->klass->image;
 
-	mono_loader_lock (); /*FIXME I think this lock can go.*/
+#ifndef DISABLE_JIT
 	if (mb->dynamic) {
 		method = mb->method;
 		mw = (MonoMethodWrapper*)method;
@@ -155,7 +150,9 @@ mono_mb_create_method (MonoMethodBuilder *mb, MonoMethodSignature *signature, in
 		for (i = 0, l = mb->locals_list; l; l = l->next, i++) {
 			header->locals [i] = mono_metadata_type_dup (NULL, (MonoType*)l->data);
 		}
-	} else {
+	} else
+#endif
+	{
 		/* Realloc the method info into a mempool */
 
 		method = mono_image_alloc0 (image, sizeof (MonoMethodWrapper));
@@ -167,6 +164,7 @@ mono_mb_create_method (MonoMethodBuilder *mb, MonoMethodSignature *signature, in
 		else
 			method->name = mono_image_strdup (image, mb->name);
 
+#ifndef DISABLE_JIT
 		mw->header = header = (MonoMethodHeader *) 
 			mono_image_alloc0 (image, MONO_SIZEOF_METHOD_HEADER + mb->locals * sizeof (MonoType *));
 
@@ -176,14 +174,18 @@ mono_mb_create_method (MonoMethodBuilder *mb, MonoMethodSignature *signature, in
 		for (i = 0, l = mb->locals_list; l; l = l->next, i++) {
 			header->locals [i] = (MonoType *)l->data;
 		}
+#endif
 	}
 
+	method->signature = signature;
+	if (!signature->hasthis)
+		method->flags |= METHOD_ATTRIBUTE_STATIC;
+
+#ifndef DISABLE_JIT
 	if (max_stack < 8)
 		max_stack = 8;
 
 	header->max_stack = max_stack;
-
-	method->signature = signature;
 
 	header->code_size = mb->pos;
 	header->num_locals = mb->locals;
@@ -193,13 +195,14 @@ mono_mb_create_method (MonoMethodBuilder *mb, MonoMethodSignature *signature, in
 	header->clauses = mb->clauses;
 
 	method->skip_visibility = mb->skip_visibility;
+#endif
 
 	i = g_list_length (mw->method_data);
 	if (i) {
 		GList *tmp;
 		void **data;
 		l = g_list_reverse (mw->method_data);
-		if (method->dynamic)
+		if (method_is_dynamic (method))
 			data = g_malloc (sizeof (gpointer) * (i + 1));
 		else
 			data = mono_image_alloc (image, sizeof (gpointer) * (i + 1));
@@ -213,6 +216,8 @@ mono_mb_create_method (MonoMethodBuilder *mb, MonoMethodSignature *signature, in
 
 		mw->method_data = data;
 	}
+
+#ifndef DISABLE_JIT
 	/*{
 		static int total_code = 0;
 		static int total_alloc = 0;
@@ -237,8 +242,8 @@ mono_mb_create_method (MonoMethodBuilder *mb, MonoMethodSignature *signature, in
 		g_hash_table_insert (image->wrapper_param_names, method, param_names);
 		mono_image_unlock (image);
 	}
+#endif
 
-	mono_loader_unlock ();
 	return method;
 }
 
@@ -255,6 +260,23 @@ mono_mb_add_data (MonoMethodBuilder *mb, gpointer data)
 	mw->method_data = g_list_prepend (mw->method_data, data);
 
 	return g_list_length (mw->method_data);
+}
+
+#ifndef DISABLE_JIT
+
+int
+mono_mb_add_local (MonoMethodBuilder *mb, MonoType *type)
+{
+	int res;
+
+	g_assert (mb != NULL);
+	g_assert (type != NULL);
+
+	res = mb->locals;
+	mb->locals_list = g_list_append (mb->locals_list, type);
+	mb->locals++;
+
+	return res;
 }
 
 void
@@ -515,7 +537,7 @@ mono_mb_emit_exception_full (MonoMethodBuilder *mb, const char *exc_nspace, cons
 	mono_mb_emit_op (mb, CEE_NEWOBJ, ctor);
 	if (msg != NULL) {
 		mono_mb_emit_byte (mb, CEE_DUP);
-		mono_mb_emit_ldflda (mb, G_STRUCT_OFFSET (MonoException, message));
+		mono_mb_emit_ldflda (mb, MONO_STRUCT_OFFSET (MonoException, message));
 		mono_mb_emit_ldstr (mb, (char*)msg);
 		mono_mb_emit_byte (mb, CEE_STIND_REF);
 	}
@@ -555,3 +577,5 @@ mono_mb_set_param_names (MonoMethodBuilder *mb, const char **param_names)
 {
 	mb->param_names = param_names;
 }
+
+#endif /* DISABLE_JIT */

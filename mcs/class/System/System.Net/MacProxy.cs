@@ -3,7 +3,7 @@
 //  
 // Author: Jeffrey Stedfast <jeff@xamarin.com>
 // 
-// Copyright (c) 2012 Xamarin Inc.
+// Copyright (c) 2012-2014 Xamarin Inc.
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -25,7 +25,9 @@
 // 
 
 using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
+using System.Threading;
 
 namespace System.Net
 {
@@ -81,7 +83,7 @@ namespace System.Net
 		}
 
 		[DllImport (CoreFoundationLibrary)]
-		extern static IntPtr CFRelease (IntPtr handle);
+		extern static void CFRelease (IntPtr handle);
 
 		void Release ()
 		{
@@ -108,7 +110,7 @@ namespace System.Net
 		public CFArray (IntPtr handle, bool own) : base (handle, own) { }
 
 		[DllImport (CoreFoundationLibrary)]
-		extern static IntPtr CFArrayCreate (IntPtr allocator, IntPtr values, int numValues, IntPtr callbacks);
+		extern static IntPtr CFArrayCreate (IntPtr allocator, IntPtr values, /* CFIndex */ IntPtr numValues, IntPtr callbacks);
 		static readonly IntPtr kCFTypeArrayCallbacks;
 
 		static CFArray ()
@@ -130,7 +132,7 @@ namespace System.Net
 				throw new ArgumentNullException ("values");
 
 			fixed (IntPtr *pv = values) {
-				IntPtr handle = CFArrayCreate (IntPtr.Zero, (IntPtr) pv, values.Length, kCFTypeArrayCallbacks);
+				IntPtr handle = CFArrayCreate (IntPtr.Zero, (IntPtr) pv, (IntPtr) values.Length, kCFTypeArrayCallbacks);
 
 				return new CFArray (handle, false);
 			}
@@ -149,18 +151,18 @@ namespace System.Net
 		}
 
 		[DllImport (CoreFoundationLibrary)]
-		extern static int CFArrayGetCount (IntPtr handle);
+		extern static /* CFIndex */ IntPtr CFArrayGetCount (IntPtr handle);
 
 		public int Count {
-			get { return CFArrayGetCount (Handle); }
+			get { return (int) CFArrayGetCount (Handle); }
 		}
 
 		[DllImport (CoreFoundationLibrary)]
-		extern static IntPtr CFArrayGetValueAtIndex (IntPtr handle, int index);
+		extern static IntPtr CFArrayGetValueAtIndex (IntPtr handle, /* CFIndex */ IntPtr index);
 
 		public IntPtr this[int index] {
 			get {
-				return CFArrayGetValueAtIndex (Handle, index);
+				return CFArrayGetValueAtIndex (Handle, (IntPtr) index);
 			}
 		}
 	}
@@ -170,7 +172,8 @@ namespace System.Net
 		public CFNumber (IntPtr handle, bool own) : base (handle, own) { }
 
 		[DllImport (CoreFoundationLibrary)]
-		extern static bool CFNumberGetValue (IntPtr handle, int type, out bool value);
+		[return: MarshalAs (UnmanagedType.I1)]
+		extern static bool CFNumberGetValue (IntPtr handle, /* CFNumberType */ IntPtr type, [MarshalAs (UnmanagedType.I1)] out bool value);
 
 		public static bool AsBool (IntPtr handle)
 		{
@@ -179,7 +182,7 @@ namespace System.Net
 			if (handle == IntPtr.Zero)
 				return false;
 
-			CFNumberGetValue (handle, 1, out value);
+			CFNumberGetValue (handle, (IntPtr) 1, out value);
 
 			return value;
 		}
@@ -190,7 +193,8 @@ namespace System.Net
 		}
 
 		[DllImport (CoreFoundationLibrary)]
-		extern static bool CFNumberGetValue (IntPtr handle, int type, out int value);
+		[return: MarshalAs (UnmanagedType.I1)]
+		extern static bool CFNumberGetValue (IntPtr handle, /* CFNumberType */ IntPtr type, out int value);
 
 		public static int AsInt32 (IntPtr handle)
 		{
@@ -199,7 +203,8 @@ namespace System.Net
 			if (handle == IntPtr.Zero)
 				return 0;
 
-			CFNumberGetValue (handle, 9, out value);
+			// 9 == kCFNumberIntType == C int
+			CFNumberGetValue (handle, (IntPtr) 9, out value);
 
 			return value;
 		}
@@ -211,13 +216,21 @@ namespace System.Net
 	}
 
 	internal struct CFRange {
-		public int Location, Length;
+		public IntPtr Location, Length;
 		
 		public CFRange (int loc, int len)
 		{
-			Location = loc;
-			Length = len;
+			Location = (IntPtr) loc;
+			Length = (IntPtr) len;
 		}
+	}
+
+	internal struct CFStreamClientContext {
+		public IntPtr Version;
+		public IntPtr Info;
+		public IntPtr Retain;
+		public IntPtr Release;
+		public IntPtr CopyDescription;
 	}
 
 	internal class CFString : CFObject
@@ -227,7 +240,7 @@ namespace System.Net
 		public CFString (IntPtr handle, bool own) : base (handle, own) { }
 
 		[DllImport (CoreFoundationLibrary)]
-		extern static IntPtr CFStringCreateWithCharacters (IntPtr alloc, IntPtr chars, int length);
+		extern static IntPtr CFStringCreateWithCharacters (IntPtr alloc, IntPtr chars, /* CFIndex */ IntPtr length);
 
 		public static CFString Create (string value)
 		{
@@ -235,7 +248,7 @@ namespace System.Net
 
 			unsafe {
 				fixed (char *ptr = value) {
-					handle = CFStringCreateWithCharacters (IntPtr.Zero, (IntPtr) ptr, value.Length);
+					handle = CFStringCreateWithCharacters (IntPtr.Zero, (IntPtr) ptr, (IntPtr) value.Length);
 				}
 			}
 
@@ -246,14 +259,14 @@ namespace System.Net
 		}
 
 		[DllImport (CoreFoundationLibrary)]
-		extern static int CFStringGetLength (IntPtr handle);
+		extern static /* CFIndex */ IntPtr CFStringGetLength (IntPtr handle);
 
 		public int Length {
 			get {
 				if (str != null)
 					return str.Length;
 
-				return CFStringGetLength (Handle);
+				return (int) CFStringGetLength (Handle);
 			}
 		}
 
@@ -268,7 +281,7 @@ namespace System.Net
 			if (handle == IntPtr.Zero)
 				return null;
 			
-			int len = CFStringGetLength (handle);
+			int len = (int) CFStringGetLength (handle);
 			
 			if (len == 0)
 				return string.Empty;
@@ -353,6 +366,52 @@ namespace System.Net
 				return null;
 
 			return new CFUrl (handle, true);
+		}
+	}
+
+	internal class CFRunLoop : CFObject
+	{
+		[DllImport (CFObject.CoreFoundationLibrary)]
+		static extern void CFRunLoopAddSource (IntPtr rl, IntPtr source, IntPtr mode);
+
+		[DllImport (CFObject.CoreFoundationLibrary)]
+		static extern void CFRunLoopRemoveSource (IntPtr rl, IntPtr source, IntPtr mode);
+
+		[DllImport (CFObject.CoreFoundationLibrary)]
+		static extern int CFRunLoopRunInMode (IntPtr mode, double seconds, bool returnAfterSourceHandled);
+
+		[DllImport (CFObject.CoreFoundationLibrary)]
+		static extern IntPtr CFRunLoopGetCurrent ();
+
+		[DllImport (CFObject.CoreFoundationLibrary)]
+		static extern void CFRunLoopStop (IntPtr rl);
+
+		public CFRunLoop (IntPtr handle, bool own): base (handle, own)
+		{
+		}
+
+		public static CFRunLoop CurrentRunLoop {
+			get { return new CFRunLoop (CFRunLoopGetCurrent (), false); }
+		}
+
+		public void AddSource (IntPtr source, CFString mode)
+		{
+			CFRunLoopAddSource (Handle, source, mode.Handle);
+		}
+
+		public void RemoveSource (IntPtr source, CFString mode)
+		{
+			CFRunLoopRemoveSource (Handle, source, mode.Handle);
+		}
+
+		public int RunInMode (CFString mode, double seconds, bool returnAfterSourceHandled)
+		{
+			return CFRunLoopRunInMode (mode.Handle, seconds, returnAfterSourceHandled);
+		}
+
+		public void Stop ()
+		{
+			CFRunLoopStop (Handle);
 		}
 	}
 
@@ -606,13 +665,91 @@ namespace System.Net
 		public const string CFNetworkLibrary = "/System/Library/Frameworks/CFNetwork.framework/CFNetwork";
 #endif
 		
+		[DllImport (CFNetworkLibrary, EntryPoint = "CFNetworkCopyProxiesForAutoConfigurationScript")]
+		// CFArrayRef CFNetworkCopyProxiesForAutoConfigurationScript (CFStringRef proxyAutoConfigurationScript, CFURLRef targetURL, CFErrorRef* error);
+		extern static IntPtr CFNetworkCopyProxiesForAutoConfigurationScriptSequential (IntPtr proxyAutoConfigurationScript, IntPtr targetURL, out IntPtr error);
+
 		[DllImport (CFNetworkLibrary)]
-		// CFArrayRef CFNetworkCopyProxiesForAutoConfigurationScript (CFStringRef proxyAutoConfigurationScript, CFURLRef targetURL);
-		extern static IntPtr CFNetworkCopyProxiesForAutoConfigurationScript (IntPtr proxyAutoConfigurationScript, IntPtr targetURL);
-		
+		extern static IntPtr CFNetworkExecuteProxyAutoConfigurationURL (IntPtr proxyAutoConfigURL, IntPtr targetURL, CFProxyAutoConfigurationResultCallback cb, ref CFStreamClientContext clientContext);
+
+
+		class GetProxyData : IDisposable {
+			public IntPtr script;
+			public IntPtr targetUri;
+			public IntPtr error;
+			public IntPtr result;
+			public ManualResetEvent evt = new ManualResetEvent (false);
+
+			public void Dispose ()
+			{
+				evt.Close ();
+			}
+		}
+
+		static object lock_obj = new object ();
+		static Queue<GetProxyData> get_proxy_queue;
+		static AutoResetEvent proxy_event;
+
+		static void CFNetworkCopyProxiesForAutoConfigurationScriptThread ()
+		{
+			GetProxyData data;
+			var data_left = true;
+
+			while (true) {
+				proxy_event.WaitOne ();
+
+				do {
+					lock (lock_obj) {
+						if (get_proxy_queue.Count == 0)
+							break;
+						data = get_proxy_queue.Dequeue ();
+						data_left = get_proxy_queue.Count > 0;
+					}
+
+					data.result = CFNetworkCopyProxiesForAutoConfigurationScriptSequential (data.script, data.targetUri, out data.error);
+					data.evt.Set ();
+				} while (data_left);
+			}
+		}
+
+		static IntPtr CFNetworkCopyProxiesForAutoConfigurationScript (IntPtr proxyAutoConfigurationScript, IntPtr targetURL, out IntPtr error)
+		{
+			// This method must only be called on only one thread during an application's life time.
+			// Note that it's not enough to use a lock to make calls sequential across different threads,
+			// it has to be one thread. Also note that that thread can't be the main thread, because the
+			// main thread might be blocking waiting for this network request to finish.
+			// Another possibility would be to use JavaScriptCore to execute this piece of
+			// javascript ourselves, but unfortunately it's not available before iOS7.
+			// See bug #7923 comment #21+.
+
+			using (var data = new GetProxyData ()) {
+				data.script = proxyAutoConfigurationScript;
+				data.targetUri = targetURL;
+
+				lock (lock_obj) {
+					if (get_proxy_queue == null) {
+						get_proxy_queue = new Queue<GetProxyData> ();
+						proxy_event = new AutoResetEvent (false);
+						new Thread (CFNetworkCopyProxiesForAutoConfigurationScriptThread) {
+							IsBackground = true,
+						}.Start ();
+					}
+					get_proxy_queue.Enqueue (data);
+					proxy_event.Set ();
+				}
+
+				data.evt.WaitOne ();
+
+				error = data.error;
+
+				return data.result;
+			}
+		}
+
 		static CFArray CopyProxiesForAutoConfigurationScript (IntPtr proxyAutoConfigurationScript, CFUrl targetURL)
 		{
-			IntPtr native = CFNetworkCopyProxiesForAutoConfigurationScript (proxyAutoConfigurationScript, targetURL.Handle);
+			IntPtr err = IntPtr.Zero;
+			IntPtr native = CFNetworkCopyProxiesForAutoConfigurationScript (proxyAutoConfigurationScript, targetURL.Handle, out err);
 			
 			if (native == IntPtr.Zero)
 				return null;
@@ -656,6 +793,45 @@ namespace System.Net
 			CFProxy[] proxies = GetProxiesForAutoConfigurationScript (proxyAutoConfigurationScript, targetURL);
 			targetURL.Dispose ();
 			
+			return proxies;
+		}
+
+		delegate void CFProxyAutoConfigurationResultCallback (IntPtr client, IntPtr proxyList, IntPtr error);
+
+		public static CFProxy[] ExecuteProxyAutoConfigurationURL (IntPtr proxyAutoConfigURL, Uri targetURL)
+		{
+			CFUrl url = CFUrl.Create (targetURL.AbsoluteUri);
+			if (url == null)
+				return null;
+
+			CFProxy[] proxies = null;
+
+			var runLoop = CFRunLoop.CurrentRunLoop;
+
+			// Callback that will be called after executing the configuration script
+			CFProxyAutoConfigurationResultCallback cb = delegate (IntPtr client, IntPtr proxyList, IntPtr error) {
+				if (proxyList != IntPtr.Zero) {
+					var array = new CFArray (proxyList, false);
+					proxies = new CFProxy [array.Count];
+					for (int i = 0; i < proxies.Length; i++) {
+						CFDictionary dict = new CFDictionary (array[i], false);
+						proxies[i] = new CFProxy (dict);
+					}
+					array.Dispose ();
+				}
+				runLoop.Stop ();
+			};
+
+			var clientContext = new CFStreamClientContext ();
+			var loopSource = CFNetworkExecuteProxyAutoConfigurationURL (proxyAutoConfigURL, url.Handle, cb, ref clientContext);
+
+			// Create a private mode
+			var mode = CFString.Create ("Mono.MacProxy");
+
+			runLoop.AddSource (loopSource, mode);
+			runLoop.RunInMode (mode, double.MaxValue, false);
+			runLoop.RemoveSource (loopSource, mode);
+
 			return proxies;
 		}
 		
@@ -780,7 +956,18 @@ namespace System.Net
 			static Uri GetProxyUriFromScript (IntPtr script, Uri targetUri, out NetworkCredential credentials)
 			{
 				CFProxy[] proxies = CFNetwork.GetProxiesForAutoConfigurationScript (script, targetUri);
-				
+				return SelectProxy (proxies, targetUri, out credentials);
+			}
+
+			static Uri ExecuteProxyAutoConfigurationURL (IntPtr proxyAutoConfigURL, Uri targetUri, out NetworkCredential credentials)
+			{
+				CFProxy[] proxies = CFNetwork.ExecuteProxyAutoConfigurationURL (proxyAutoConfigURL, targetUri);
+				return SelectProxy (proxies, targetUri, out credentials);
+			}
+
+
+			static Uri SelectProxy (CFProxy[] proxies, Uri targetUri, out NetworkCredential credentials)
+			{
 				if (proxies == null) {
 					credentials = null;
 					return targetUri;
@@ -828,7 +1015,7 @@ namespace System.Net
 								proxy = GetProxyUriFromScript (proxies[i].AutoConfigurationJavaScript, targetUri, out credentials);
 								break;
 							case CFProxyType.AutoConfigurationUrl:
-								// unsupported proxy type (requires fetching script from remote url)
+								proxy = ExecuteProxyAutoConfigurationURL (proxies[i].AutoConfigurationUrl, targetUri, out credentials);
 								break;
 							case CFProxyType.HTTPS:
 							case CFProxyType.HTTP:

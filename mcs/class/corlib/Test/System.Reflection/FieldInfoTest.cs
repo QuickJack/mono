@@ -31,9 +31,9 @@
 using System;
 using System.Threading;
 using System.Reflection;
-#if !TARGET_JVM
+#if !MONOTOUCH
 using System.Reflection.Emit;
-#endif // TARGET_JVM
+#endif
 using System.Runtime.InteropServices;
 
 using NUnit.Framework;
@@ -71,6 +71,79 @@ namespace MonoTests.System.Reflection
 
 	public class Class3 : Class2
 	{
+	}
+
+	// Disable this warning, as the purpose of this struct is to poke at the internal via reflection
+	#pragma warning disable 649
+	class FieldInvokeMatrix
+	{
+		public Byte field_Byte;
+		public SByte field_SByte;
+		public Boolean field_Boolean;
+		public Char field_Char;
+		public Int16 field_Int16;
+		public UInt16 field_UInt16;
+		public Int32 field_Int32;
+		public UInt32 field_UInt32;
+		public Int64 field_Int64;
+		public UInt64 field_UInt64;
+		public Single field_Single;
+		public Double field_Double;
+		public IntPtr field_IntPtr;
+		public UIntPtr field_UIntPtr;
+		public Decimal field_Decimal;
+		public DateTime field_DateTime;
+		public String field_String;
+
+		public ByteEnum field_ByteEnum;
+		public SByteEnum field_SByteEnum;
+		public Int16Enum field_Int16Enum;
+		public UInt16Enum field_UInt16Enum;
+		public Int32Enum field_Int32Enum;
+		public UInt32Enum field_UInt32Enum;
+		public Int64Enum field_Int64Enum;
+		public UInt64Enum field_UInt64Enum;
+	}
+	#pragma warning restore 649
+
+	public enum ByteEnum : byte
+	{
+		MaxValue = Byte.MaxValue
+	}
+
+	public enum SByteEnum : sbyte
+	{
+		MaxValue = SByte.MaxValue
+	}
+
+	public enum Int16Enum : short
+	{
+		MaxValue = Int16.MaxValue
+	}
+
+	public enum UInt16Enum : ushort
+	{
+		MaxValue = UInt16.MaxValue
+	}
+
+	public enum Int32Enum : int
+	{
+		MaxValue = Int32.MaxValue
+	}
+
+	public enum UInt32Enum: uint
+	{
+		MaxValue= UInt32.MaxValue
+	}
+
+	public enum Int64Enum : long
+	{
+		MaxValue = Int64.MaxValue
+	}
+
+	public enum UInt64Enum: ulong
+	{
+		MaxValue = UInt64.MaxValue
 	}
 
 	[TestFixture]
@@ -159,7 +232,6 @@ namespace MonoTests.System.Reflection
 			}
 		}
 
-#if NET_2_0
 		[Test] // GetFieldFromHandle (RuntimeFieldHandle, RuntimeTypeHandle)
 		public void GetFieldFromHandle2_DeclaringType_Zero ()
 		{
@@ -242,7 +314,6 @@ namespace MonoTests.System.Reflection
 
 			FieldInfo fi2 = FieldInfo.GetFieldFromHandle (fh, th);
 		}
-#endif
 
 		[Test]
 		public void PseudoCustomAttributes ()
@@ -250,102 +321,69 @@ namespace MonoTests.System.Reflection
 			object [] attrs;
 			Type t = typeof (FieldInfoTest);
 
-#if NET_2_0
 			Assert.AreEqual (1, t.GetField ("i").GetCustomAttributes (typeof (NonSerializedAttribute), true).Length);
-#else
-			Assert.AreEqual (0, t.GetField ("i").GetCustomAttributes (typeof (NonSerializedAttribute), true).Length);
-#endif
 
 			attrs = typeof (Class1).GetField ("i").GetCustomAttributes (true);
-#if NET_2_0
 			Assert.AreEqual (1, attrs.Length, "#B1");
 			FieldOffsetAttribute field_attr = (FieldOffsetAttribute) attrs [0];
 			Assert.AreEqual (32, field_attr.Value, "#B2");
-#else
-			Assert.AreEqual (0, attrs.Length, "#B1");
-#endif
 
 			MarshalAsAttribute attr;
 
 			attrs = typeof (Class2).GetField ("f0").GetCustomAttributes (true);
-#if NET_2_0
 			Assert.AreEqual (1, attrs.Length, "#C1");
 			attr = (MarshalAsAttribute) attrs [0];
 			Assert.AreEqual (UnmanagedType.Bool, attr.Value, "#C2");
-#else
-			Assert.AreEqual (0, attrs.Length, "#C1");
-#endif
 
 			attrs = typeof (Class2).GetField ("f1").GetCustomAttributes (true);
-#if NET_2_0
 			Assert.AreEqual (1, attrs.Length, "#D1");
 			attr = (MarshalAsAttribute) attrs [0];
 			Assert.AreEqual (UnmanagedType.LPArray, attr.Value, "#D2");
 			Assert.AreEqual (UnmanagedType.LPStr, attr.ArraySubType, "#D3");
-#else
-			Assert.AreEqual (0, attrs.Length, "#D1");
-#endif
 
 			attrs = typeof (Class2).GetField ("f2").GetCustomAttributes (true);
-#if NET_2_0
 			Assert.AreEqual (1, attrs.Length, "#E1");
 			attr = (MarshalAsAttribute) attrs [0];
 			Assert.AreEqual (UnmanagedType.ByValTStr, attr.Value, "#E2");
 			Assert.AreEqual (100, attr.SizeConst, "#E3");
-#else
-			Assert.AreEqual (0, attrs.Length, "#E1");
-#endif
 
 			attrs = typeof (Class2).GetField ("f3").GetCustomAttributes (true);
-#if NET_2_0
 			Assert.AreEqual (1, attrs.Length, "#F1");
 			attr = (MarshalAsAttribute) attrs [0];
 			Assert.AreEqual (UnmanagedType.CustomMarshaler, attr.Value, "#F2");
 			Assert.AreEqual ("5", attr.MarshalCookie, "#F3");
 			Assert.AreEqual (typeof (Marshal1), Type.GetType (attr.MarshalType), "#F4");
-#else
-			Assert.AreEqual (0, attrs.Length, "#F1");
-#endif
 
 			attrs = typeof (Class3).GetField ("f3").GetCustomAttributes (false);
-#if NET_2_0
 			Assert.AreEqual (1, attrs.Length, "#G1");
 			attr = (MarshalAsAttribute) attrs [0];
 			Assert.AreEqual (UnmanagedType.CustomMarshaler, attr.Value, "#G2");
 			Assert.AreEqual ("5", attr.MarshalCookie, "#G3");
 			Assert.AreEqual (typeof (Marshal1), Type.GetType (attr.MarshalType), "#G4");
-#else
-			Assert.AreEqual (0, attrs.Length, "#G1");
-#endif
 
 			attrs = typeof (Class3).GetField ("f3").GetCustomAttributes (true);
-#if NET_2_0
 			Assert.AreEqual (1, attrs.Length, "#H1");
 			attr = (MarshalAsAttribute) attrs [0];
 			Assert.AreEqual (UnmanagedType.CustomMarshaler, attr.Value, "#H2");
 			Assert.AreEqual ("5", attr.MarshalCookie, "#H3");
 			Assert.AreEqual (typeof (Marshal1), Type.GetType (attr.MarshalType), "#H4");
-#else
-			Assert.AreEqual (0, attrs.Length, "#H1");
-#endif
 
 			// bug #82465
 			attrs = typeof (Class2).GetField ("f3").GetCustomAttributes (true);
-#if NET_2_0
 			Assert.AreEqual (1, attrs.Length, "#I1");
 			attr = (MarshalAsAttribute) attrs [0];
 			Assert.AreEqual (UnmanagedType.CustomMarshaler, attr.Value, "#I2");
 			Assert.AreEqual ("5", attr.MarshalCookie, "#I3");
 			Assert.AreEqual (typeof (Marshal1), Type.GetType (attr.MarshalType), "#I4");
-#else
-			Assert.AreEqual (0, attrs.Length, "#I1");
-#endif
 		}
 
+		// Disable "field not used warning", this is intended.
+#pragma warning disable 649
 		class Foo {
 			public static int static_field;
 			public int field;
 		}
+#pragma warning restore 649
 
 		[ExpectedException (typeof (ArgumentException))]
 		public void GetValueWrongObject ()
@@ -363,8 +401,6 @@ namespace MonoTests.System.Reflection
 			typeof (Foo).GetField ("static_field").GetValue (typeof (int));
 		}
 
-#if NET_2_0
-#if !TARGET_JVM // ReflectionOnlyLoad not supported for TARGET_JVM
 		[Test]
 		[ExpectedException (typeof (InvalidOperationException))]
 		public void GetValueOnRefOnlyAssembly ()
@@ -384,7 +420,6 @@ namespace MonoTests.System.Reflection
 			FieldInfo f = t.GetField ("RefOnlyField", BindingFlags.Static | BindingFlags.NonPublic);
 			f.SetValue (null, 8);
 		}
-#endif // TARGET_JVM
 
 		const int literal = 42;
 
@@ -420,7 +455,6 @@ namespace MonoTests.System.Reflection
 			Assert.AreEqual (null, fi2.GetValue (t));
 		}
 	
-#if !TARGET_JVM // TypeBuilder not supported for TARGET_JVM
 		[Test]
 		public void NonPublicTests ()
 		{
@@ -435,7 +469,6 @@ namespace MonoTests.System.Reflection
 			fi = t.GetField ("protectedField", BindingFlags.NonPublic | BindingFlags.Instance);
 			Assert.IsNotNull (fi);
 		}
-#endif // TARGET_JVM
 
 		[Test]
 		public void GetRawDefaultValue ()
@@ -484,6 +517,10 @@ namespace MonoTests.System.Reflection
 		[Test]
 		public unsafe void GetSetValuePointers ()
 		{
+			Pointer p0 = (Pointer)typeof (FieldInfoTest).GetField ("ip").GetValue (null);
+			int *p0i = (int*)Pointer.Unbox (p0);
+			Assert.AreEqual (IntPtr.Zero, new IntPtr (p0i));
+
 			int i = 5;
 			void *p = &i;
 			typeof (FieldInfoTest).GetField ("ip").SetValue (null, (IntPtr)p);
@@ -491,7 +528,808 @@ namespace MonoTests.System.Reflection
 
 			int *pi = (int*)Pointer.Unbox (p2);
 			Assert.AreEqual (5, *pi);
+
+			typeof (FieldInfoTest).GetField ("ip").SetValue (null, (UIntPtr)p);
+			p2 = (Pointer)typeof (FieldInfoTest).GetField ("ip").GetValue (null);
+
+			pi = (int*)Pointer.Unbox (p2);
+			Assert.AreEqual (5, *pi);
 		}
+
+		[Test]
+		public void SetValuePrimitiveConversions ()
+		{
+			FieldInfo field;
+			var instance = new FieldInvokeMatrix ();
+			var fh = typeof (FieldInvokeMatrix);
+
+			field = fh.GetField ("field_Byte");			
+			field.SetValue (instance, Byte.MaxValue);
+			Assert.AreEqual (Byte.MaxValue, instance.field_Byte);
+			Throws (field, instance, SByte.MaxValue);
+			Throws (field, instance, true);
+			Throws (field, instance, Char.MaxValue);
+			Throws (field, instance, Int16.MaxValue);
+			Throws (field, instance, UInt16.MaxValue);
+			Throws (field, instance, Int32.MaxValue);
+			Throws (field, instance, UInt32.MaxValue);
+			Throws (field, instance, Int64.MaxValue);
+			Throws (field, instance, UInt64.MaxValue);
+			Throws (field, instance, Single.MaxValue);
+			Throws (field, instance, Double.MaxValue);
+			Throws (field, instance, IntPtr.Zero);
+			Throws (field, instance, UIntPtr.Zero);
+			Throws (field, instance, Decimal.MaxValue);
+			Throws (field, instance, DateTime.MaxValue);
+			field.SetValue (instance, ByteEnum.MaxValue);
+			Assert.AreEqual (Byte.MaxValue, instance.field_Byte);
+			Throws (field, instance, SByteEnum.MaxValue);
+			Throws (field, instance, Int16Enum.MaxValue);
+			Throws (field, instance, UInt16Enum.MaxValue);
+			Throws (field, instance, Int32Enum.MaxValue);
+			Throws (field, instance, UInt32Enum.MaxValue);
+			Throws (field, instance, Int64Enum.MaxValue);
+			Throws (field, instance, UInt64Enum.MaxValue);
+			field = fh.GetField ("field_SByte");
+			Throws (field, instance, Byte.MaxValue);
+			field.SetValue (instance, SByte.MaxValue);
+			Assert.AreEqual (SByte.MaxValue, instance.field_SByte);
+			Throws (field, instance, true);
+			Throws (field, instance, Char.MaxValue);
+			Throws (field, instance, Int16.MaxValue);
+			Throws (field, instance, UInt16.MaxValue);
+			Throws (field, instance, Int32.MaxValue);
+			Throws (field, instance, UInt32.MaxValue);
+			Throws (field, instance, Int64.MaxValue);
+			Throws (field, instance, UInt64.MaxValue);
+			Throws (field, instance, Single.MaxValue);
+			Throws (field, instance, Double.MaxValue);
+			Throws (field, instance, IntPtr.Zero);
+			Throws (field, instance, UIntPtr.Zero);
+			Throws (field, instance, Decimal.MaxValue);
+			Throws (field, instance, DateTime.MaxValue);
+			Throws (field, instance, ByteEnum.MaxValue);
+			field.SetValue (instance, SByteEnum.MaxValue);
+			Assert.AreEqual (SByte.MaxValue, instance.field_SByte);
+			Throws (field, instance, Int16Enum.MaxValue);
+			Throws (field, instance, UInt16Enum.MaxValue);
+			Throws (field, instance, Int32Enum.MaxValue);
+			Throws (field, instance, UInt32Enum.MaxValue);
+			Throws (field, instance, Int64Enum.MaxValue);
+			Throws (field, instance, UInt64Enum.MaxValue);
+			field = fh.GetField ("field_Boolean");
+			Throws (field, instance, Byte.MaxValue);
+			Throws (field, instance, SByte.MaxValue);
+			field.SetValue (instance, true);
+			Assert.AreEqual (true, instance.field_Boolean);
+			Throws (field, instance, Char.MaxValue);
+			Throws (field, instance, Int16.MaxValue);
+			Throws (field, instance, UInt16.MaxValue);
+			Throws (field, instance, Int32.MaxValue);
+			Throws (field, instance, UInt32.MaxValue);
+			Throws (field, instance, Int64.MaxValue);
+			Throws (field, instance, UInt64.MaxValue);
+			Throws (field, instance, Single.MaxValue);
+			Throws (field, instance, Double.MaxValue);
+			Throws (field, instance, IntPtr.Zero);
+			Throws (field, instance, UIntPtr.Zero);
+			Throws (field, instance, Decimal.MaxValue);
+			Throws (field, instance, DateTime.MaxValue);
+			Throws (field, instance, ByteEnum.MaxValue);
+			Throws (field, instance, SByteEnum.MaxValue);
+			Throws (field, instance, Int16Enum.MaxValue);
+			Throws (field, instance, UInt16Enum.MaxValue);
+			Throws (field, instance, Int32Enum.MaxValue);
+			Throws (field, instance, UInt32Enum.MaxValue);
+			Throws (field, instance, Int64Enum.MaxValue);
+			Throws (field, instance, UInt64Enum.MaxValue);
+			field = fh.GetField ("field_Char");
+			field.SetValue (instance, Byte.MaxValue);
+			Assert.AreEqual (Byte.MaxValue, instance.field_Char);
+			Throws (field, instance, SByte.MaxValue);
+			Throws (field, instance, true);
+			field.SetValue (instance, Char.MaxValue);
+			Assert.AreEqual (Char.MaxValue, instance.field_Char);
+			Throws (field, instance, Int16.MaxValue);
+			field.SetValue (instance, UInt16.MaxValue);
+			Assert.AreEqual (UInt16.MaxValue, instance.field_Char);
+			Throws (field, instance, Int32.MaxValue);
+			Throws (field, instance, UInt32.MaxValue);
+			Throws (field, instance, Int64.MaxValue);
+			Throws (field, instance, UInt64.MaxValue);
+			Throws (field, instance, Single.MaxValue);
+			Throws (field, instance, Double.MaxValue);
+			Throws (field, instance, IntPtr.Zero);
+			Throws (field, instance, UIntPtr.Zero);
+			Throws (field, instance, Decimal.MaxValue);
+			Throws (field, instance, DateTime.MaxValue);
+			field.SetValue (instance, ByteEnum.MaxValue);
+			Assert.AreEqual (Byte.MaxValue, instance.field_Char);
+			Throws (field, instance, SByteEnum.MaxValue);
+			Throws (field, instance, Int16Enum.MaxValue);
+			field.SetValue (instance, UInt16Enum.MaxValue);
+			Assert.AreEqual (UInt16.MaxValue, instance.field_Char);
+			Throws (field, instance, Int32Enum.MaxValue);
+			Throws (field, instance, UInt32Enum.MaxValue);
+			Throws (field, instance, Int64Enum.MaxValue);
+			Throws (field, instance, UInt64Enum.MaxValue);
+			field = fh.GetField ("field_Int16");
+			field.SetValue (instance, Byte.MaxValue);
+			Assert.AreEqual (Byte.MaxValue, instance.field_Int16);
+			field.SetValue (instance, SByte.MaxValue);
+			Assert.AreEqual (SByte.MaxValue, instance.field_Int16);
+			Throws (field, instance, true);
+			Throws (field, instance, Char.MaxValue);
+			field.SetValue (instance, Int16.MaxValue);
+			Assert.AreEqual (Int16.MaxValue, instance.field_Int16);
+			Throws (field, instance, UInt16.MaxValue);
+			Throws (field, instance, Int32.MaxValue);
+			Throws (field, instance, UInt32.MaxValue);
+			Throws (field, instance, Int64.MaxValue);
+			Throws (field, instance, UInt64.MaxValue);
+			Throws (field, instance, Single.MaxValue);
+			Throws (field, instance, Double.MaxValue);
+			Throws (field, instance, IntPtr.Zero);
+			Throws (field, instance, UIntPtr.Zero);
+			Throws (field, instance, Decimal.MaxValue);
+			Throws (field, instance, DateTime.MaxValue);
+			field.SetValue (instance, ByteEnum.MaxValue);
+			Assert.AreEqual (Byte.MaxValue, instance.field_Int16);
+			field.SetValue (instance, SByteEnum.MaxValue);
+			Assert.AreEqual (SByte.MaxValue, instance.field_Int16);
+			field.SetValue (instance, Int16Enum.MaxValue);
+			Assert.AreEqual (Int16.MaxValue, instance.field_Int16);
+			Throws (field, instance, UInt16Enum.MaxValue);
+			Throws (field, instance, Int32Enum.MaxValue);
+			Throws (field, instance, UInt32Enum.MaxValue);
+			Throws (field, instance, Int64Enum.MaxValue);
+			Throws (field, instance, UInt64Enum.MaxValue);
+			field = fh.GetField ("field_UInt16");
+			field.SetValue (instance, Byte.MaxValue);
+			Assert.AreEqual (Byte.MaxValue, instance.field_UInt16);
+			Throws (field, instance, SByte.MaxValue);
+			Throws (field, instance, true);
+			field.SetValue (instance, Char.MaxValue);
+			Assert.AreEqual (Char.MaxValue, instance.field_UInt16);
+			Throws (field, instance, Int16.MaxValue);
+			field.SetValue (instance, UInt16.MaxValue);
+			Assert.AreEqual (UInt16.MaxValue, instance.field_UInt16);
+			Throws (field, instance, Int32.MaxValue);
+			Throws (field, instance, UInt32.MaxValue);
+			Throws (field, instance, Int64.MaxValue);
+			Throws (field, instance, UInt64.MaxValue);
+			Throws (field, instance, Single.MaxValue);
+			Throws (field, instance, Double.MaxValue);
+			Throws (field, instance, IntPtr.Zero);
+			Throws (field, instance, UIntPtr.Zero);
+			Throws (field, instance, Decimal.MaxValue);
+			Throws (field, instance, DateTime.MaxValue);
+			field.SetValue (instance, ByteEnum.MaxValue);
+			Assert.AreEqual (Byte.MaxValue, instance.field_UInt16);
+			Throws (field, instance, SByteEnum.MaxValue);
+			Throws (field, instance, Int16Enum.MaxValue);
+			field.SetValue (instance, UInt16Enum.MaxValue);
+			Assert.AreEqual (UInt16.MaxValue, instance.field_UInt16);
+			Throws (field, instance, Int32Enum.MaxValue);
+			Throws (field, instance, UInt32Enum.MaxValue);
+			Throws (field, instance, Int64Enum.MaxValue);
+			Throws (field, instance, UInt64Enum.MaxValue);
+			field = fh.GetField ("field_Int32");
+			field.SetValue (instance, Byte.MaxValue);
+			Assert.AreEqual (Byte.MaxValue, instance.field_Int32);
+			field.SetValue (instance, SByte.MaxValue);
+			Assert.AreEqual (SByte.MaxValue, instance.field_Int32);
+			Throws (field, instance, true);
+			field.SetValue (instance, Char.MaxValue);
+			Assert.AreEqual (Char.MaxValue, instance.field_Int32);
+			field.SetValue (instance, Int16.MaxValue);
+			Assert.AreEqual (Int16.MaxValue, instance.field_Int32);
+			field.SetValue (instance, UInt16.MaxValue);
+			Assert.AreEqual (UInt16.MaxValue, instance.field_Int32);
+			field.SetValue (instance, Int32.MaxValue);
+			Assert.AreEqual (Int32.MaxValue, instance.field_Int32);
+			Throws (field, instance, UInt32.MaxValue);
+			Throws (field, instance, Int64.MaxValue);
+			Throws (field, instance, UInt64.MaxValue);
+			Throws (field, instance, Single.MaxValue);
+			Throws (field, instance, Double.MaxValue);
+			Throws (field, instance, IntPtr.Zero);
+			Throws (field, instance, UIntPtr.Zero);
+			Throws (field, instance, Decimal.MaxValue);
+			Throws (field, instance, DateTime.MaxValue);
+			field.SetValue (instance, ByteEnum.MaxValue);
+			Assert.AreEqual (Byte.MaxValue, instance.field_Int32);
+			field.SetValue (instance, SByteEnum.MaxValue);
+			Assert.AreEqual (SByte.MaxValue, instance.field_Int32);
+			field.SetValue (instance, Int16Enum.MaxValue);
+			Assert.AreEqual (Int16.MaxValue, instance.field_Int32);
+			field.SetValue (instance, UInt16Enum.MaxValue);
+			Assert.AreEqual (UInt16.MaxValue, instance.field_Int32);
+			field.SetValue (instance, Int32Enum.MaxValue);
+			Assert.AreEqual (Int32.MaxValue, instance.field_Int32);
+			Throws (field, instance, UInt32Enum.MaxValue);
+			Throws (field, instance, Int64Enum.MaxValue);
+			Throws (field, instance, UInt64Enum.MaxValue);
+			field = fh.GetField ("field_UInt32");
+			field.SetValue (instance, Byte.MaxValue);
+			Assert.AreEqual (Byte.MaxValue, instance.field_UInt32);
+			Throws (field, instance, SByte.MaxValue);
+			Throws (field, instance, true);
+			field.SetValue (instance, Char.MaxValue);
+			Assert.AreEqual (Char.MaxValue, instance.field_UInt32);
+			Throws (field, instance, Int16.MaxValue);
+			field.SetValue (instance, UInt16.MaxValue);
+			Assert.AreEqual (UInt16.MaxValue, instance.field_UInt32);
+			Throws (field, instance, Int32.MaxValue);
+			field.SetValue (instance, UInt32.MaxValue);
+			Assert.AreEqual (UInt32.MaxValue, instance.field_UInt32);
+			Throws (field, instance, Int64.MaxValue);
+			Throws (field, instance, UInt64.MaxValue);
+			Throws (field, instance, Single.MaxValue);
+			Throws (field, instance, Double.MaxValue);
+			Throws (field, instance, IntPtr.Zero);
+			Throws (field, instance, UIntPtr.Zero);
+			Throws (field, instance, Decimal.MaxValue);
+			Throws (field, instance, DateTime.MaxValue);
+			field.SetValue (instance, ByteEnum.MaxValue);
+			Assert.AreEqual (Byte.MaxValue, instance.field_UInt32);
+			Throws (field, instance, SByteEnum.MaxValue);
+			Throws (field, instance, Int16Enum.MaxValue);
+			field.SetValue (instance, UInt16Enum.MaxValue);
+			Assert.AreEqual (UInt16.MaxValue, instance.field_UInt32);
+			Throws (field, instance, Int32Enum.MaxValue);
+			field.SetValue (instance, UInt32Enum.MaxValue);
+			Assert.AreEqual (UInt32.MaxValue, instance.field_UInt32);
+			Throws (field, instance, Int64Enum.MaxValue);
+			Throws (field, instance, UInt64Enum.MaxValue);
+			field = fh.GetField ("field_Int64");
+			field.SetValue (instance, Byte.MaxValue);
+			Assert.AreEqual (Byte.MaxValue, instance.field_Int64);
+			field.SetValue (instance, SByte.MaxValue);
+			Assert.AreEqual (SByte.MaxValue, instance.field_Int64);
+			Throws (field, instance, true);
+			field.SetValue (instance, Char.MaxValue);
+			Assert.AreEqual (Char.MaxValue, instance.field_Int64);
+			field.SetValue (instance, Int16.MaxValue);
+			Assert.AreEqual (Int16.MaxValue, instance.field_Int64);
+			field.SetValue (instance, UInt16.MaxValue);
+			Assert.AreEqual (UInt16.MaxValue, instance.field_Int64);
+			field.SetValue (instance, Int32.MaxValue);
+			Assert.AreEqual (Int32.MaxValue, instance.field_Int64);
+			field.SetValue (instance, UInt32.MaxValue);
+			Assert.AreEqual (UInt32.MaxValue, instance.field_Int64);
+			field.SetValue (instance, Int64.MaxValue);
+			Assert.AreEqual (Int64.MaxValue, instance.field_Int64);
+			Throws (field, instance, UInt64.MaxValue);
+			Throws (field, instance, Single.MaxValue);
+			Throws (field, instance, Double.MaxValue);
+			Throws (field, instance, IntPtr.Zero);
+			Throws (field, instance, UIntPtr.Zero);
+			Throws (field, instance, Decimal.MaxValue);
+			Throws (field, instance, DateTime.MaxValue);
+			field.SetValue (instance, ByteEnum.MaxValue);
+			Assert.AreEqual (Byte.MaxValue, instance.field_Int64);
+			field.SetValue (instance, SByteEnum.MaxValue);
+			Assert.AreEqual (SByte.MaxValue, instance.field_Int64);
+			field.SetValue (instance, Int16Enum.MaxValue);
+			Assert.AreEqual (Int16.MaxValue, instance.field_Int64);
+			field.SetValue (instance, UInt16Enum.MaxValue);
+			Assert.AreEqual (UInt16.MaxValue, instance.field_Int64);
+			field.SetValue (instance, Int32Enum.MaxValue);
+			Assert.AreEqual (Int32.MaxValue, instance.field_Int64);
+			field.SetValue (instance, UInt32Enum.MaxValue);
+			Assert.AreEqual (UInt32.MaxValue, instance.field_Int64);
+			field.SetValue (instance, Int64Enum.MaxValue);
+			Assert.AreEqual (Int64.MaxValue, instance.field_Int64);
+			Throws (field, instance, UInt64Enum.MaxValue);
+			field = fh.GetField ("field_UInt64");
+			field.SetValue (instance, Byte.MaxValue);
+			Assert.AreEqual (Byte.MaxValue, instance.field_UInt64);
+			Throws (field, instance, SByte.MaxValue);
+			Throws (field, instance, true);
+			field.SetValue (instance, Char.MaxValue);
+			Assert.AreEqual (Char.MaxValue, instance.field_UInt64);
+			Throws (field, instance, Int16.MaxValue);
+			field.SetValue (instance, UInt16.MaxValue);
+			Assert.AreEqual (UInt16.MaxValue, instance.field_UInt64);
+			Throws (field, instance, Int32.MaxValue);
+			field.SetValue (instance, UInt32.MaxValue);
+			Assert.AreEqual (UInt32.MaxValue, instance.field_UInt64);
+			Throws (field, instance, Int64.MaxValue);
+			field.SetValue (instance, UInt64.MaxValue);
+			Assert.AreEqual (UInt64.MaxValue, instance.field_UInt64);
+			Throws (field, instance, Single.MaxValue);
+			Throws (field, instance, Double.MaxValue);
+			Throws (field, instance, IntPtr.Zero);
+			Throws (field, instance, UIntPtr.Zero);
+			Throws (field, instance, Decimal.MaxValue);
+			Throws (field, instance, DateTime.MaxValue);
+			field.SetValue (instance, ByteEnum.MaxValue);
+			Assert.AreEqual (Byte.MaxValue, instance.field_UInt64);
+			Throws (field, instance, SByteEnum.MaxValue);
+			Throws (field, instance, Int16Enum.MaxValue);
+			field.SetValue (instance, UInt16Enum.MaxValue);
+			Assert.AreEqual (UInt16.MaxValue, instance.field_UInt64);
+			Throws (field, instance, Int32Enum.MaxValue);
+			field.SetValue (instance, UInt32Enum.MaxValue);
+			Assert.AreEqual (UInt32.MaxValue, instance.field_UInt64);
+			Throws (field, instance, Int64Enum.MaxValue);
+			field.SetValue (instance, UInt64Enum.MaxValue);
+			Assert.AreEqual (UInt64.MaxValue, instance.field_UInt64);
+			field = fh.GetField ("field_Single");
+			field.SetValue (instance, Byte.MaxValue);
+			Assert.AreEqual (Byte.MaxValue, instance.field_Single);
+			field.SetValue (instance, SByte.MaxValue);
+			Assert.AreEqual (SByte.MaxValue, instance.field_Single);
+			Throws (field, instance, true);
+			field.SetValue (instance, Char.MaxValue);
+			Assert.AreEqual ((Single) Char.MaxValue, instance.field_Single);
+			field.SetValue (instance, Int16.MaxValue);
+			Assert.AreEqual (Int16.MaxValue, instance.field_Single);
+			field.SetValue (instance, UInt16.MaxValue);
+			Assert.AreEqual (UInt16.MaxValue, instance.field_Single);
+			field.SetValue (instance, Int32.MaxValue);
+			Assert.AreEqual ((Single)Int32.MaxValue, instance.field_Single);
+			field.SetValue (instance, UInt32.MaxValue);
+			Assert.AreEqual ((Single) UInt32.MaxValue, instance.field_Single);
+			field.SetValue (instance, Int64.MaxValue);
+			Assert.AreEqual (Int64.MaxValue, instance.field_Single);
+			field.SetValue (instance, UInt64.MaxValue);
+			Assert.AreEqual (UInt64.MaxValue, instance.field_Single);
+			field.SetValue (instance, Single.MaxValue);
+			Assert.AreEqual (Single.MaxValue, instance.field_Single);
+			Throws (field, instance, Double.MaxValue);
+			Throws (field, instance, IntPtr.Zero);
+			Throws (field, instance, UIntPtr.Zero);
+			Throws (field, instance, Decimal.MaxValue);
+			Throws (field, instance, DateTime.MaxValue);
+			field.SetValue (instance, ByteEnum.MaxValue);
+			Assert.AreEqual (Byte.MaxValue, instance.field_Single);
+			field.SetValue (instance, SByteEnum.MaxValue);
+			Assert.AreEqual (SByte.MaxValue, instance.field_Single);
+			field.SetValue (instance, Int16Enum.MaxValue);
+			Assert.AreEqual (Int16.MaxValue, instance.field_Single);
+			field.SetValue (instance, UInt16Enum.MaxValue);
+			Assert.AreEqual (UInt16.MaxValue, instance.field_Single);
+			field.SetValue (instance, Int32Enum.MaxValue);
+			Assert.AreEqual ((Single) Int32.MaxValue, instance.field_Single);
+			field.SetValue (instance, UInt32Enum.MaxValue);
+			Assert.AreEqual ((Single) UInt32.MaxValue, instance.field_Single);
+			field.SetValue (instance, Int64Enum.MaxValue);
+			Assert.AreEqual (Int64.MaxValue, instance.field_Single);
+			field.SetValue (instance, UInt64Enum.MaxValue);
+			Assert.AreEqual (UInt64.MaxValue, instance.field_Single);
+			field = fh.GetField ("field_Double");
+			field.SetValue (instance, Byte.MaxValue);
+			Assert.AreEqual (Byte.MaxValue, instance.field_Double);
+			field.SetValue (instance, SByte.MaxValue);
+			Assert.AreEqual (SByte.MaxValue, instance.field_Double);
+			Throws (field, instance, true);
+			field.SetValue (instance, Char.MaxValue);
+			Assert.AreEqual ((Double) Char.MaxValue, instance.field_Double);
+			field.SetValue (instance, Int16.MaxValue);
+			Assert.AreEqual (Int16.MaxValue, instance.field_Double);
+			field.SetValue (instance, UInt16.MaxValue);
+			Assert.AreEqual (UInt16.MaxValue, instance.field_Double);
+			field.SetValue (instance, Int32.MaxValue);
+			Assert.AreEqual (Int32.MaxValue, instance.field_Double);
+			field.SetValue (instance, UInt32.MaxValue);
+			Assert.AreEqual (UInt32.MaxValue, instance.field_Double);
+			field.SetValue (instance, Int64.MaxValue);
+			Assert.AreEqual (Int64.MaxValue, instance.field_Double);
+			field.SetValue (instance, UInt64.MaxValue);
+			Assert.AreEqual (UInt64.MaxValue, instance.field_Double);
+			field.SetValue (instance, Single.MaxValue);
+			Assert.AreEqual (Single.MaxValue, instance.field_Double);
+			field.SetValue (instance, Double.MaxValue);
+			Assert.AreEqual (Double.MaxValue, instance.field_Double);
+			Throws (field, instance, IntPtr.Zero);
+			Throws (field, instance, UIntPtr.Zero);
+			Throws (field, instance, Decimal.MaxValue);
+			Throws (field, instance, DateTime.MaxValue);
+			field.SetValue (instance, ByteEnum.MaxValue);
+			Assert.AreEqual (Byte.MaxValue, instance.field_Double);
+			field.SetValue (instance, SByteEnum.MaxValue);
+			Assert.AreEqual (SByte.MaxValue, instance.field_Double);
+			field.SetValue (instance, Int16Enum.MaxValue);
+			Assert.AreEqual (Int16.MaxValue, instance.field_Double);
+			field.SetValue (instance, UInt16Enum.MaxValue);
+			Assert.AreEqual (UInt16.MaxValue, instance.field_Double);
+			field.SetValue (instance, Int32Enum.MaxValue);
+			Assert.AreEqual (Int32.MaxValue, instance.field_Double);
+			field.SetValue (instance, UInt32Enum.MaxValue);
+			Assert.AreEqual (UInt32.MaxValue, instance.field_Double);
+			field.SetValue (instance, Int64Enum.MaxValue);
+			Assert.AreEqual (Int64.MaxValue, instance.field_Double);
+			field.SetValue (instance, UInt64Enum.MaxValue);
+			Assert.AreEqual (UInt64.MaxValue, instance.field_Double);
+			field = fh.GetField ("field_IntPtr");
+			Throws (field, instance, Byte.MaxValue);
+			Throws (field, instance, SByte.MaxValue);
+			Throws (field, instance, true);
+			Throws (field, instance, Char.MaxValue);
+			Throws (field, instance, Int16.MaxValue);
+			Throws (field, instance, UInt16.MaxValue);
+			Throws (field, instance, Int32.MaxValue);
+			Throws (field, instance, UInt32.MaxValue);
+			Throws (field, instance, Int64.MaxValue);
+			Throws (field, instance, UInt64.MaxValue);
+			Throws (field, instance, Single.MaxValue);
+			Throws (field, instance, Double.MaxValue);
+			field.SetValue (instance, IntPtr.Zero);
+			Assert.AreEqual (IntPtr.Zero, instance.field_IntPtr);
+			Throws (field, instance, UIntPtr.Zero);
+			Throws (field, instance, Decimal.MaxValue);
+			Throws (field, instance, DateTime.MaxValue);
+			Throws (field, instance, ByteEnum.MaxValue);
+			Throws (field, instance, SByteEnum.MaxValue);
+			Throws (field, instance, Int16Enum.MaxValue);
+			Throws (field, instance, UInt16Enum.MaxValue);
+			Throws (field, instance, Int32Enum.MaxValue);
+			Throws (field, instance, UInt32Enum.MaxValue);
+			Throws (field, instance, Int64Enum.MaxValue);
+			Throws (field, instance, UInt64Enum.MaxValue);
+			field = fh.GetField ("field_UIntPtr");
+			Throws (field, instance, Byte.MaxValue);
+			Throws (field, instance, SByte.MaxValue);
+			Throws (field, instance, true);
+			Throws (field, instance, Char.MaxValue);
+			Throws (field, instance, Int16.MaxValue);
+			Throws (field, instance, UInt16.MaxValue);
+			Throws (field, instance, Int32.MaxValue);
+			Throws (field, instance, UInt32.MaxValue);
+			Throws (field, instance, Int64.MaxValue);
+			Throws (field, instance, UInt64.MaxValue);
+			Throws (field, instance, Single.MaxValue);
+			Throws (field, instance, Double.MaxValue);
+			Throws (field, instance, IntPtr.Zero);
+			field.SetValue (instance, UIntPtr.Zero);
+			Assert.AreEqual (UIntPtr.Zero, instance.field_UIntPtr);
+			Throws (field, instance, Decimal.MaxValue);
+			Throws (field, instance, DateTime.MaxValue);
+			Throws (field, instance, ByteEnum.MaxValue);
+			Throws (field, instance, SByteEnum.MaxValue);
+			Throws (field, instance, Int16Enum.MaxValue);
+			Throws (field, instance, UInt16Enum.MaxValue);
+			Throws (field, instance, Int32Enum.MaxValue);
+			Throws (field, instance, UInt32Enum.MaxValue);
+			Throws (field, instance, Int64Enum.MaxValue);
+			Throws (field, instance, UInt64Enum.MaxValue);
+			field = fh.GetField ("field_Decimal");
+			Throws (field, instance, Byte.MaxValue);
+			Throws (field, instance, SByte.MaxValue);
+			Throws (field, instance, true);
+			Throws (field, instance, Char.MaxValue);
+			Throws (field, instance, Int16.MaxValue);
+			Throws (field, instance, UInt16.MaxValue);
+			Throws (field, instance, Int32.MaxValue);
+			Throws (field, instance, UInt32.MaxValue);
+			Throws (field, instance, Int64.MaxValue);
+			Throws (field, instance, UInt64.MaxValue);
+			Throws (field, instance, Single.MaxValue);
+			Throws (field, instance, Double.MaxValue);
+			Throws (field, instance, IntPtr.Zero);
+			Throws (field, instance, UIntPtr.Zero);
+			field.SetValue (instance, Decimal.MaxValue);
+			Assert.AreEqual (Decimal.MaxValue, instance.field_Decimal);
+			Throws (field, instance, DateTime.MaxValue);
+			Throws (field, instance, ByteEnum.MaxValue);
+			Throws (field, instance, SByteEnum.MaxValue);
+			Throws (field, instance, Int16Enum.MaxValue);
+			Throws (field, instance, UInt16Enum.MaxValue);
+			Throws (field, instance, Int32Enum.MaxValue);
+			Throws (field, instance, UInt32Enum.MaxValue);
+			Throws (field, instance, Int64Enum.MaxValue);
+			Throws (field, instance, UInt64Enum.MaxValue);
+			field = fh.GetField ("field_DateTime");
+			Throws (field, instance, Byte.MaxValue);
+			Throws (field, instance, SByte.MaxValue);
+			Throws (field, instance, true);
+			Throws (field, instance, Char.MaxValue);
+			Throws (field, instance, Int16.MaxValue);
+			Throws (field, instance, UInt16.MaxValue);
+			Throws (field, instance, Int32.MaxValue);
+			Throws (field, instance, UInt32.MaxValue);
+			Throws (field, instance, Int64.MaxValue);
+			Throws (field, instance, UInt64.MaxValue);
+			Throws (field, instance, Single.MaxValue);
+			Throws (field, instance, Double.MaxValue);
+			Throws (field, instance, IntPtr.Zero);
+			Throws (field, instance, UIntPtr.Zero);
+			Throws (field, instance, Decimal.MaxValue);
+			field.SetValue (instance, DateTime.MaxValue);
+			Assert.AreEqual (DateTime.MaxValue, instance.field_DateTime);
+			Throws (field, instance, ByteEnum.MaxValue);
+			Throws (field, instance, SByteEnum.MaxValue);
+			Throws (field, instance, Int16Enum.MaxValue);
+			Throws (field, instance, UInt16Enum.MaxValue);
+			Throws (field, instance, Int32Enum.MaxValue);
+			Throws (field, instance, UInt32Enum.MaxValue);
+			Throws (field, instance, Int64Enum.MaxValue);
+			Throws (field, instance, UInt64Enum.MaxValue);
+			field = fh.GetField ("field_ByteEnum");
+			field.SetValue (instance, Byte.MaxValue);
+			Assert.AreEqual (ByteEnum.MaxValue, instance.field_ByteEnum);
+			Throws (field, instance, SByte.MaxValue);
+			Throws (field, instance, true);
+			Throws (field, instance, Char.MaxValue);
+			Throws (field, instance, Int16.MaxValue);
+			Throws (field, instance, UInt16.MaxValue);
+			Throws (field, instance, Int32.MaxValue);
+			Throws (field, instance, UInt32.MaxValue);
+			Throws (field, instance, Int64.MaxValue);
+			Throws (field, instance, UInt64.MaxValue);
+			Throws (field, instance, Single.MaxValue);
+			Throws (field, instance, Double.MaxValue);
+			Throws (field, instance, IntPtr.Zero);
+			Throws (field, instance, UIntPtr.Zero);
+			Throws (field, instance, Decimal.MaxValue);
+			Throws (field, instance, DateTime.MaxValue);
+			field.SetValue (instance, ByteEnum.MaxValue);
+			Assert.AreEqual (ByteEnum.MaxValue, instance.field_ByteEnum);
+			Throws (field, instance, SByteEnum.MaxValue);
+			Throws (field, instance, Int16Enum.MaxValue);
+			Throws (field, instance, UInt16Enum.MaxValue);
+			Throws (field, instance, Int32Enum.MaxValue);
+			Throws (field, instance, UInt32Enum.MaxValue);
+			Throws (field, instance, Int64Enum.MaxValue);
+			Throws (field, instance, UInt64Enum.MaxValue);
+			field = fh.GetField ("field_SByteEnum");
+			Throws (field, instance, Byte.MaxValue);
+			field.SetValue (instance, SByte.MaxValue);
+			Assert.AreEqual (SByteEnum.MaxValue, instance.field_SByteEnum);
+			Throws (field, instance, true);
+			Throws (field, instance, Char.MaxValue);
+			Throws (field, instance, Int16.MaxValue);
+			Throws (field, instance, UInt16.MaxValue);
+			Throws (field, instance, Int32.MaxValue);
+			Throws (field, instance, UInt32.MaxValue);
+			Throws (field, instance, Int64.MaxValue);
+			Throws (field, instance, UInt64.MaxValue);
+			Throws (field, instance, Single.MaxValue);
+			Throws (field, instance, Double.MaxValue);
+			Throws (field, instance, IntPtr.Zero);
+			Throws (field, instance, UIntPtr.Zero);
+			Throws (field, instance, Decimal.MaxValue);
+			Throws (field, instance, DateTime.MaxValue);
+			Throws (field, instance, ByteEnum.MaxValue);
+			field.SetValue (instance, SByteEnum.MaxValue);
+			Assert.AreEqual (SByteEnum.MaxValue, instance.field_SByteEnum);
+			Throws (field, instance, Int16Enum.MaxValue);
+			Throws (field, instance, UInt16Enum.MaxValue);
+			Throws (field, instance, Int32Enum.MaxValue);
+			Throws (field, instance, UInt32Enum.MaxValue);
+			Throws (field, instance, Int64Enum.MaxValue);
+			Throws (field, instance, UInt64Enum.MaxValue);
+			field = fh.GetField ("field_Int16Enum");
+			field.SetValue (instance, Byte.MaxValue);
+			Assert.AreEqual (Byte.MaxValue, (byte) instance.field_Int16Enum);
+			field.SetValue (instance, SByte.MaxValue);
+			Assert.AreEqual (SByte.MaxValue, (sbyte) instance.field_Int16Enum);
+			Throws (field, instance, true);
+			Throws (field, instance, Char.MaxValue);
+			field.SetValue (instance, Int16.MaxValue);
+			Assert.AreEqual (Int16Enum.MaxValue, instance.field_Int16Enum);
+			Throws (field, instance, UInt16.MaxValue);
+			Throws (field, instance, Int32.MaxValue);
+			Throws (field, instance, UInt32.MaxValue);
+			Throws (field, instance, Int64.MaxValue);
+			Throws (field, instance, UInt64.MaxValue);
+			Throws (field, instance, Single.MaxValue);
+			Throws (field, instance, Double.MaxValue);
+			Throws (field, instance, IntPtr.Zero);
+			Throws (field, instance, UIntPtr.Zero);
+			Throws (field, instance, Decimal.MaxValue);
+			Throws (field, instance, DateTime.MaxValue);
+			field.SetValue (instance, ByteEnum.MaxValue);
+			Assert.AreEqual (ByteEnum.MaxValue, (ByteEnum) instance.field_Int16Enum);
+			field.SetValue (instance, SByteEnum.MaxValue);
+			Assert.AreEqual (SByteEnum.MaxValue, (SByteEnum) instance.field_Int16Enum);
+			field.SetValue (instance, Int16Enum.MaxValue);
+			Assert.AreEqual (Int16Enum.MaxValue, instance.field_Int16Enum);
+			Throws (field, instance, UInt16Enum.MaxValue);
+			Throws (field, instance, Int32Enum.MaxValue);
+			Throws (field, instance, UInt32Enum.MaxValue);
+			Throws (field, instance, Int64Enum.MaxValue);
+			Throws (field, instance, UInt64Enum.MaxValue);
+			field = fh.GetField ("field_UInt16Enum");
+			field.SetValue (instance, Byte.MaxValue);
+			Assert.AreEqual (Byte.MaxValue, (byte) instance.field_UInt16Enum);
+			Throws (field, instance, SByte.MaxValue);
+			Throws (field, instance, true);
+			field.SetValue (instance, Char.MaxValue);
+			Assert.AreEqual (Char.MaxValue, (char) instance.field_UInt16Enum);
+			Throws (field, instance, Int16.MaxValue);
+			field.SetValue (instance, UInt16.MaxValue);
+			Assert.AreEqual (UInt16.MaxValue, (UInt16) instance.field_UInt16Enum);
+			Throws (field, instance, Int32.MaxValue);
+			Throws (field, instance, UInt32.MaxValue);
+			Throws (field, instance, Int64.MaxValue);
+			Throws (field, instance, UInt64.MaxValue);
+			Throws (field, instance, Single.MaxValue);
+			Throws (field, instance, Double.MaxValue);
+			Throws (field, instance, IntPtr.Zero);
+			Throws (field, instance, UIntPtr.Zero);
+			Throws (field, instance, Decimal.MaxValue);
+			Throws (field, instance, DateTime.MaxValue);
+			field.SetValue (instance, ByteEnum.MaxValue);
+			Assert.AreEqual (ByteEnum.MaxValue, (ByteEnum) instance.field_UInt16Enum);
+			Throws (field, instance, SByteEnum.MaxValue);
+			Throws (field, instance, Int16Enum.MaxValue);
+			field.SetValue (instance, UInt16Enum.MaxValue);
+			Assert.AreEqual (UInt16Enum.MaxValue, instance.field_UInt16Enum);
+			Throws (field, instance, Int32Enum.MaxValue);
+			Throws (field, instance, UInt32Enum.MaxValue);
+			Throws (field, instance, Int64Enum.MaxValue);
+			Throws (field, instance, UInt64Enum.MaxValue);
+			field = fh.GetField ("field_Int32Enum");
+			field.SetValue (instance, Byte.MaxValue);
+			Assert.AreEqual (Byte.MaxValue, (byte) instance.field_Int32Enum);
+			field.SetValue (instance, SByte.MaxValue);
+			Assert.AreEqual (SByte.MaxValue, (sbyte) instance.field_Int32Enum);
+			Throws (field, instance, true);
+			field.SetValue (instance, Char.MaxValue);
+			Assert.AreEqual (Char.MaxValue, (char) instance.field_Int32Enum);
+			field.SetValue (instance, Int16.MaxValue);
+			Assert.AreEqual (Int16.MaxValue, (Int16) instance.field_Int32Enum);
+			field.SetValue (instance, UInt16.MaxValue);
+			Assert.AreEqual (UInt16.MaxValue, (UInt16) instance.field_Int32Enum);
+			field.SetValue (instance, Int32.MaxValue);
+			Assert.AreEqual (Int32.MaxValue, (Int32) instance.field_Int32Enum);
+			Throws (field, instance, UInt32.MaxValue);
+			Throws (field, instance, Int64.MaxValue);
+			Throws (field, instance, UInt64.MaxValue);
+			Throws (field, instance, Single.MaxValue);
+			Throws (field, instance, Double.MaxValue);
+			Throws (field, instance, IntPtr.Zero);
+			Throws (field, instance, UIntPtr.Zero);
+			Throws (field, instance, Decimal.MaxValue);
+			Throws (field, instance, DateTime.MaxValue);
+			field.SetValue (instance, ByteEnum.MaxValue);
+			Assert.AreEqual (ByteEnum.MaxValue, (ByteEnum) instance.field_Int32Enum);
+			field.SetValue (instance, SByteEnum.MaxValue);
+			Assert.AreEqual (SByteEnum.MaxValue, (SByteEnum) instance.field_Int32Enum);
+			field.SetValue (instance, Int16Enum.MaxValue);
+			Assert.AreEqual (Int16Enum.MaxValue, (Int16Enum) instance.field_Int32Enum);
+			field.SetValue (instance, UInt16Enum.MaxValue);
+			Assert.AreEqual (UInt16Enum.MaxValue, (UInt16Enum) instance.field_Int32Enum);
+			field.SetValue (instance, Int32Enum.MaxValue);
+			Assert.AreEqual (Int32Enum.MaxValue, instance.field_Int32Enum);
+			Throws (field, instance, UInt32Enum.MaxValue);
+			Throws (field, instance, Int64Enum.MaxValue);
+			Throws (field, instance, UInt64Enum.MaxValue);
+			field = fh.GetField ("field_UInt32Enum");
+			field.SetValue (instance, Byte.MaxValue);
+			Assert.AreEqual (Byte.MaxValue, (byte) instance.field_UInt32Enum);
+			Throws (field, instance, SByte.MaxValue);
+			Throws (field, instance, true);
+			field.SetValue (instance, Char.MaxValue);
+			Assert.AreEqual (Char.MaxValue, (char) instance.field_UInt32Enum);
+			Throws (field, instance, Int16.MaxValue);
+			field.SetValue (instance, UInt16.MaxValue);
+			Assert.AreEqual (UInt16.MaxValue, (UInt16) instance.field_UInt32Enum);
+			Throws (field, instance, Int32.MaxValue);
+			field.SetValue (instance, UInt32.MaxValue);
+			Assert.AreEqual (UInt32.MaxValue, (UInt32) instance.field_UInt32Enum);
+			Throws (field, instance, Int64.MaxValue);
+			Throws (field, instance, UInt64.MaxValue);
+			Throws (field, instance, Single.MaxValue);
+			Throws (field, instance, Double.MaxValue);
+			Throws (field, instance, IntPtr.Zero);
+			Throws (field, instance, UIntPtr.Zero);
+			Throws (field, instance, Decimal.MaxValue);
+			Throws (field, instance, DateTime.MaxValue);
+			field.SetValue (instance, ByteEnum.MaxValue);
+			Assert.AreEqual (ByteEnum.MaxValue, (ByteEnum) instance.field_UInt32Enum);
+			Throws (field, instance, SByteEnum.MaxValue);
+			Throws (field, instance, Int16Enum.MaxValue);
+			field.SetValue (instance, UInt16Enum.MaxValue);
+			Assert.AreEqual (UInt16Enum.MaxValue, (UInt16Enum) instance.field_UInt32Enum);
+			Throws (field, instance, Int32Enum.MaxValue);
+			field.SetValue (instance, UInt32Enum.MaxValue);
+			Assert.AreEqual (UInt32Enum.MaxValue, instance.field_UInt32Enum);
+			Throws (field, instance, Int64Enum.MaxValue);
+			Throws (field, instance, UInt64Enum.MaxValue);
+			field = fh.GetField ("field_Int64Enum");
+			field.SetValue (instance, Byte.MaxValue);
+			Assert.AreEqual (Byte.MaxValue, (byte) instance.field_Int64Enum);
+			field.SetValue (instance, SByte.MaxValue);
+			Assert.AreEqual (SByte.MaxValue, (sbyte) instance.field_Int64Enum);
+			Throws (field, instance, true);
+			field.SetValue (instance, Char.MaxValue);
+			Assert.AreEqual (Char.MaxValue, (char) instance.field_Int64Enum);
+			field.SetValue (instance, Int16.MaxValue);
+			Assert.AreEqual (Int16.MaxValue, (Int16) instance.field_Int64Enum);
+			field.SetValue (instance, UInt16.MaxValue);
+			Assert.AreEqual (UInt16.MaxValue, (UInt16) instance.field_Int64Enum);
+			field.SetValue (instance, Int32.MaxValue);
+			Assert.AreEqual (Int32.MaxValue, (Int32) instance.field_Int64Enum);
+			field.SetValue (instance, UInt32.MaxValue);
+			Assert.AreEqual (UInt32.MaxValue, (UInt32) instance.field_Int64Enum);
+			field.SetValue (instance, Int64.MaxValue);
+			Assert.AreEqual (Int64.MaxValue, (Int64) instance.field_Int64Enum);
+			Throws (field, instance, UInt64.MaxValue);
+			Throws (field, instance, Single.MaxValue);
+			Throws (field, instance, Double.MaxValue);
+			Throws (field, instance, IntPtr.Zero);
+			Throws (field, instance, UIntPtr.Zero);
+			Throws (field, instance, Decimal.MaxValue);
+			Throws (field, instance, DateTime.MaxValue);
+			field.SetValue (instance, ByteEnum.MaxValue);
+			Assert.AreEqual (ByteEnum.MaxValue, (ByteEnum) instance.field_Int64Enum);
+			field.SetValue (instance, SByteEnum.MaxValue);
+			Assert.AreEqual (SByteEnum.MaxValue, (SByteEnum) instance.field_Int64Enum);
+			field.SetValue (instance, Int16Enum.MaxValue);
+			Assert.AreEqual (Int16Enum.MaxValue, (Int16Enum) instance.field_Int64Enum);
+			field.SetValue (instance, UInt16Enum.MaxValue);
+			Assert.AreEqual (UInt16Enum.MaxValue, (UInt16Enum) instance.field_Int64Enum);
+			field.SetValue (instance, Int32Enum.MaxValue);
+			Assert.AreEqual (Int32Enum.MaxValue, (Int32Enum) instance.field_Int64Enum);
+			field.SetValue (instance, UInt32Enum.MaxValue);
+			Assert.AreEqual (UInt32Enum.MaxValue, (UInt32Enum) instance.field_Int64Enum);
+			field.SetValue (instance, Int64Enum.MaxValue);
+			Assert.AreEqual (Int64Enum.MaxValue, instance.field_Int64Enum);
+			Throws (field, instance, UInt64Enum.MaxValue);
+			field = fh.GetField ("field_UInt64Enum");
+			field.SetValue (instance, Byte.MaxValue);
+			Assert.AreEqual (Byte.MaxValue, (byte) instance.field_UInt64Enum);
+			Throws (field, instance, SByte.MaxValue);
+			Throws (field, instance, true);
+			field.SetValue (instance, Char.MaxValue);
+			Assert.AreEqual (Char.MaxValue, (char) instance.field_UInt64Enum);
+			Throws (field, instance, Int16.MaxValue);
+			field.SetValue (instance, UInt16.MaxValue);
+			Assert.AreEqual (UInt16.MaxValue, (UInt16) instance.field_UInt64Enum);
+			Throws (field, instance, Int32.MaxValue);
+			field.SetValue (instance, UInt32.MaxValue);
+			Assert.AreEqual (UInt32.MaxValue, (UInt32) instance.field_UInt64Enum);
+			Throws (field, instance, Int64.MaxValue);
+			field.SetValue (instance, UInt64.MaxValue);
+			Assert.AreEqual (UInt64.MaxValue, (UInt64) instance.field_UInt64Enum);
+			Throws (field, instance, Single.MaxValue);
+			Throws (field, instance, Double.MaxValue);
+			Throws (field, instance, IntPtr.Zero);
+			Throws (field, instance, UIntPtr.Zero);
+			Throws (field, instance, Decimal.MaxValue);
+			Throws (field, instance, DateTime.MaxValue);
+			field.SetValue (instance, ByteEnum.MaxValue);
+			Assert.AreEqual (ByteEnum.MaxValue, (ByteEnum) instance.field_UInt64Enum);
+			Throws (field, instance, SByteEnum.MaxValue);
+			Throws (field, instance, Int16Enum.MaxValue);
+			field.SetValue (instance, UInt16Enum.MaxValue);
+			Assert.AreEqual (UInt16Enum.MaxValue, (UInt16Enum) instance.field_UInt64Enum);
+			Throws (field, instance, Int32Enum.MaxValue);
+			field.SetValue (instance, UInt32Enum.MaxValue);
+			Assert.AreEqual (UInt32Enum.MaxValue, (UInt32Enum) instance.field_UInt64Enum);
+			Throws (field, instance, Int64Enum.MaxValue);
+			field.SetValue (instance, UInt64Enum.MaxValue);
+			Assert.AreEqual (UInt64Enum.MaxValue, instance.field_UInt64Enum);
+
+		}
+
+		static void Throws (FieldInfo field, object instance, object value)
+		{
+			try {
+				field.SetValue (instance, value);
+				Assert.Fail ("ArgumentException expected");
+			} catch (ArgumentException ex) {
+			}
+		}
+
+		public object[] ObjectArrayField;
+
+		[Test]
+		public void TestSetValueArray ()
+		{
+			var field = typeof (FieldInfoTest).GetField ("ObjectArrayField");
+			var instance = new FieldInfoTest ();
+			field.SetValue (instance, new string[] { "3" });
+			field.SetValue (instance, null);
+
+			Throws (field, instance, new int[] { 3 });
+		}
+
+		public IntEnum PPP;
 
 		public class Foo<T>
 		{
@@ -526,26 +1364,31 @@ namespace MonoTests.System.Reflection
 		public const string string_field = "Hello";
 		public const FieldInfoTest object_field = null;
 		public int non_const_field;
-	
-#endif
+
 	}
 
-#if NET_2_0
+	// We do not refernece the field, that is expected
+#pragma warning disable 169
 	// Helper classes
 	class RefOnlyFieldClass 
 	{
 		// Helper property
 		static int RefOnlyField;
 	}
-
+#pragma warning restore 169
+	
 	class NonPublicFieldClass
 	{
 		protected int protectedField;
+
+		public void Dummy ()
+		{
+			protectedField = 1;
+		}
 	}
 
 	public class FieldInfoTest<T>
 	{
 		public T TestField;
 	}
-#endif
 }

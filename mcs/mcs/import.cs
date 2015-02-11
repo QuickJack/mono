@@ -56,10 +56,10 @@ namespace Mono.CSharp
 			//
 			// Returns true when object at local position has dynamic attribute flag
 			//
-			public bool IsDynamicObject (MetadataImporter importer)
+			public bool IsDynamicObject ()
 			{
 				if (provider != null)
-					ReadAttribute (importer);
+					ReadAttribute ();
 
 				return flags != null && Position < flags.Length && flags[Position];
 			}
@@ -67,23 +67,32 @@ namespace Mono.CSharp
 			//
 			// Returns true when DynamicAttribute exists
 			//
-			public bool HasDynamicAttribute (MetadataImporter importer)
+			public bool HasDynamicAttribute ()
 			{
 				if (provider != null)
-					ReadAttribute (importer);
+					ReadAttribute ();
 
 				return flags != null;
 			}
 
-			void ReadAttribute (MetadataImporter importer)
+			IList<CustomAttributeData> GetCustomAttributes ()
 			{
-				IList<CustomAttributeData> cad;
-				if (provider is MemberInfo) {
-					cad = CustomAttributeData.GetCustomAttributes ((MemberInfo) provider);
-				} else if (provider is ParameterInfo) {
-					cad = CustomAttributeData.GetCustomAttributes ((ParameterInfo) provider);
-				} else {
-					provider = null;
+				var mi = provider as MemberInfo;
+				if (mi != null)
+					return CustomAttributeData.GetCustomAttributes (mi);
+
+				var pi = provider as ParameterInfo;
+				if (pi != null)
+					return CustomAttributeData.GetCustomAttributes (pi);
+
+				provider = null;
+				return null;
+			}
+
+			void ReadAttribute ()
+			{
+				var cad = GetCustomAttributes ();
+				if (cad == null) {
 					return;
 				}
 
@@ -152,7 +161,7 @@ namespace Mono.CSharp
 
 		public FieldSpec CreateField (FieldInfo fi, TypeSpec declaringType)
 		{
-			Modifiers mod = 0;
+			Modifiers mod;
 			var fa = fi.Attributes;
 			switch (fa & FieldAttributes.FieldAccessMask) {
 				case FieldAttributes.Public:
@@ -181,6 +190,12 @@ namespace Mono.CSharp
 
 			try {
 				field_type = ImportType (fi.FieldType, new DynamicTypeReader (fi));
+
+				//
+				// Private field has private type which is not fixed buffer
+				//
+				if (field_type == null)
+					return null;
 			} catch (Exception e) {
 				// TODO: I should construct fake TypeSpec based on TypeRef signature
 				// but there is no way to do it with System.Reflection
@@ -193,7 +208,7 @@ namespace Mono.CSharp
 			if ((fa & FieldAttributes.Literal) != 0) {
 				Constant c = field_type.Kind == MemberKind.MissingType ?
 					new NullConstant (InternalType.ErrorType, Location.Null) :
-					Constant.CreateConstantFromValue (field_type, fi.GetRawConstantValue (), Location.Null);
+					CreateConstantFromValue (field_type, fi);
 				return new ConstSpec (declaringType, definition, field_type, fi, mod, c);
 			}
 
@@ -220,11 +235,30 @@ namespace Mono.CSharp
 
 					// TODO: Sanity check on field_type (only few types are allowed)
 					var element_field = CreateField (fi.FieldType.GetField (FixedField.FixedElementName), declaringType);
-					return new FixedFieldSpec (declaringType, definition, fi, element_field, mod);
+					return new FixedFieldSpec (module, declaringType, definition, fi, element_field, mod);
 				}
 			}
 
 			return new FieldSpec (declaringType, definition, field_type, fi, mod);
+		}
+
+		Constant CreateConstantFromValue (TypeSpec fieldType, FieldInfo fi)
+		{
+			var value = fi.GetRawConstantValue ();
+			//
+			// Metadata value can be encoded using different constant value type
+			// than is actual field type
+			//
+			// e.g. unsigned int16 CONSTANT = int16 (0x0000ffff)
+			//
+			if (value != null && !fieldType.IsEnum) {
+				var c = ImportConstant (value);
+				if (c != null) {
+					return fieldType == c.Type ? c : c.ConvertExplicitly (false, fieldType);
+				}
+			}
+
+			return Constant.CreateConstantFromValue (fieldType, value, Location.Null);
 		}
 
 		public EventSpec CreateEvent (EventInfo ei, TypeSpec declaringType, MethodSpec add, MethodSpec remove)
@@ -324,13 +358,15 @@ namespace Mono.CSharp
 					//    IFoo<A<T>> foo;	// A<T> is definition in this case
 					// }
 					//
-					// TODO: Is full logic from CreateType needed here as well?
-					//
 					if (!IsMissingType (type) && type.IsGenericTypeDefinition) {
-						var targs = CreateGenericArguments (0, type.GetGenericArguments (), dtype);
+						var start_pos = spec.DeclaringType == null ? 0 : spec.DeclaringType.MemberDefinition.TypeParametersCount;
+						var targs = CreateGenericArguments (start_pos, type.GetGenericArguments (), dtype);
 						spec = spec.MakeGenericType (module, targs);
 					}
 				}
+
+				if (spec == null)
+					return null;
 
 				++dtype.Position;
 				tspec[index] = spec;
@@ -368,7 +404,7 @@ namespace Mono.CSharp
 				kind = MemberKind.Method;
 				if (tparams == null && !mb.DeclaringType.IsInterface && name.Length > 6) {
 					if ((mod & (Modifiers.STATIC | Modifiers.PUBLIC)) == (Modifiers.STATIC | Modifiers.PUBLIC)) {
-						if (name[2] == '_' && name[1] == 'p' && name[0] == 'o') {
+						if (name[2] == '_' && name[1] == 'p' && name[0] == 'o' && (mb.Attributes & MethodAttributes.SpecialName) != 0) {
 							var op_type = Operator.GetType (name);
 							if (op_type.HasValue && parameters.Count > 0 && parameters.Count < 3) {
 								kind = MemberKind.Operator;
@@ -417,10 +453,12 @@ namespace Mono.CSharp
 						else
 							mod |= Modifiers.VIRTUAL;
 					}
+				} else if (parameters.HasExtensionMethodType) {
+					mod |= Modifiers.METHOD_EXTENSION;
 				}
 			}
 
-			IMemberDefinition definition;
+			IMethodDefinition definition;
 			if (tparams != null) {
 				var gmd = new ImportedGenericMethodDefinition ((MethodInfo) mb, returnType, parameters, tparams, this);
 				foreach (var tp in gmd.TypeParameters) {
@@ -429,10 +467,10 @@ namespace Mono.CSharp
 
 				definition = gmd;
 			} else {
-				definition = new ImportedParameterMemberDefinition (mb, returnType, parameters, this);
+				definition = new ImportedMethodDefinition (mb, returnType, parameters, this);
 			}
 
-			MethodSpec ms = new MethodSpec (kind, declaringType, definition, returnType, mb, parameters, mod);
+			MethodSpec ms = new MethodSpec (kind, declaringType, definition, returnType, parameters, mod);
 			if (tparams != null)
 				ms.IsGeneric = true;
 
@@ -494,7 +532,7 @@ namespace Mono.CSharp
 				} else if (i == 0 && method.IsStatic && (parent.Modifiers & Modifiers.METHOD_EXTENSION) != 0 &&
 					HasAttribute (CustomAttributeData.GetCustomAttributes (method), "ExtensionAttribute", CompilerServicesNamespace)) {
 					mod = Parameter.Modifier.This;
-					types[i] = ImportType (p.ParameterType);
+					types[i] = ImportType (p.ParameterType, new DynamicTypeReader (p));
 				} else {
 					types[i] = ImportType (p.ParameterType, new DynamicTypeReader (p));
 
@@ -512,7 +550,7 @@ namespace Mono.CSharp
 							if (value == null) {
 								default_value = Constant.CreateConstantFromValue (ptype, null, Location.Null);
 							} else {
-								default_value = ImportParameterConstant (value);
+								default_value = ImportConstant (value);
 
 								if (ptype.IsEnum) {
 									default_value = new EnumConstant ((Constant) default_value, ptype);
@@ -538,7 +576,7 @@ namespace Mono.CSharp
 						} else if (value == null) {
 							default_value = new DefaultValueExpression (new TypeExpression (ptype, Location.Null), Location.Null);
 						} else if (ptype.BuiltinType == BuiltinTypeSpec.Type.Decimal) {
-							default_value = ImportParameterConstant (value);
+							default_value = ImportConstant (value);
 						}
 					}
 				}
@@ -714,7 +752,7 @@ namespace Mono.CSharp
 			TypeSpec spec;
 			if (import_cache.TryGetValue (type, out spec)) {
 				if (spec.BuiltinType == BuiltinTypeSpec.Type.Object) {
-					if (dtype.IsDynamicObject (this))
+					if (dtype.IsDynamicObject ())
 						return module.Compiler.BuiltinTypes.Dynamic;
 
 					return spec;
@@ -723,7 +761,7 @@ namespace Mono.CSharp
 				if (!spec.IsGeneric || type.IsGenericTypeDefinition)
 					return spec;
 
-				if (!dtype.HasDynamicAttribute (this))
+				if (!dtype.HasDynamicAttribute ())
 					return spec;
 
 				// We've found same object in the cache but this one has a dynamic custom attribute
@@ -748,6 +786,8 @@ namespace Mono.CSharp
 					return spec;
 
 				var targs = CreateGenericArguments (0, type.GetGenericArguments (), dtype);
+				if (targs == null)
+					return null;
 				if (declaringType == null) {
 					// Simple case, no nesting
 					spec = CreateType (type_def, null, new DynamicTypeReader (), canImportBaseType);
@@ -774,24 +814,34 @@ namespace Mono.CSharp
 
 					for (int i = nested_hierarchy.Count; i != 0; --i) {
 						var t = nested_hierarchy [i - 1];
-						spec = MemberCache.FindNestedType (spec, t.Name, t.Arity);
+						if (t.Kind == MemberKind.MissingType)
+							spec = t;
+						else
+							spec = MemberCache.FindNestedType (spec, t.Name, t.Arity);
+
 						if (t.Arity > 0) {
 							spec = spec.MakeGenericType (module, targs.Skip (targs_pos).Take (spec.Arity).ToArray ());
 							targs_pos += t.Arity;
 						}
 					}
 
-					string name = type.Name;
-					int index = name.IndexOf ('`');
-					if (index > 0)
-						name = name.Substring (0, index);
+					if (spec.Kind == MemberKind.MissingType) {
+						spec = new TypeSpec (MemberKind.MissingType, spec, new ImportedTypeDefinition (type_def, this), type_def, Modifiers.PUBLIC);
+						spec.MemberCache = MemberCache.Empty;
+					} else {
+						if ((type_def.Attributes & TypeAttributes.VisibilityMask) == TypeAttributes.NestedPrivate && IgnorePrivateMembers)
+							return null;
 
-					spec = MemberCache.FindNestedType (spec, name, targs.Length - targs_pos);
-					if (spec == null)
-						return null;
+						string name = type.Name;
+						int index = name.IndexOf ('`');
+						if (index > 0)
+							name = name.Substring (0, index);
 
-					if (spec.Arity > 0) {
-						spec = spec.MakeGenericType (module, targs.Skip (targs_pos).ToArray ());
+						spec = MemberCache.FindNestedType (spec, name, targs.Length - targs_pos);
+
+						if (spec.Arity > 0) {
+							spec = spec.MakeGenericType (module, targs.Skip (targs_pos).ToArray ());
+						}
 					}
 				}
 
@@ -847,9 +897,10 @@ namespace Mono.CSharp
 
 				if (kind == MemberKind.Class) {
 					if ((ma & TypeAttributes.Sealed) != 0) {
-						mod |= Modifiers.SEALED;
 						if ((ma & TypeAttributes.Abstract) != 0)
 							mod |= Modifiers.STATIC;
+						else
+							mod |= Modifiers.SEALED;
 					} else if ((ma & TypeAttributes.Abstract) != 0) {
 						mod |= Modifiers.ABSTRACT;
 					}
@@ -1006,58 +1057,6 @@ namespace Mono.CSharp
 				spec.BaseType = base_type;
 			}
 
-			MetaType[] ifaces;
-#if STATIC
-			ifaces = type.__GetDeclaredInterfaces ();
-			if (ifaces.Length != 0) {
-				foreach (var iface in ifaces) {
-					var it = CreateType (iface);
-					if (it == null)
-						continue;
-
-					spec.AddInterface (it);
-
-					// Unfortunately not all languages expand inherited interfaces
-					var bifaces = it.Interfaces;
-					if (bifaces != null) {
-						foreach (var biface in bifaces) {
-							spec.AddInterface (biface);
-						}
-					}
-				}
-			}
-
-			//
-			// It's impossible to get declared interfaces only using System.Reflection
-			// hence we need to mimic the behavior with ikvm-reflection too to keep
-			// our type look-up logic same
-			//
-			if (spec.BaseType != null) {
-				var bifaces = spec.BaseType.Interfaces;
-				if (bifaces != null) {
-					//
-					// Before adding base class interfaces close defined interfaces
-					// on type parameter
-					//
-					var tp = spec as TypeParameterSpec;
-					if (tp != null && tp.InterfacesDefined == null) {
-						tp.InterfacesDefined = TypeSpec.EmptyTypes;
-					}
-
-					foreach (var iface in bifaces)
-						spec.AddInterface (iface);
-				}
-			}
-#else
-			ifaces = type.GetInterfaces ();
-
-			if (ifaces.Length > 0) {
-				foreach (var iface in ifaces) {
-					spec.AddInterface (CreateType (iface));
-				}
-			}
-#endif
-
 			if (spec.MemberDefinition.TypeParametersCount > 0) {
 				foreach (var tp in spec.MemberDefinition.TypeParameters) {
 					ImportTypeParameterTypeConstraints (tp, tp.GetMetaInfo ());
@@ -1129,7 +1128,7 @@ namespace Mono.CSharp
 				spec.TypeArguments = tparams.ToArray ();
 		}
 
-		Constant ImportParameterConstant (object value)
+		Constant ImportConstant (object value)
 		{
 			//
 			// Get type of underlying value as int constant can be used for object
@@ -1190,6 +1189,14 @@ namespace Mono.CSharp
 					return PointerContainer.MakeType (module, spec);
 
 				throw new NotImplementedException ("Unknown element type " + type.ToString ());
+			}
+
+			TypeSpec compiled_type;
+			if (compiled_types.TryGetValue (type, out compiled_type)) {
+				if (compiled_type.BuiltinType == BuiltinTypeSpec.Type.Object && dtype.IsDynamicObject ())
+					return module.Compiler.BuiltinTypes.Dynamic;
+
+				return compiled_type;
 			}
 
 			return CreateType (type, dtype, true);
@@ -1299,6 +1306,23 @@ namespace Mono.CSharp
 			public string DefaultIndexerName;
 			public bool? CLSAttributeValue;
 			public TypeSpec CoClass;
+
+			static bool HasMissingType (ConstructorInfo ctor)
+			{
+#if STATIC
+				//
+				// Mimic odd csc behaviour where missing type on predefined
+				// attributes means the attribute is silently ignored. This can
+				// happen with PCL facades
+				//
+				foreach (var p in ctor.GetParameters ()) {
+					if (p.ParameterType.__ContainsMissingType)
+						return true;
+				}
+#endif
+
+				return false;
+			}
 			
 			public static AttributesBag Read (MemberInfo mi, MetadataImporter importer)
 			{
@@ -1373,6 +1397,9 @@ namespace Mono.CSharp
 							if (dt.Namespace != "System")
 								continue;
 
+							if (HasMissingType (a.Constructor))
+								continue;
+
 							if (bag == null)
 								bag = new AttributesBag ();
 
@@ -1389,6 +1416,9 @@ namespace Mono.CSharp
 						// Interface only attribute
 						if (name == "CoClassAttribute") {
 							if (dt.Namespace != "System.Runtime.InteropServices")
+								continue;
+
+							if (HasMissingType (a.Constructor))
 								continue;
 
 							if (bag == null)
@@ -1414,7 +1444,7 @@ namespace Mono.CSharp
 		protected AttributesBag cattrs;
 		protected readonly MetadataImporter importer;
 
-		public ImportedDefinition (MemberInfo provider, MetadataImporter importer)
+		protected ImportedDefinition (MemberInfo provider, MetadataImporter importer)
 		{
 			this.provider = provider;
 			this.importer = importer;
@@ -1735,7 +1765,7 @@ namespace Mono.CSharp
 	{
 		readonly AParametersCollection parameters;
 
-		public ImportedParameterMemberDefinition (MethodBase provider, TypeSpec type, AParametersCollection parameters, MetadataImporter importer)
+		protected ImportedParameterMemberDefinition (MethodBase provider, TypeSpec type, AParametersCollection parameters, MetadataImporter importer)
 			: base (provider, type, importer)
 		{
 			this.parameters = parameters;
@@ -1758,7 +1788,21 @@ namespace Mono.CSharp
 		#endregion
 	}
 
-	class ImportedGenericMethodDefinition : ImportedParameterMemberDefinition, IGenericMethodDefinition
+	class ImportedMethodDefinition : ImportedParameterMemberDefinition, IMethodDefinition
+	{
+		public ImportedMethodDefinition (MethodBase provider, TypeSpec type, AParametersCollection parameters, MetadataImporter importer)
+			: base (provider, type, parameters, importer)
+		{
+		}
+
+		MethodBase IMethodDefinition.Metadata {
+			get {
+				return (MethodBase) provider;
+			}
+		}
+	}
+
+	class ImportedGenericMethodDefinition : ImportedMethodDefinition, IGenericMethodDefinition
 	{
 		readonly TypeParameterSpec[] tparams;
 
@@ -1826,6 +1870,16 @@ namespace Mono.CSharp
 			}
 		}
 
+		bool ITypeDefinition.IsCyclicTypeForwarder {
+			get {
+#if STATIC
+				return ((MetaType) provider).__IsCyclicTypeForwarder;
+#else
+				return false;
+#endif
+			}
+		}
+
 		public override string Name {
 			get {
 				if (name == null) {
@@ -1864,41 +1918,109 @@ namespace Mono.CSharp
 
 		#endregion
 
-		public static void Error_MissingDependency (IMemberContext ctx, List<TypeSpec> types, Location loc)
+		public void DefineInterfaces (TypeSpec spec)
+		{
+			var type = (MetaType) provider;
+			MetaType[] ifaces;
+#if STATIC
+			ifaces = type.__GetDeclaredInterfaces ();
+			if (ifaces.Length != 0) {
+				foreach (var iface in ifaces) {
+					var it = importer.CreateType (iface);
+					if (it == null)
+						continue;
+
+					spec.AddInterfaceDefined (it);
+
+					// Unfortunately not all languages expand inherited interfaces
+					var bifaces = it.Interfaces;
+					if (bifaces != null) {
+						foreach (var biface in bifaces) {
+							spec.AddInterfaceDefined (biface);
+						}
+					}
+				}
+			}
+			
+			//
+			// It's impossible to get declared interfaces only using System.Reflection
+			// hence we need to mimic the behavior with ikvm-reflection too to keep
+			// our type look-up logic same
+			//
+			if (spec.BaseType != null) {
+				var bifaces = spec.BaseType.Interfaces;
+				if (bifaces != null) {
+					//
+					// Before adding base class interfaces close defined interfaces
+					// on type parameter
+					//
+					var tp = spec as TypeParameterSpec;
+					if (tp != null && tp.InterfacesDefined == null) {
+						tp.InterfacesDefined = TypeSpec.EmptyTypes;
+					}
+
+					foreach (var iface in bifaces)
+						spec.AddInterfaceDefined (iface);
+				}
+			}
+#else
+			ifaces = type.GetInterfaces ();
+
+			if (ifaces.Length > 0) {
+				foreach (var iface in ifaces) {
+					spec.AddInterface (importer.CreateType (iface));
+				}
+			}
+#endif
+
+		}
+
+		public static void Error_MissingDependency (IMemberContext ctx, List<MissingTypeSpecReference> missing, Location loc)
 		{
 			// 
 			// Report details about missing type and most likely cause of the problem.
-			// csc reports 1683, 1684 as warnings but we report them only when used
+			// csc used to reports 1683, 1684 (now 7069) as warnings but we report them only when used
 			// or referenced from the user core in which case compilation error has to
 			// be reported because compiler cannot continue anyway
 			//
-			for (int i = 0; i < types.Count; ++i) {
-				var t = types [i];
+
+			var report = ctx.Module.Compiler.Report;
+
+			for (int i = 0; i < missing.Count; ++i) {
+				var t = missing [i].Type;
 
 				//
-				// Report missing types only once per type
+				// Report missing types only once
 				//
-				if (i > 0 && types.IndexOf (t) < i)
+				if (report.Printer.MissingTypeReported (t.MemberDefinition))
 					continue;
 
 				string name = t.GetSignatureForError ();
 
-				if (t.MemberDefinition.DeclaringAssembly == ctx.Module.DeclaringAssembly) {
-					ctx.Module.Compiler.Report.Error (1683, loc,
+				var caller = missing[i].Caller;
+				if (caller.Kind != MemberKind.MissingType)
+					report.SymbolRelatedToPreviousError (caller);
+
+				var definition = t.MemberDefinition;
+				if (definition.DeclaringAssembly == ctx.Module.DeclaringAssembly) {
+					report.Error (1683, loc,
 						"Reference to type `{0}' claims it is defined in this assembly, but it is not defined in source or any added modules",
 						name);
-				} else if (t.MemberDefinition.DeclaringAssembly.IsMissing) {
-					if (t.MemberDefinition.IsTypeForwarder) {
-						ctx.Module.Compiler.Report.Error (1070, loc,
+				} else if (definition.DeclaringAssembly.IsMissing) {
+					if (definition.IsTypeForwarder) {
+						report.Error (1070, loc,
 							"The type `{0}' has been forwarded to an assembly that is not referenced. Consider adding a reference to assembly `{1}'",
-							name, t.MemberDefinition.DeclaringAssembly.FullName);
+							name, definition.DeclaringAssembly.FullName);
 					} else {
-						ctx.Module.Compiler.Report.Error (12, loc,
+						report.Error (12, loc,
 							"The type `{0}' is defined in an assembly that is not referenced. Consider adding a reference to assembly `{1}'",
-							name, t.MemberDefinition.DeclaringAssembly.FullName);
+							name, definition.DeclaringAssembly.FullName);
 					}
+				} else if (definition.IsTypeForwarder) {
+					report.Error (731, loc, "The type forwarder for type `{0}' in assembly `{1}' has circular dependency",
+						name, definition.DeclaringAssembly.FullName);
 				} else {
-					ctx.Module.Compiler.Report.Error (1684, loc,
+					report.Error (7069, loc,
 						"Reference to type `{0}' claims it is defined assembly `{1}', but it could not be found",
 						name, t.MemberDefinition.DeclaringAssembly.FullName);
 				}
@@ -2075,7 +2197,13 @@ namespace Mono.CSharp
 						if (get == null && set == null)
 							continue;
 
-						imported = importer.CreateProperty (p, declaringType, get, set);
+						try {
+							imported = importer.CreateProperty (p, declaringType, get, set);
+						} catch (Exception ex) {
+							throw new InternalErrorException (ex, "Could not import property `{0}' inside `{1}'",
+								p.Name, declaringType.GetSignatureForError ());
+						}
+
 						if (imported == null)
 							continue;
 
@@ -2184,6 +2312,12 @@ namespace Mono.CSharp
 		}
 
 		bool ITypeDefinition.IsTypeForwarder {
+			get {
+				return false;
+			}
+		}
+
+		bool ITypeDefinition.IsCyclicTypeForwarder {
 			get {
 				return false;
 			}

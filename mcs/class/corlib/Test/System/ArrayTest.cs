@@ -61,7 +61,21 @@ public class ArrayTest
 {
 	char [] arrsort = {'d', 'b', 'f', 'e', 'a', 'c'};
 
-	public ArrayTest() {}
+	interface I
+	{
+	}
+
+	class C
+	{
+	}
+
+	class DC : C
+	{
+	}
+
+	class DI : I
+	{
+	}
 
 	[Test]
 	public void TestIsFixedSize() {
@@ -488,14 +502,24 @@ public class ArrayTest
 	}
 
 	[Test]
-	[ExpectedException (typeof (InvalidCastException))]
 	public void Copy_InvalidCast () {
 		object[] arr1 = new object [10];
 		Type[] arr2 = new Type [10];
-
 		arr1 [0] = new object ();
 
-		Array.Copy (arr1, 0, arr2, 0, 10);
+		try {
+			Array.Copy (arr1, 0, arr2, 0, 10);
+			Assert.Fail ("#1");
+		} catch (InvalidCastException) {
+		}
+
+		var arr1_2 = new I [1] { new DI () };
+		var arr2_2 = new C [1] { new DC () };
+		try {
+			Array.Copy (arr2_2, arr1_2, 1);
+			Assert.Fail ("#1");
+		} catch (InvalidCastException) {
+		}
 	}
 
 	[Test]
@@ -519,11 +543,6 @@ public class ArrayTest
 			} catch (ArgumentException) {
 				errorThrown = true;
 			}
-#if TARGET_JVM // This is really implementation dependent behaviour.
-			catch (RankException) {
-				errorThrown = true;
-			}
-#endif // TARGET_JVM
 			Assert.IsTrue (errorThrown, "#E62");
 		}
 		{
@@ -683,7 +702,6 @@ public class ArrayTest
 			}
 			Assert.IsTrue (errorThrown, "#F03b");
 		}
-#if !TARGET_JVM // Arrays lower bounds are not supported for TARGET_JVM
 		{
 			bool errorThrown = false;
 			try {
@@ -693,7 +711,6 @@ public class ArrayTest
 			}
 			Assert.IsTrue (errorThrown, "#F04");
 		}
-#endif // TARGET_JVM
 		{
 			bool errorThrown = false;
 			try {
@@ -704,7 +721,6 @@ public class ArrayTest
 			}
 			Assert.IsTrue (errorThrown, "#F05");
 		}
-#if !TARGET_JVM // CreateInstance with lower bounds not supported for TARGET_JVM
 		{
 			bool errorThrown = false;
 			try {
@@ -747,7 +763,6 @@ public class ArrayTest
 		Type szarrayType = new int [10].GetType ();
 		Assert.IsTrue (szarrayType == (Array.CreateInstance (typeof (int), new int[] {1}, new int[] {0})).GetType ());
 		Assert.IsTrue (szarrayType != (Array.CreateInstance (typeof (int), new int[] {1}, new int[] {1})).GetType ());
-#endif // TARGET_JVM
 	}
 	
 	[Test]
@@ -818,7 +833,6 @@ public class ArrayTest
 	}
 
 	[Test]
-	[Category ("TargetJvmNotSupported")] // Arrays lower bounds are not supported for TARGET_JVM
 	public void TestGetEnumeratorNonZeroLowerBounds() {
 		int[] myLengthsArray = new int[2] { 3, 5 };
 		int[] myBoundsArray = new int[2] { 2, 3 };
@@ -847,7 +861,6 @@ public class ArrayTest
 	}
 
 	[Test]
-	[Category ("TargetJvmNotSupported")] // Arrays lower bounds are not supported for TARGET_JVM
 	public void TestIList_Add () {
 		int[] myLengthsArray = new int[2] { 3, 5 };
 		int[] myBoundsArray = new int[2] { 2, 3 };
@@ -868,7 +881,6 @@ public class ArrayTest
 	}
 
 	[Test]
-	[Category ("TargetJvmNotSupported")] // Arrays lower bounds are not supported for TARGET_JVM
 	public void TestIList_Insert () {
 		int[] myLengthsArray = new int[2] { 3, 5 };
 		int[] myBoundsArray = new int[2] { 2, 3 };
@@ -889,7 +901,6 @@ public class ArrayTest
 	}
 
 	[Test]
-	[Category ("TargetJvmNotSupported")] // Arrays lower bounds are not supported for TARGET_JVM
 	public void TestIList_Remove () {
 		int[] myLengthsArray = new int[2] { 3, 5 };
 		int[] myBoundsArray = new int[2] { 2, 3 };
@@ -910,7 +921,6 @@ public class ArrayTest
 	}
 
 	[Test]
-	[Category ("TargetJvmNotSupported")] // Arrays lower bounds are not supported for TARGET_JVM
 	public void TestIList_RemoveAt () {
 		int[] myLengthsArray = new int[2] { 3, 5 };
 		int[] myBoundsArray = new int[2] { 2, 3 };
@@ -931,7 +941,6 @@ public class ArrayTest
 	}
 
 	[Test]
-	[Category ("TargetJvmNotSupported")] // Arrays lower bounds are not supported for TARGET_JVM
 	public void TestIList_Contains () {
 		int[] myLengthsArray = new int[2] { 3, 5 };
 		int[] myBoundsArray = new int[2] { 2, 3 };
@@ -957,7 +966,6 @@ public class ArrayTest
 	}
 
 	[Test]
-	[Category ("TargetJvmNotSupported")] // Arrays lower bounds are not supported for TARGET_JVM
 	public void TestIList_IndexOf () {
 		int[] myLengthsArray = new int[2] { 3, 5 };
 		int[] myBoundsArray = new int[2] { 2, 3 };
@@ -1615,6 +1623,126 @@ public class ArrayTest
 			Array.LastIndexOf (array, (object) null, -100, 10);
 			Assert.Fail ("#06");
 		} catch (ArgumentOutOfRangeException e) {
+		}
+	}
+
+
+	[Test]
+	public void FindIndexTest ()
+	{
+		var a = new int[] { 2, 2, 2, 3, 2 };
+		Assert.AreEqual (2, Array.FindIndex (a, 2, 2, l => true));
+	}
+
+	[Test]
+	public void FindIndex_Invalid ()
+	{
+		var array = new int [] { 1, 2, 3, 4, 5 };
+
+		try {
+			Array.FindIndex (array, null);
+			Assert.Fail ("#1");
+		} catch (ArgumentNullException) {
+		}
+
+		try {
+			Array.FindIndex (array, -1, l => true);
+			Assert.Fail ("#2");
+		} catch (ArgumentOutOfRangeException) {
+		}
+
+		try {
+			Array.FindIndex (array, -1, 0, l => true);
+			Assert.Fail ("#2b");
+		} catch (ArgumentOutOfRangeException) {
+		}
+
+		try {
+			Array.FindIndex (array, 0, -1, l => true);
+			Assert.Fail ("#3");
+		} catch (ArgumentOutOfRangeException) {
+		}
+
+		try {
+			Array.FindIndex (array, 100, l => true);
+			Assert.Fail ("#4");
+		} catch (ArgumentOutOfRangeException) {
+		}
+
+		try {
+			Array.FindIndex (array, 100, 0, l => true);
+			Assert.Fail ("#4b");
+		} catch (ArgumentOutOfRangeException) {
+		}
+
+		try {
+			Array.FindIndex (array, 7, 2, l => true);
+			Assert.Fail ("#5");
+		} catch (ArgumentOutOfRangeException) {
+		}
+	}
+
+	[Test, ExpectedException (typeof (ArgumentNullException))]
+	public void FindLastNullTest ()
+	{
+		var array = new int [] { 1, 2, 3, 4, 5 };		
+		Array.FindLast (array, null);
+	}
+
+	[Test]
+	public void FindLastIndexTest ()
+	{
+		var array = new int [] { 1, 2, 3, 4, 5 };
+
+		Assert.AreEqual (2, Array.FindLastIndex (array, 2, 3, l => true));
+		Assert.AreEqual (2, Array.FindLastIndex (array, 2, 2, l => true));
+		Assert.AreEqual (1, Array.FindLastIndex (array, 1, 2, l => true));
+	}
+
+	[Test]
+	public void FindLastIndex_Invalid ()
+	{
+		var array = new int [] { 1, 2, 3, 4, 5 };
+		try {
+			Array.FindLastIndex (array, null);
+			Assert.Fail ("#1");
+		} catch (ArgumentNullException) {
+		}
+
+		try {
+			Array.FindLastIndex (array, -1, l => true);
+			Assert.Fail ("#2");
+		} catch (ArgumentOutOfRangeException) {
+		}
+
+		try {
+			Array.FindLastIndex (array, -1, 0, l => true);
+			Assert.Fail ("#2b");
+		} catch (ArgumentOutOfRangeException) {
+		}
+
+		try {
+			Array.FindLastIndex (array, 0, -1, l => true);
+			Assert.Fail ("#3");
+		} catch (ArgumentOutOfRangeException) {
+		}
+
+		try {
+			Array.FindLastIndex (array, 100, l => true);
+			Assert.Fail ("#4");
+		} catch (ArgumentOutOfRangeException) {
+		}
+
+		try {
+			Array.FindLastIndex (array, 100, 0, l => true);
+			Assert.Fail ("#4b");
+		} catch (ArgumentOutOfRangeException) {
+		}
+
+		try {
+			Array.FindLastIndex (array, 2, 4, l => true);
+			Assert.Fail ("#5");
+		} catch (ArgumentOutOfRangeException) {
 		}
 	}
 
@@ -2366,6 +2494,27 @@ public class ArrayTest
 		}
 	}
 
+	[Test]
+	public void Sort_NullValues ()
+	{
+		var s = new [] { "a", null, "b", null };
+		Array.Sort (s, (a, b) => {
+			if (a == null) {
+				return b == null ? 0 : 1;
+			}
+
+			if (b == null)
+				return -1;
+
+			return a.CompareTo (b);
+		});
+
+		Assert.AreEqual ("a", s [0], "#1");
+		Assert.AreEqual ("b", s [1], "#2");
+		Assert.IsNull (s [2], "#3");
+		Assert.IsNull (s [3], "#4");
+	}
+
 	[Test] // #616416
 	public void SortNonGenericDoubleItems () {
             double[] doubleValues = new double[11];
@@ -3013,7 +3162,6 @@ public class ArrayTest
 		public int i, j;
 	}
 
-#if !TARGET_JVM // BugBUG: T[] is not yet ICollection<T> under TARGET_JVM
 	[Test]
 	// From bug #80563
 	public void ICollectionNull ()
@@ -3069,7 +3217,6 @@ public class ArrayTest
 		Assert.AreEqual (-1, test.IndexOf (null), "array with test");
 	}
 	
-#endif // TARGET_JVM
 
 	#region Bug 80299
 
@@ -3292,6 +3439,16 @@ public class ArrayTest
 		}
 	}
 
+	[Test] //bxc #11184
+	public void UnalignedArrayClear ()
+	{
+		byte[] input = new byte[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 };
+		byte[] expected = new byte[] { 1, 2, 3, 4, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+		Array.Clear (input, 5, 11);
+		
+		Assert.AreEqual (input, expected);
+	}
+
 #if NET_4_0
 	[Test]
 	[ExpectedException (typeof (ArgumentException))]
@@ -3461,5 +3618,22 @@ public class ArrayTest
 
 #endif
 
+	[Test]
+	public void JaggedArrayCtor ()
+	{
+        var type = Type.GetType ("System.Object[][]");
+
+		ConstructorInfo ctor = null;
+        foreach (var c in type.GetConstructors ()) {
+			if (c.GetParameters ().Length == 2)
+				ctor = c;
+		}
+		Assert.IsNotNull (ctor);
+		var arr = (object[])ctor.Invoke (new object [] { 4, 10 });
+		for (int i = 0; i < 4; ++i) {
+			Assert.IsNotNull (arr [i]);
+			Assert.AreEqual (10, ((object[])arr [i]).Length);
+		}
+	}
 }
 }

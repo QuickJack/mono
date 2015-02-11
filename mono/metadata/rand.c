@@ -26,7 +26,7 @@
 #include <mono/metadata/rand.h>
 #include <mono/metadata/exception.h>
 
-#if !defined(__native_client__) && !defined(HOST_WIN32)
+#if !defined(__native_client__) && !defined(HOST_WIN32) && defined (HAVE_SYS_UN_H)
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <errno.h>
@@ -44,8 +44,8 @@ get_entropy_from_server (const char *path, guchar *buf, int len)
         ret = -1;
     else {
         egd_addr.sun_family = AF_UNIX;
-        strncpy (egd_addr.sun_path, path, MONO_SIZEOF_SUNPATH - 1);
-        egd_addr.sun_path [MONO_SIZEOF_SUNPATH-1] = '\0';
+        strncpy (egd_addr.sun_path, path, sizeof(egd_addr.sun_path) - 1);
+        egd_addr.sun_path [sizeof(egd_addr.sun_path)-1] = '\0';
         ret = connect (file, (struct sockaddr *)&egd_addr, sizeof(egd_addr));
     }
     if (ret == -1) {
@@ -180,7 +180,9 @@ ves_icall_System_Security_Cryptography_RNGCryptoServiceProvider_RngClose (gpoint
 	CryptReleaseContext ((HCRYPTPROV) handle, 0);
 }
 
-#elif defined (__native_client__)
+#elif defined (__native_client__) || !defined (HAVE_SYS_UN_H)
+
+#include <time.h>
 
 MonoBoolean
 ves_icall_System_Security_Cryptography_RNGCryptoServiceProvider_RngOpen (void)

@@ -47,8 +47,13 @@ namespace MonoTests.System.Security.Cryptography {
 		{
 			// that will return a AesCryptoServiceProvider
 			var aes = GetInstance ();
+#if MOBILE
+			Assert.AreEqual ("System.Security.Cryptography.AesManaged", aes.ToString (), "Default");
+			Assert.AreEqual (128, aes.FeedbackSize, "FeedbackSize");
+#else
 			Assert.AreEqual ("System.Security.Cryptography.AesCryptoServiceProvider", aes.ToString (), "Default");
 			Assert.AreEqual (8, aes.FeedbackSize, "FeedbackSize");
+#endif
 			ProcessBlockSizes (aes);
 		}
 

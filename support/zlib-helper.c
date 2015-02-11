@@ -45,7 +45,7 @@ gint WriteZStream (ZStream *stream, guchar *buffer, gint length);
 static gint flush_internal (ZStream *stream, gboolean is_final);
 
 static void *
-z_alloc (void *opaque, gsize nitems, gsize item_size)
+z_alloc (void *opaque, unsigned int nitems, unsigned int item_size)
 {
 	return g_malloc0 (nitems * item_size);
 }
@@ -183,11 +183,13 @@ ReadZStream (ZStream *stream, guchar *buffer, gint length)
 			n = stream->func (stream->buffer, BUFFER_SIZE, stream->gchandle);
 			if (n <= 0) {
 				stream->eof = TRUE;
-				break;
 			}
 			zs->next_in = stream->buffer;
 			zs->avail_in = n;
 		}
+
+		if (zs->avail_in == 0 && zs->total_in == 0)
+			return Z_STREAM_END;
 
 		status = inflate (stream->stream, Z_SYNC_FLUSH);
 		if (status == Z_STREAM_END) {

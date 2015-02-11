@@ -21,7 +21,14 @@
 #ifndef __MONO_SGENARCHDEP_H__
 #define __MONO_SGENARCHDEP_H__
 
-#include <mono/utils/mono-sigcontext.h>
+#include <mono/utils/mono-context.h>
+
+/*
+ * Define either USE_MONO_CTX, or
+ * ARCH_SIGCTX_SP/ARCH_SIGCTX_IP/ARCH_STORE_REGS/ARCH_COPY_SIGCTX_REGS.
+ * Define ARCH_NUM_REGS to be the number of general registers in MonoContext, or the
+ * number of registers stored by ARCH_STORE_REGS.
+ */
 
 #if defined(MONO_CROSS_COMPILE)
 
@@ -35,61 +42,24 @@
 
 #elif defined(TARGET_X86)
 
-#include <mono/utils/mono-context.h>
-
 #define REDZONE_SIZE	0
 
 #define ARCH_NUM_REGS 8
 
-#ifdef MONO_ARCH_HAS_MONO_CONTEXT
-#define USE_MONO_CTX
-#else
-#ifdef _MSC_VER
-#define ARCH_STORE_REGS(ptr) __asm {	\
-		__asm mov [ptr], edi \
-		__asm mov [ptr+4], esi \
-		__asm mov [ptr+8], ebx \
-		__asm mov [ptr+12], edx \
-		__asm mov [ptr+16], ecx \
-		__asm mov [ptr+20], eax \
-		__asm mov [ptr+24], ebp \
-		__asm mov [ptr+28], esp \
-	}
-#else
-#define ARCH_STORE_REGS(ptr)	\
-	__asm__ __volatile__(	\
-		"mov %%edi,0(%0)\n"	\
-		"mov %%esi,4(%0)\n"	\
-		"mov %%ebx,8(%0)\n"	\
-		"mov %%edx,12(%0)\n"	\
-		"mov %%ecx,16(%0)\n"	\
-		"mov %%eax,20(%0)\n"	\
-		"mov %%ebp,24(%0)\n"	\
-		"mov %%esp,28(%0)\n"	\
-		:			\
-		: "r" (ptr)	\
-	)
-#endif
+#ifndef MONO_ARCH_HAS_MONO_CONTEXT
+#error 0
 #endif
 
-/*FIXME, move this to mono-sigcontext as this is generaly useful.*/
-#define ARCH_SIGCTX_SP(ctx)    (UCONTEXT_REG_ESP ((ctx)))
-#define ARCH_SIGCTX_IP(ctx)    (UCONTEXT_REG_EIP ((ctx)))
+#define USE_MONO_CTX
 
 #elif defined(TARGET_AMD64)
-
-#include <mono/utils/mono-context.h>
 
 #define REDZONE_SIZE	128
 
 #define ARCH_NUM_REGS 16
 #define USE_MONO_CTX
 
-/*FIXME, move this to mono-sigcontext as this is generaly useful.*/
-#define ARCH_SIGCTX_SP(ctx)    (UCONTEXT_REG_RSP (ctx))
-#define ARCH_SIGCTX_IP(ctx)    (UCONTEXT_REG_RIP (ctx))
-
-#elif defined(TARGET_PPC)
+#elif defined(TARGET_POWERPC)
 
 #define REDZONE_SIZE	224
 
@@ -114,8 +84,15 @@
 #define ARCH_COPY_SIGCTX_REGS(a,ctx) do {	\
 	int __i;	\
 	for (__i = 0; __i < 32; ++__i)	\
-		((a)[__i]) = UCONTEXT_REG_Rn((ctx), __i);	\
+		((a)[__i]) = (gpointer) UCONTEXT_REG_Rn((ctx), __i);	\
 	} while (0)
+
+/* MS_BLOCK_SIZE must be a multiple of the system pagesize, which for some
+   archs is 64k.  */
+#if defined(TARGET_POWERPC64) && _CALL_ELF == 2
+#define ARCH_MIN_MS_BLOCK_SIZE	(64*1024)
+#define ARCH_MIN_MS_BLOCK_SIZE_SHIFT	16
+#endif
 
 #elif defined(TARGET_ARM)
 
@@ -124,34 +101,18 @@
 
 /* We dont store ip, sp */
 #define ARCH_NUM_REGS 14
-#define ARCH_STORE_REGS(ptr)		\
-	__asm__ __volatile__(			\
-		"push {lr}\n"				\
-		"mov lr, %0\n"				\
-		"stmia lr!, {r0-r12}\n"		\
-		"pop {lr}\n"				\
-		:							\
-		: "r" (ptr)					\
-	)
 
-#define ARCH_SIGCTX_SP(ctx)	(UCONTEXT_REG_SP((ctx)))
-#define ARCH_SIGCTX_IP(ctx)	(UCONTEXT_REG_PC((ctx)))
-#define ARCH_COPY_SIGCTX_REGS(a,ctx) do {			\
-	((a)[0]) = (gpointer) (UCONTEXT_REG_R0((ctx)));		\
-	((a)[1]) = (gpointer) (UCONTEXT_REG_R1((ctx)));		\
-	((a)[2]) = (gpointer) (UCONTEXT_REG_R2((ctx)));		\
-	((a)[3]) = (gpointer) (UCONTEXT_REG_R3((ctx)));		\
-	((a)[4]) = (gpointer) (UCONTEXT_REG_R4((ctx)));		\
-	((a)[5]) = (gpointer) (UCONTEXT_REG_R5((ctx)));		\
-	((a)[6]) = (gpointer) (UCONTEXT_REG_R6((ctx)));		\
-	((a)[7]) = (gpointer) (UCONTEXT_REG_R7((ctx)));		\
-	((a)[8]) = (gpointer) (UCONTEXT_REG_R8((ctx)));		\
-	((a)[9]) = (gpointer) (UCONTEXT_REG_R9((ctx)));		\
-	((a)[10]) = (gpointer) (UCONTEXT_REG_R10((ctx)));	\
-	((a)[11]) = (gpointer) (UCONTEXT_REG_R11((ctx)));	\
-	((a)[12]) = (gpointer) (UCONTEXT_REG_R12((ctx)));	\
-	((a)[13]) = (gpointer) (UCONTEXT_REG_LR((ctx)));	\
-	} while (0)
+#elif defined(TARGET_ARM64)
+
+#ifdef __linux__
+#define REDZONE_SIZE    0
+#elif defined(__APPLE__)
+#define REDZONE_SIZE	128
+#else
+#error "Not implemented."
+#endif
+#define USE_MONO_CTX
+#define ARCH_NUM_REGS 31
 
 #elif defined(__mips__)
 
@@ -160,19 +121,12 @@
 #define USE_MONO_CTX
 #define ARCH_NUM_REGS 32
 
-#define ARCH_SIGCTX_SP(ctx)	(UCONTEXT_GREGS((ctx))[29])
-#define ARCH_SIGCTX_IP(ctx)	(UCONTEXT_REG_PC((ctx)))
-
 #elif defined(__s390x__)
 
 #define REDZONE_SIZE	0
 
-#include <mono/utils/mono-context.h>
-
 #define USE_MONO_CTX
 #define ARCH_NUM_REGS 16	
-#define ARCH_SIGCTX_SP(ctx)	((UCONTEXT_GREGS((ctx))) [15])
-#define ARCH_SIGCTX_IP(ctx)	((ucontext_t *) (ctx))->uc_mcontext.psw.addr
 
 #elif defined(__sparc__)
 
@@ -224,6 +178,10 @@
 		: "r" (ptr)		\
 		: "memory"			\
 	)
+#endif
+
+#ifndef REG_SP
+#define REG_SP REG_O6
 #endif
 
 #define ARCH_SIGCTX_SP(ctx)	(((ucontext_t *)(ctx))->uc_mcontext.gregs [REG_SP])

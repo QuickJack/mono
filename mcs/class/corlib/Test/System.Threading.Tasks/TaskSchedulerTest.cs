@@ -30,6 +30,9 @@ using System.Threading.Tasks;
 using System.Collections.Generic;
 
 using NUnit.Framework;
+#if !MOBILE
+using NUnit.Framework.SyntaxHelpers;
+#endif
 
 namespace MonoTests.System.Threading.Tasks
 {
@@ -89,6 +92,11 @@ namespace MonoTests.System.Threading.Tasks
 			}
 		}
 
+		class UserSynchronizationContext : SynchronizationContext
+		{
+			
+		}
+
 		[Test]
 		public void FromCurrentSynchronizationContextTest_Invalid()
 		{
@@ -98,6 +106,19 @@ namespace MonoTests.System.Threading.Tasks
 				TaskScheduler.FromCurrentSynchronizationContext ();
 				Assert.Fail ("#1");
 			} catch (InvalidOperationException) {
+			} finally {
+				SynchronizationContext.SetSynchronizationContext (c);
+			}
+		}
+
+		[Test]
+		public void FromUserSynchronizationContext ()
+		{
+			var c = SynchronizationContext.Current;
+			try {
+				SynchronizationContext.SetSynchronizationContext (new UserSynchronizationContext ());
+				var ts = TaskScheduler.FromCurrentSynchronizationContext ();
+				Assert.AreEqual (1, ts.MaximumConcurrencyLevel, "#1");
 			} finally {
 				SynchronizationContext.SetSynchronizationContext (c);
 			}
@@ -132,7 +153,7 @@ namespace MonoTests.System.Threading.Tasks
 
 			Assert.IsNotNull (ex);
 			Assert.IsNotNull (ex.InnerException);
-			Assert.IsInstanceOfType (typeof (InvalidOperationException), ex.InnerException);
+			Assert.That (ex.InnerException, Is.TypeOf (typeof (InvalidOperationException)));
 		}
 
 		[Test]

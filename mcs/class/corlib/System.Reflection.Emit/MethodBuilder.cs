@@ -219,17 +219,23 @@ namespace System.Reflection.Emit
 		{
 			if (!type.is_created)
 				throw NotSupported ();
+
+			return GetParametersInternal ();
+		}
+
+		internal override ParameterInfo[] GetParametersInternal ()
+		{
 			if (parameters == null)
 				return null;
 
 			ParameterInfo[] retval = new ParameterInfo [parameters.Length];
 			for (int i = 0; i < parameters.Length; i++) {
-				retval [i] = new ParameterInfo (pinfo == null ? null : pinfo [i + 1], parameters [i], this, i + 1);
+				retval [i] = ParameterInfo.New (pinfo == null ? null : pinfo [i + 1], parameters [i], this, i + 1);
 			}
 			return retval;
 		}
 		
-		internal override int GetParameterCount ()
+		internal override int GetParametersCount ()
 		{
 			if (parameters == null)
 				return 0;
@@ -348,7 +354,7 @@ namespace System.Reflection.Emit
 											    DeclaringType.FullName, Name));
 			}
 			if (ilgen != null)
-				ilgen.label_fixup ();
+				ilgen.label_fixup (this);
 		}
 		
 		internal void GenerateDebugInfo (ISymbolWriter symbolWriter)
@@ -673,11 +679,9 @@ namespace System.Reflection.Emit
 			throw new NotImplementedException ();
 		}
 
-#if NET_4_0 || MOONLIGHT
 		public override ParameterInfo ReturnParameter {
 			get { return base.ReturnParameter; }
 		}
-#endif
 	}
 }
 #endif

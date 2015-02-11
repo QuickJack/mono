@@ -127,7 +127,7 @@ namespace System.Net.Http.Headers
 				int number;
 				token_read = false;
 
-				t = lexer.Scan ();
+				t = lexer.Scan (recognizeDash: true);
 				switch (t.Kind) {
 				case Token.Type.SeparatorDash:
 					t = lexer.Scan ();
@@ -144,11 +144,10 @@ namespace System.Net.Http.Headers
 
 					switch (values.Length) {
 					case 1:
-						t = lexer.Scan ();
+						t = lexer.Scan (recognizeDash: true);
+						from = number;
 						switch (t.Kind) {
 						case Token.Type.SeparatorDash:
-							from = number;
-
 							t = lexer.Scan ();
 							if (t != Token.Type.Token) {
 								token_read = true;
@@ -162,6 +161,15 @@ namespace System.Net.Http.Headers
 							if (to < from)
 								return false;
 
+							break;
+						case Token.Type.End:
+							if (s.Length > 0 && s [s.Length - 1] != '-')
+								return false;
+
+							token_read = true;
+							break;
+						case Token.Type.SeparatorComma:
+							token_read = true;
 							break;
 						default:
 							return false;

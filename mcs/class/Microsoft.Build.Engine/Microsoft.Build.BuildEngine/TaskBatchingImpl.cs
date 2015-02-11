@@ -40,7 +40,7 @@ namespace Microsoft.Build.BuildEngine {
 		{
 		}
 
-		public bool Build (BuildTask buildTask, out bool executeOnErrors)
+		public bool Build (IBuildTask buildTask, TaskExecutionMode taskExecutionMode, out bool executeOnErrors)
 		{
 			executeOnErrors = false;
 			try {
@@ -49,15 +49,11 @@ namespace Microsoft.Build.BuildEngine {
 				// populate list of referenced items and metadata
 				ParseTaskAttributes (buildTask);
 				if (consumedMetadataReferences.Count == 0) {
-					// No batching required
-					if (ConditionParser.ParseAndEvaluate (buildTask.Condition, project))
-						return buildTask.Execute ();
-					else // skipped, it should be logged
-						return true;
+					return Execute (buildTask, taskExecutionMode);
 				}
 
 				BatchAndPrepareBuckets ();
-				return Run (buildTask, out executeOnErrors);
+				return Run (buildTask, taskExecutionMode, out executeOnErrors);
 			} finally {
 				consumedItemsByName = null;
 				consumedMetadataReferences = null;
@@ -68,7 +64,7 @@ namespace Microsoft.Build.BuildEngine {
 			}
 		}
 
-		bool Run (BuildTask buildTask, out bool executeOnErrors)
+		bool Run (IBuildTask buildTask, TaskExecutionMode taskExecutionMode, out bool executeOnErrors)
 		{
 			executeOnErrors = false;
 
@@ -76,11 +72,9 @@ namespace Microsoft.Build.BuildEngine {
 			bool retval = true;
 			if (buckets.Count == 0) {
 				// batched mode, but no values in the corresponding items!
-				if (ConditionParser.ParseAndEvaluate (buildTask.Condition, project)) {
-					retval = buildTask.Execute ();
-					if (!retval && !buildTask.ContinueOnError)
-						executeOnErrors = true;
-				}
+				retval = Execute (buildTask, taskExecutionMode);
+				if (!retval && !buildTask.ContinueOnError)
+					executeOnErrors = true;
 
 				return retval;
 			}
@@ -89,12 +83,10 @@ namespace Microsoft.Build.BuildEngine {
 			foreach (Dictionary<string, BuildItemGroup> bucket in buckets) {
 				project.PushBatch (bucket, commonItemsByName);
 				try {
-					if (ConditionParser.ParseAndEvaluate (buildTask.Condition, project)) {
-						 retval = buildTask.Execute ();
-						 if (!retval && !buildTask.ContinueOnError) {
-							executeOnErrors = true;
-							break;
-						 }
+					retval = Execute (buildTask, taskExecutionMode);
+					 if (!retval && !buildTask.ContinueOnError) {
+						executeOnErrors = true;
+						break;
 					}
 				} finally {
 					project.PopBatch ();
@@ -104,25 +96,30 @@ namespace Microsoft.Build.BuildEngine {
 			return retval;
 		}
 
+		bool Execute (IBuildTask buildTask, TaskExecutionMode taskExecutionMode)
+		{
+			if (ConditionParser.ParseAndEvaluate (buildTask.Condition, project)) {
+				switch (taskExecutionMode) {
+				case TaskExecutionMode.Complete:
+					return buildTask.Execute ();
+				case TaskExecutionMode.SkipAndSetOutput:
+					return buildTask.ResolveOutputItems ();
+				default:
+					throw new NotImplementedException ();
+				}
+			}
+
+			return true;
+		}
+
 
 		// Parse task attributes to get list of referenced metadata and items
 		// to determine batching
 		//
-		void ParseTaskAttributes (BuildTask buildTask)
+		void ParseTaskAttributes (IBuildTask buildTask)
 		{
-			foreach (XmlAttribute attrib in buildTask.TaskElement.Attributes)
-				ParseAttribute (attrib.Value);
-
-			foreach (XmlNode xn in buildTask.TaskElement.ChildNodes) {
-				XmlElement xe = xn as XmlElement;
-				if (xe == null)
-					continue;
-
-				//FIXME: error on any other child
-				if (String.Compare (xe.LocalName, "Output", StringComparison.Ordinal) == 0) {
-					foreach (XmlAttribute attrib in xe.Attributes)
-						ParseAttribute (attrib.Value);
-				}
+			foreach (var attr in buildTask.GetAttributes ()) {
+				ParseAttribute (attr);
 			}
 		}
 	}

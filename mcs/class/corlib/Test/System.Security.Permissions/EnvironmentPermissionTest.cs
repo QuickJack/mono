@@ -35,6 +35,9 @@ using System.Security.Permissions;
 namespace MonoTests.System.Security.Permissions {
 
 	[TestFixture]
+#if MOBILE
+	[Ignore]
+#endif
 	public class EnvironmentPermissionTest {
 
 		private static string className = "System.Security.Permissions.EnvironmentPermission, ";
@@ -139,13 +142,8 @@ namespace MonoTests.System.Security.Permissions {
 		public void GetPathList () 
 		{
 			EnvironmentPermission ep = new EnvironmentPermission (PermissionState.None);
-#if NET_2_0
 			Assert.AreEqual (String.Empty, ep.GetPathList (EnvironmentPermissionAccess.Read), "GetPathList-Read-Empty");
 			Assert.AreEqual (String.Empty, ep.GetPathList (EnvironmentPermissionAccess.Write), "GetPathList-Write-Empty");
-#else
-			Assert.IsNull (ep.GetPathList (EnvironmentPermissionAccess.Read), "GetPathList-Read-Empty");
-			Assert.IsNull (ep.GetPathList (EnvironmentPermissionAccess.Write), "GetPathList-Write-Empty");
-#endif
 			ep.AddPathList (EnvironmentPermissionAccess.Read, "UID");
 			ep.AddPathList (EnvironmentPermissionAccess.Write, "PROMPT");
 			Assert.AreEqual ("UID", ep.GetPathList (EnvironmentPermissionAccess.Read), "GetPathList-Read");
@@ -200,9 +198,7 @@ namespace MonoTests.System.Security.Permissions {
 			ep.FromXml (se2);
 		}
 
-#if NET_2_0
 		[Category ("NotWorking")]
-#endif
 		
 		[Test]
 		public void FromXml () 
@@ -239,9 +235,7 @@ namespace MonoTests.System.Security.Permissions {
 			ep3 = (EnvironmentPermission) ep2.Union (ep1);
 			Assert.IsTrue (ep3.IsUnrestricted (), "EP2 U Unrestricted == Unrestricted");
 		}
-#if NET_2_0
 		[Category ("NotWorking")]
-#endif
 		[Test]
 		public void Union () 
 		{

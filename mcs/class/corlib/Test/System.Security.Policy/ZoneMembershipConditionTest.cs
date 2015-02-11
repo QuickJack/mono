@@ -114,9 +114,7 @@ namespace MonoTests.System.Security.Policy {
 			Assert.IsTrue (zmc.ToString ().StartsWith ("Zone - "), "ToString-1");
 			Assert.IsTrue (zmc.ToString ().EndsWith (zmc.SecurityZone.ToString ()), "ToString-2");
 
-#if NET_2_0
 			Assert.AreEqual (zmc.SecurityZone.GetHashCode (), zmc.GetHashCode (), "GetHashCode");
-#endif
 
 			return zmc; // for further tests
 		}
@@ -305,6 +303,9 @@ namespace MonoTests.System.Security.Policy {
 		}
 
 		[Test]
+#if MOBILE
+		[ExpectedException (typeof (NotSupportedException))]
+#endif
 		public void FromXml_PolicyLevel ()
 		{
 			ZoneMembershipCondition zmc = new ZoneMembershipCondition (SecurityZone.MyComputer);
@@ -330,6 +331,9 @@ namespace MonoTests.System.Security.Policy {
 		}
 
 		[Test]
+#if MOBILE
+		[ExpectedException (typeof (NotSupportedException))]
+#endif
 		public void ToXml_PolicyLevel ()
 		{
 			ZoneMembershipCondition zmc = new ZoneMembershipCondition (SecurityZone.MyComputer);

@@ -42,9 +42,7 @@ using System.Reflection;
 namespace System.Xml.Serialization 
 {
 	public abstract class XmlSerializationWriter 
-#if NET_2_0
 		: XmlSerializationGeneratedCode
-#endif
 	{
 
 		#region Fields
@@ -55,11 +53,7 @@ namespace System.Xml.Serialization
 
 		ArrayList namespaces;
 		XmlWriter writer;
-#if MOONLIGHT
-		Queue<object> referencedElements;
-#else
 		Queue referencedElements;
-#endif
 		Hashtable callbacks;
 		Hashtable serializedObjects;
 		const string xmlNamespace = "http://www.w3.org/2000/xmlns/";
@@ -92,17 +86,10 @@ namespace System.Xml.Serialization
 
 		#region Properties
 
-#if MOONLIGHT
-		protected IList XmlNamespaces {
-			get { return namespaces; }
-			set { namespaces = (value as ArrayList); }
-		}
-#else
 		protected ArrayList Namespaces {
 			get { return namespaces; }
 			set { namespaces = value; }
 		}
-#endif
 
 		protected XmlWriter Writer {
 			get { return writer; }
@@ -309,7 +296,6 @@ namespace System.Xml.Serialization
 			Writer.WriteAttributeString (prefix, localName, ns, value);
 		}
 
-#if !MOONLIGHT
 		void WriteXmlNode (XmlNode node)
 		{
 			if (node is XmlDocument)
@@ -327,6 +313,8 @@ namespace System.Xml.Serialization
 					if (isNullable)
 						WriteNullTagEncoded (name, ns);
 				}
+				else if (any)
+					WriteXmlNode (node);
 				else
 				{
 					Writer.WriteStartElement (name, ns);
@@ -347,6 +335,8 @@ namespace System.Xml.Serialization
 					if (isNullable)
 						WriteNullTagLiteral (name, ns);
 				}
+				else if (any)
+					WriteXmlNode (node);
 				else
 				{
 					Writer.WriteStartElement (name, ns);
@@ -357,7 +347,6 @@ namespace System.Xml.Serialization
 			else
 				WriteXmlNode (node);
 		}
-#endif
 
 		protected void WriteElementQualifiedName (string localName, XmlQualifiedName value)
 		{
@@ -504,11 +493,7 @@ namespace System.Xml.Serialization
 		{
 			if (xmlns == null)
 				return;
-#if MOONLIGHT
-			IEnumerable<XmlQualifiedName> namespaces = ns.GetNamespaces ();
-#else
 			ICollection namespaces = xmlns.Namespaces.Values;
-#endif
 			foreach (XmlQualifiedName qn in namespaces) {
 				if (qn.Namespace != String.Empty && Writer.LookupPrefix (qn.Namespace) != qn.Name)
 					WriteAttribute ("xmlns", qn.Name, xmlNamespace, qn.Namespace);
@@ -760,11 +745,7 @@ namespace System.Xml.Serialization
 		{
 			if (referencedElements == null)  
 			{
-#if MOONLIGHT
-				referencedElements = new Queue<object> ();
-#else
 				referencedElements = new Queue ();
-#endif
 				InitCallbacks ();
 			}
 		}
@@ -780,9 +761,7 @@ namespace System.Xml.Serialization
 			WriteSerializable (serializable, name, ns, isNullable, true);
 		}
 
-#if NET_2_0
 		protected
-#endif
 		void WriteSerializable (IXmlSerializable serializable, string name, string ns, bool isNullable, bool wrapped)
 		{
 			if (serializable == null)
@@ -831,12 +810,10 @@ namespace System.Xml.Serialization
 			WriteStartElement (name, ns, o, writePrefixed, namespaces);
 		}
 
-#if NET_2_0
 		protected void WriteStartElement (string name, string ns, Object o, bool writePrefixed, XmlSerializerNamespaces xmlns)
 		{
 			WriteStartElement (name, ns, o, writePrefixed, xmlns != null ? xmlns.ToArray () : null);
 		}
-#endif
 
 		void WriteStartElement (string name, string ns, object o, bool writePrefixed, ICollection namespaces)
 		{
@@ -931,7 +908,6 @@ namespace System.Xml.Serialization
 				Writer.WriteString (value);
 		}
 
-#if !MOONLIGHT
 		protected void WriteXmlAttribute (XmlNode node)
 		{
 			WriteXmlAttribute (node, null);
@@ -957,7 +933,6 @@ namespace System.Xml.Serialization
 			
 			WriteAttribute (attr.Prefix, attr.LocalName, attr.NamespaceURI, attr.Value);
 		}
-#endif
 
 		protected void WriteXsiType (string name, string ns)
 		{
@@ -967,7 +942,6 @@ namespace System.Xml.Serialization
 				WriteAttribute ("type", XmlSchema.InstanceNamespace, name);
 		}
 		
-#if NET_2_0
 
 		protected Exception CreateInvalidAnyTypeException (object o)
 		{
@@ -1011,7 +985,6 @@ namespace System.Xml.Serialization
 			get { throw new NotImplementedException(); }
 			set { throw new NotImplementedException(); }
 		}
-#endif
 
 		#endregion
 

@@ -1,6 +1,5 @@
 using NUnit.Framework;
 using System;
-#if NET_2_0
 using System.Net.NetworkInformation;
 
 namespace MonoTests.System.Net.NetworkInformation
@@ -107,7 +106,7 @@ namespace MonoTests.System.Net.NetworkInformation
 		}
 
 		[Test]
-		public void ToString()
+		public void ToStringTest()
 		{
 			PhysicalAddress phys1 = new PhysicalAddress(new byte[] { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06 });
 			Assert.AreEqual("010203040506", phys1.ToString());
@@ -133,4 +132,3 @@ namespace MonoTests.System.Net.NetworkInformation
 	}
 }
 
-#endif

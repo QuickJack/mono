@@ -35,6 +35,8 @@ namespace System.Net.Http
 {
 	public class HttpClientHandler : HttpMessageHandler
 	{
+		static long groupCounter;
+
 		bool allowAutoRedirect;
 		DecompressionMethods automaticDecompression;
 		CookieContainer cookieContainer;
@@ -48,6 +50,8 @@ namespace System.Net.Http
 		bool useProxy;
 		ClientCertificateOption certificate;
 		bool sentRequest;
+		string connectionGroupName;
+		bool disposed;
 
 		public HttpClientHandler ()
 		{
@@ -56,9 +60,10 @@ namespace System.Net.Http
 			maxRequestContentBufferSize = int.MaxValue;
 			useCookies = true;
 			useProxy = true;
+			connectionGroupName = "HttpClientHandler" + Interlocked.Increment (ref groupCounter);
 		}
 
-		void EnsureModifiability ()
+		internal void EnsureModifiability ()
 		{
 			if (sentRequest)
 				throw new InvalidOperationException (
@@ -215,16 +220,21 @@ namespace System.Net.Http
 
 		protected override void Dispose (bool disposing)
 		{
-			// TODO: ?
+			if (disposing && !disposed) {
+				Volatile.Write (ref disposed, true);
+				ServicePointManager.CloseConnectionGroup (connectionGroupName);
+			}
+
 			base.Dispose (disposing);
 		}
 
-		HttpWebRequest CreateWebRequest (HttpRequestMessage request)
+		internal virtual HttpWebRequest CreateWebRequest (HttpRequestMessage request)
 		{
 			var wr = new HttpWebRequest (request.RequestUri);
 			wr.ThrowOnError = false;
+			wr.AllowWriteStreamBuffering = false;
 
-			wr.ConnectionGroupName = "HttpClientHandler";
+			wr.ConnectionGroupName = connectionGroupName;
 			wr.Method = request.Method.Method;
 			wr.ProtocolVersion = request.Version;
 
@@ -247,7 +257,8 @@ namespace System.Net.Http
 			wr.PreAuthenticate = preAuthenticate;
 
 			if (useCookies) {
-				wr.CookieContainer = cookieContainer;
+				// It cannot be null or allowAutoRedirect won't work
+				wr.CookieContainer = CookieContainer;
 			}
 
 			if (useDefaultCredentials) {
@@ -271,12 +282,12 @@ namespace System.Net.Http
 			return wr;
 		}
 
-		HttpResponseMessage CreateResponseMessage (HttpWebResponse wr, HttpRequestMessage requestMessage)
+		HttpResponseMessage CreateResponseMessage (HttpWebResponse wr, HttpRequestMessage requestMessage, CancellationToken cancellationToken)
 		{
 			var response = new HttpResponseMessage (wr.StatusCode);
 			response.RequestMessage = requestMessage;
 			response.ReasonPhrase = wr.StatusDescription;
-			response.Content = new StreamContent (wr.GetResponseStream ());
+			response.Content = new StreamContent (wr.GetResponseStream (), cancellationToken);
 
 			var headers = wr.Headers;
 			for (int i = 0; i < headers.Count; ++i) {
@@ -292,29 +303,66 @@ namespace System.Net.Http
 				item_headers.TryAddWithoutValidation (key, value);
 			}
 
+			requestMessage.RequestUri = wr.ResponseUri;
+
 			return response;
 		}
 
 		protected async internal override Task<HttpResponseMessage> SendAsync (HttpRequestMessage request, CancellationToken cancellationToken)
 		{
-			sentRequest = true;
+			if (disposed)
+				throw new ObjectDisposedException (GetType ().ToString ());
+
+			Volatile.Write (ref sentRequest, true);
 			var wrequest = CreateWebRequest (request);
+			HttpWebResponse wresponse = null;
 
-			if (request.Content != null) {
-				var headers = wrequest.Headers;
-				foreach (var header in request.Content.Headers) {
-					foreach (var value in header.Value) {
-						headers.AddValue (header.Key, value);
+			try {
+				using (cancellationToken.Register (l => ((HttpWebRequest)l).Abort (), wrequest)) {
+					var content = request.Content;
+					if (content != null) {
+						var headers = wrequest.Headers;
+
+						foreach (var header in content.Headers) {
+							foreach (var value in header.Value) {
+								headers.AddValue (header.Key, value);
+							}
+						}
+
+						//
+						// Content length has to be set because HttpWebRequest is running without buffering
+						//
+						var contentLength = content.Headers.ContentLength;
+						if (contentLength != null) {
+							wrequest.ContentLength = contentLength.Value;
+						} else {
+							await content.LoadIntoBufferAsync (MaxRequestContentBufferSize).ConfigureAwait (false);
+							wrequest.ContentLength = content.Headers.ContentLength.Value;
+						}
+
+						var stream = await wrequest.GetRequestStreamAsync ().ConfigureAwait (false);
+						await request.Content.CopyToAsync (stream).ConfigureAwait (false);
+					} else if (HttpMethod.Post.Equals (request.Method) || HttpMethod.Put.Equals (request.Method) || HttpMethod.Delete.Equals (request.Method)) {
+						// Explicitly set this to make sure we're sending a "Content-Length: 0" header.
+						// This fixes the issue that's been reported on the forums:
+						// http://forums.xamarin.com/discussion/17770/length-required-error-in-http-post-since-latest-release
+						wrequest.ContentLength = 0;
 					}
-				}
 
-				var stream = wrequest.GetRequestStream ();
-				await request.Content.CopyToAsync (stream).ConfigureAwait (false);
+					wresponse = (HttpWebResponse)await wrequest.GetResponseAsync ().ConfigureAwait (false);
+				}
+			} catch (WebException we) {
+				if (we.Status != WebExceptionStatus.RequestCanceled)
+					throw;
 			}
 
-			// FIXME: GetResponseAsync does not accept cancellationToken
-			var wresponse = (HttpWebResponse) await wrequest.GetResponseAsync ().ConfigureAwait (false);
-			return CreateResponseMessage (wresponse, request);
+			if (cancellationToken.IsCancellationRequested) {
+				var cancelled = new TaskCompletionSource<HttpResponseMessage> ();
+				cancelled.SetCanceled ();
+				return await cancelled.Task;
+			}
+			
+			return CreateResponseMessage (wresponse, request, cancellationToken);
 		}
 	}
 }

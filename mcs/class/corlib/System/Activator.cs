@@ -4,10 +4,12 @@
 // Authors:
 //   Nick Drochak II (ndrochak@gol.com)
 //   Gonzalo Paniagua (gonzalo@ximian.com)
+//   Marek Safar (marek.safar@gmail.com)
 //
 // (C) 2001 Nick Drochak II
 // (c) 2002 Ximian, Inc. (http://www.ximian.com)
 // Copyright (C) 2004-2005 Novell, Inc (http://www.novell.com)
+// Copyright (C) 2013 Xamarin Inc (http://www.xamarin.com)
 //
 // Permission is hereby granted, free of charge, to any person obtaining
 // a copy of this software and associated documentation files (the
@@ -37,10 +39,8 @@ using System.Security.Permissions;
 using System.Security.Policy;
 using System.Configuration.Assemblies;
 using System.Text;
-#if !MOONLIGHT
 using System.Runtime.Remoting;
 using System.Runtime.Remoting.Activation;
-#endif
 
 namespace System 
 {
@@ -58,7 +58,6 @@ namespace System
 		{
 		}
 
-#if !MOONLIGHT
 		[MonoTODO ("No COM support")]
 		public static ObjectHandle CreateComInstanceFrom (string assemblyName, string typeName)
 		{
@@ -101,9 +100,7 @@ namespace System
 				activationAttributes, null);
 		}
 
-#if NET_4_0
 		[Obsolete]
-#endif
 		public static ObjectHandle CreateInstanceFrom (string assemblyFile, string typeName, bool ignoreCase,
 		                                               BindingFlags bindingAttr, Binder binder, object [] args,
 		                                               CultureInfo culture, object [] activationAttributes,
@@ -138,9 +135,7 @@ namespace System
 				activationAttributes, null);
 		}
 
-#if NET_4_0
 		[Obsolete]
-#endif
 		public static ObjectHandle CreateInstance (string assemblyName, string typeName, bool ignoreCase,
 		                                           BindingFlags bindingAttr, Binder binder, object [] args,
 							   CultureInfo culture, object [] activationAttributes, Evidence securityInfo)
@@ -177,9 +172,7 @@ namespace System
 		}
 
 
-#if NET_4_0
 		[Obsolete]
-#endif
 		public static ObjectHandle CreateInstanceFrom (AppDomain domain, string assemblyFile, string typeName,
 							       bool ignoreCase, BindingFlags bindingAttr, Binder binder,
 							       object [] args, CultureInfo culture,
@@ -199,9 +192,7 @@ namespace System
 			return domain.CreateInstance (assemblyName, typeName);
 		}
 
-#if NET_4_0
 		[Obsolete]
-#endif
 		public static ObjectHandle CreateInstance (AppDomain domain, string assemblyName, string typeName,
 							   bool ignoreCase, BindingFlags bindingAttr, Binder binder,
 							   object [] args, CultureInfo culture,
@@ -212,7 +203,6 @@ namespace System
 				throw new ArgumentNullException ("domain");
 			return domain.CreateInstance (assemblyName, typeName, ignoreCase, bindingAttr, binder, args, culture, activationAttributes, securityAttributes);
 		}
-#endif // !NET_2_1
 
 		public static T CreateInstance <T> ()
 		{
@@ -226,7 +216,7 @@ namespace System
 
 		public static object CreateInstance (Type type, params object [] args)
 		{
-			return CreateInstance (type, args, new object [0]);
+			return CreateInstance (type, args, EmptyArray<object>.Value);
 		}
 
 		public static object CreateInstance (Type type, object [] args, object [] activationAttributes)
@@ -237,7 +227,7 @@ namespace System
 		public static object CreateInstance (Type type, BindingFlags bindingAttr, Binder binder, object [] args,
 		                                     CultureInfo culture)
 		{
-			return CreateInstance (type, bindingAttr, binder, args, culture, new object [0]);
+			return CreateInstance (type, bindingAttr, binder, args, culture, EmptyArray<object>.Value);
 		}
 
 		public static object CreateInstance (Type type, BindingFlags bindingAttr, Binder binder, object [] args,
@@ -282,8 +272,11 @@ namespace System
 			}
 
 			CheckAbstractType (type);
-#if !MOONLIGHT
+
 			if (activationAttributes != null && activationAttributes.Length > 0) {
+#if DISABLE_REMOTING
+				throw new NotSupportedException ("Activation attributes are not supported");
+#else
 				if (!type.IsMarshalByRef) {
 					string msg = Locale.GetText ("Type '{0}' doesn't derive from MarshalByRefObject.", type.FullName);
 					throw new NotSupportedException (msg);
@@ -294,8 +287,9 @@ namespace System
 					ctor.Invoke (newOb, bindingAttr, binder, args, culture);
 					return newOb;
 				}
-			}
 #endif
+			}
+
 			return ctor.Invoke (bindingAttr, binder, args, culture);
 		}
 
@@ -306,31 +300,25 @@ namespace System
 			if (type.ContainsGenericParameters)
 				throw new ArgumentException (type + " is an open generic type", "type");
 
-			CheckAbstractType (type);
+			MonoType monoType = type.UnderlyingSystemType as MonoType;
+			if (monoType == null)
+				throw new ArgumentException ("Type must be a type provided by the runtime");
 
-			ConstructorInfo ctor;
-			MonoType monoType = type as MonoType;
+			CheckAbstractType (monoType);
 
-			if (monoType != null) {
-				ctor = monoType.GetDefaultConstructor ();
-				if (!nonPublic && ctor != null && !ctor.IsPublic)
-					ctor = null;
-			} else {
-				BindingFlags flags = BindingFlags.Public | BindingFlags.Instance;
-				if (nonPublic)
-					flags |= BindingFlags.NonPublic;
-				ctor = type.GetConstructor (flags, null, CallingConventions.Any, Type.EmptyTypes, null);
+			var ctor = monoType.GetDefaultConstructor ();
+			if (!nonPublic && ctor != null && !ctor.IsPublic) {
+				ctor = null;
 			}
 
 			if (ctor == null) {
 				if (type.IsValueType)
 					return CreateInstanceInternal (type);
 
-				throw new MissingMethodException (Locale.GetText ("Default constructor not found for type " + 
-							type.FullName + "."));
+				throw new MissingMethodException (Locale.GetText ("Default constructor not found for type " + type.FullName));
 			}
 
-			return ctor.Invoke (null);
+			return ctor.InternalInvoke (null, null);
 		}
 
 		private static void CheckType (Type type)
@@ -353,7 +341,6 @@ namespace System
 			}
 		}
 
-#if !MOONLIGHT
 		[SecurityPermission (SecurityAction.LinkDemand, RemotingConfiguration = true)]
 		public static object GetObject (Type type, string url)
 		{
@@ -371,7 +358,7 @@ namespace System
 
 			return RemotingServices.Connect (type, url, state);
 		}
-#endif
+
 		[MethodImplAttribute (MethodImplOptions.InternalCall)]
 		internal static extern object CreateInstanceInternal (Type type);
 
@@ -396,7 +383,6 @@ namespace System
 			throw new NotImplementedException ();
 		}
 
-#if NET_4_0
 		public static ObjectHandle CreateInstance (string assemblyName, string typeName, bool ignoreCase,
 		                                           BindingFlags bindingAttr, Binder binder, object [] args,
 							   CultureInfo culture, object [] activationAttributes)
@@ -447,6 +433,5 @@ namespace System
 
 			return domain.CreateInstanceFrom (assemblyFile, typeName, ignoreCase, bindingAttr, binder, args, culture, activationAttributes);
 		}
-#endif
 	}
 }

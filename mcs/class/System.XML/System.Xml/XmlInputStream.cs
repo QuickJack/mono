@@ -158,11 +158,7 @@ namespace System.Xml
 		{
 			pos = decoded_count = 0;
 			mayBlock = false;
-#if NET_2_0
 			decoder.Reset ();
-#else
-			decoder = encoding.GetDecoder ();
-#endif
 		}
 		
 		// the buffer is empty, fill it again
@@ -362,15 +358,7 @@ namespace System.Xml
 				if (ReadByteSpecial () < 0)
 					return null;
 			bufPos = posBak;
-#if MOONLIGHT
-			char [] chars = new char [count];
-			for (int i = index; i < count; i++)
-				chars [i] = (char) buffer [i];
-
-			return new string (chars);
-#else
 			return Encoding.ASCII.GetString (buffer, index, count);
-#endif
 		}
 
 		private void Initialize (Stream stream)
@@ -474,12 +462,6 @@ namespace System.Xml
 						}
 					}
 				}
-#if TARGET_JVM
-				else {
-					if (bufLength >= 10 && Encoding.Unicode.GetString (buffer, 2, 8) == "?xml")
-						enc = Encoding.Unicode;
-				}
-#endif
 				bufPos = 0;
 				break;
 			default:

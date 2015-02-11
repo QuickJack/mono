@@ -16,14 +16,15 @@
 #include <mono/utils/gc_wrapper.h>
 
 typedef struct {
-	int minor_gc_count;
-	int major_gc_count;
-	long long minor_gc_time_usecs;
-	long long major_gc_time_usecs;
+	guint minor_gc_count;
+	guint major_gc_count;
+	guint64 minor_gc_time;
+	guint64 major_gc_time;
+	guint64 major_gc_time_concurrent;
 } GCStats;
 
-#define mono_domain_finalizers_lock(domain) EnterCriticalSection (&(domain)->finalizable_objects_hash_lock);
-#define mono_domain_finalizers_unlock(domain) LeaveCriticalSection (&(domain)->finalizable_objects_hash_lock);
+#define mono_domain_finalizers_lock(domain) mono_mutex_lock (&(domain)->finalizable_objects_hash_lock);
+#define mono_domain_finalizers_unlock(domain) mono_mutex_unlock (&(domain)->finalizable_objects_hash_lock);
 
 /* Register a memory area as a conservatively scanned GC root */
 #define MONO_GC_REGISTER_ROOT_PINNING(x) mono_gc_register_root ((char*)&(x), sizeof(x), NULL)
@@ -87,11 +88,11 @@ gpointer    ves_icall_System_GCHandle_GetAddrOfPinnedObject (guint32 handle) MON
 void        ves_icall_System_GC_register_ephemeron_array (MonoObject *array) MONO_INTERNAL;
 MonoObject  *ves_icall_System_GC_get_ephemeron_tombstone (void) MONO_INTERNAL;
 
+MonoBoolean ves_icall_Mono_Runtime_SetGCAllowSynchronousMajor (MonoBoolean flag) MONO_INTERNAL;
+
 extern void mono_gc_init (void) MONO_INTERNAL;
 extern void mono_gc_base_init (void) MONO_INTERNAL;
 extern void mono_gc_cleanup (void) MONO_INTERNAL;
-extern void mono_gc_enable (void) MONO_INTERNAL;
-extern void mono_gc_disable (void) MONO_INTERNAL;
 
 /*
  * Return whenever the current thread is registered with the GC (i.e. started
@@ -112,10 +113,10 @@ extern void mono_gc_set_stack_end (void *stack_end) MONO_INTERNAL;
 /* only valid after the RECLAIM_START GC event and before RECLAIM_END
  * Not exported in public headers, but can be linked to (unsupported).
  */
-extern gboolean mono_object_is_alive (MonoObject* obj);
-extern gboolean mono_gc_is_finalizer_thread (MonoThread *thread);
-extern gpointer mono_gc_out_of_memory (size_t size);
-extern void     mono_gc_enable_events (void);
+extern MONO_API gboolean mono_object_is_alive (MonoObject* obj);
+extern MONO_API gboolean mono_gc_is_finalizer_thread (MonoThread *thread);
+extern MONO_API gpointer mono_gc_out_of_memory (size_t size);
+extern MONO_API void     mono_gc_enable_events (void);
 
 /* disappearing link functionality */
 void        mono_gc_weak_link_add    (void **link_addr, MonoObject *obj, gboolean track) MONO_INTERNAL;
@@ -125,6 +126,8 @@ MonoObject *mono_gc_weak_link_get    (void **link_addr) MONO_INTERNAL;
 /*Ephemeron functionality. Sgen only*/
 gboolean    mono_gc_ephemeron_array_add (MonoObject *obj) MONO_INTERNAL;
 
+/* To disable synchronous, evacuating collections - concurrent SGen only */
+gboolean    mono_gc_set_allow_synchronous_major (gboolean flag) MONO_INTERNAL;
 
 MonoBoolean
 GCHandle_CheckCurrentDomain (guint32 gchandle) MONO_INTERNAL;
@@ -140,11 +143,11 @@ void* mono_gc_make_root_descr_all_refs (int numbits) MONO_INTERNAL;
  * foreach (ref in GC references in the are structure pointed to by ADDR)
  *    mark_func (ref)
  */
-typedef void (*MonoGCMarkFunc)     (void **addr);
-typedef void (*MonoGCRootMarkFunc) (void *addr, MonoGCMarkFunc mark_func);
+typedef void (*MonoGCMarkFunc)     (void **addr, void *gc_data);
+typedef void (*MonoGCRootMarkFunc) (void *addr, MonoGCMarkFunc mark_func, void *gc_data);
 
 /* Create a descriptor with a user defined marking function */
-void *mono_gc_make_root_descr_user (MonoGCRootMarkFunc marker);
+MONO_API void *mono_gc_make_root_descr_user (MonoGCRootMarkFunc marker);
 
 /* Return whenever user defined marking functions are supported */
 gboolean mono_gc_user_markers_supported (void) MONO_INTERNAL;
@@ -217,8 +220,8 @@ typedef struct {
 	int alloc_type;
 } AllocatorWrapperInfo;
 
-MonoMethod* mono_gc_get_managed_allocator (MonoVTable *vtable, gboolean for_box) MONO_INTERNAL;
-MonoMethod* mono_gc_get_managed_array_allocator (MonoVTable *vtable, int rank) MONO_INTERNAL;
+MonoMethod* mono_gc_get_managed_allocator (MonoClass *klass, gboolean for_box) MONO_INTERNAL;
+MonoMethod* mono_gc_get_managed_array_allocator (MonoClass *klass) MONO_INTERNAL;
 MonoMethod *mono_gc_get_managed_allocator_by_type (int atype) MONO_INTERNAL;
 
 guint32 mono_gc_get_managed_allocator_types (void) MONO_INTERNAL;
@@ -265,7 +268,7 @@ typedef struct {
 	 * - in the second pass, it should mark the remaining areas of the stack
 	 *   using precise marking by calling mono_gc_scan_object ().
 	 */
-	void (*thread_mark_func) (gpointer user_data, guint8 *stack_start, guint8 *stack_end, gboolean precise);
+	void (*thread_mark_func) (gpointer user_data, guint8 *stack_start, guint8 *stack_end, gboolean precise, void *gc_data);
 } MonoGCCallbacks;
 
 /* Set the callback functions callable by the GC */
@@ -278,7 +281,7 @@ MonoGCCallbacks *mono_gc_get_gc_callbacks (void) MONO_INTERNAL;
 void mono_gc_conservatively_scan_area (void *start, void *end) MONO_INTERNAL;
 
 /* Scan OBJ, returning its new address */
-void *mono_gc_scan_object (void *obj) MONO_INTERNAL;
+void *mono_gc_scan_object (void *obj, void *gc_data) MONO_INTERNAL;
 
 /* Return the bitmap encoded by a descriptor */
 gsize* mono_gc_get_bitmap_for_descr (void *descr, int *numbits) MONO_INTERNAL;
@@ -286,6 +289,10 @@ gsize* mono_gc_get_bitmap_for_descr (void *descr, int *numbits) MONO_INTERNAL;
 /* Return the suspend signal number used by the GC to suspend threads,
    or -1 if not applicable. */
 int mono_gc_get_suspend_signal (void) MONO_INTERNAL;
+
+/* Return the suspend signal number used by the GC to suspend threads,
+   or -1 if not applicable. */
+int mono_gc_get_restart_signal (void) MONO_INTERNAL;
 
 /*
  * Return a human readable description of the GC in malloc-ed memory.
@@ -322,25 +329,25 @@ void mono_gc_set_skip_thread (gboolean skip) MONO_INTERNAL;
  */
 gboolean mono_gc_is_disabled (void) MONO_INTERNAL;
 
+void mono_gc_set_string_length (MonoString *str, gint32 new_length) MONO_INTERNAL;
+
 #if defined(__MACH__)
 void mono_gc_register_mach_exception_thread (pthread_t thread) MONO_INTERNAL;
 pthread_t mono_gc_get_mach_exception_thread (void) MONO_INTERNAL;
 #endif
 
-gboolean mono_gc_parse_environment_string_extract_number (const char *str, glong *out) MONO_INTERNAL;
+gboolean mono_gc_parse_environment_string_extract_number (const char *str, size_t *out) MONO_INTERNAL;
 
 gboolean mono_gc_precise_stack_mark_enabled (void) MONO_INTERNAL;
 
 FILE *mono_gc_get_logfile (void) MONO_INTERNAL;
 
-typedef void (*mono_reference_queue_callback) (void *user_data);
-
-typedef struct _MonoReferenceQueue MonoReferenceQueue;
 typedef struct _RefQueueEntry RefQueueEntry;
 
 struct _RefQueueEntry {
 	void *dis_link;
 	guint32 gchandle;
+	MonoDomain *domain;
 	void *user_data;
 	RefQueueEntry *next;
 };
@@ -352,18 +359,33 @@ struct _MonoReferenceQueue {
 	gboolean should_be_deleted;
 };
 
-MonoReferenceQueue* mono_gc_reference_queue_new (mono_reference_queue_callback callback) MONO_INTERNAL;
-void mono_gc_reference_queue_free (MonoReferenceQueue *queue) MONO_INTERNAL;
-gboolean mono_gc_reference_queue_add (MonoReferenceQueue *queue, MonoObject *obj, void *user_data) MONO_INTERNAL;
+enum {
+	MONO_GC_FINALIZER_EXTENSION_VERSION = 1,
+};
+
+typedef struct {
+	int version;
+	gboolean (*is_class_finalization_aware) (MonoClass *klass);
+	void (*object_queued_for_finalization) (MonoObject *object);
+} MonoGCFinalizerCallbacks;
+
+void mono_gc_register_finalizer_callbacks (MonoGCFinalizerCallbacks *callbacks);
+
 
 #ifdef HOST_WIN32
 BOOL APIENTRY mono_gc_dllmain (HMODULE module_handle, DWORD reason, LPVOID reserved) MONO_INTERNAL;
 #endif
 
-void mono_gc_bzero (void *dest, size_t size) MONO_INTERNAL;
-void mono_gc_memmove (void *dest, const void *src, size_t size) MONO_INTERNAL;
+/*
+Those functions must be used when it's possible that either destination is not
+word aligned or size is not a multiple of word size.
+*/
+void mono_gc_bzero_atomic (void *dest, size_t size) MONO_INTERNAL;
+void mono_gc_bzero_aligned (void *dest, size_t size) MONO_INTERNAL;
+void mono_gc_memmove_atomic (void *dest, const void *src, size_t size) MONO_INTERNAL;
+void mono_gc_memmove_aligned (void *dest, const void *src, size_t size) MONO_INTERNAL;
 
-guint mono_gc_get_vtable_bits (MonoClass *class) MONO_INTERNAL;
+guint mono_gc_get_vtable_bits (MonoClass *klass) MONO_INTERNAL;
 
 void mono_gc_register_altstack (gpointer stack, gint32 stack_size, gpointer altstack, gint32 altstack_size) MONO_INTERNAL;
 

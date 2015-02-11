@@ -22,24 +22,24 @@
 #  ifdef USE_MACH_SEMA
 #    define TIMESPEC mach_timespec_t
 #    define WAIT_BLOCK(a,b) semaphore_timedwait (*(a), *(b))
-#  elif defined(__OpenBSD__)
+#  elif defined(__native_client__) && defined(USE_NEWLIB)
 #    define TIMESPEC struct timespec
-#    define WAIT_BLOCK(a) sem_trywait(a)
+#    define WAIT_BLOCK(a, b) sem_trywait(a)
 #  else
 #    define TIMESPEC struct timespec
 #    define WAIT_BLOCK(a,b) sem_timedwait (a, b)
 #  endif
 
+#ifndef NSEC_PER_SEC
 #define NSEC_PER_SEC 1000000000
+#endif
+
 int
 mono_sem_timedwait (MonoSemType *sem, guint32 timeout_ms, gboolean alertable)
 {
 	TIMESPEC ts, copy;
 	struct timeval t;
 	int res = 0;
-#if defined(__OpenBSD__)
-	int timeout;
-#endif
 
 #ifndef USE_MACH_SEMA
 	if (timeout_ms == 0)
@@ -49,7 +49,7 @@ mono_sem_timedwait (MonoSemType *sem, guint32 timeout_ms, gboolean alertable)
 		return mono_sem_wait (sem, alertable);
 
 #ifdef USE_MACH_SEMA
-	memset (&t, 0, sizeof (TIMESPEC));
+	memset (&t, 0, sizeof (t));
 #else
 	gettimeofday (&t, NULL);
 #endif
@@ -59,26 +59,14 @@ mono_sem_timedwait (MonoSemType *sem, guint32 timeout_ms, gboolean alertable)
 		ts.tv_nsec -= NSEC_PER_SEC;
 		ts.tv_sec++;
 	}
-#if defined(__OpenBSD__)
-	timeout = ts.tv_sec;
-	while (timeout) {
-		if ((res = WAIT_BLOCK (sem)) == 0)
-			return res;
 
-		if (alertable)
-			return -1;
-
-		usleep (ts.tv_nsec / 1000);
-		timeout--;
-	}
-#else
 	copy = ts;
 	while ((res = WAIT_BLOCK (sem, &ts)) == -1 && errno == EINTR) {
 		struct timeval current;
 		if (alertable)
 			return -1;
 #ifdef USE_MACH_SEMA
-		memset (&current, 0, sizeof (TIMESPEC));
+		memset (&current, 0, sizeof (current));
 #else
 		gettimeofday (&current, NULL);
 #endif
@@ -98,7 +86,7 @@ mono_sem_timedwait (MonoSemType *sem, guint32 timeout_ms, gboolean alertable)
 			ts.tv_nsec = 0;
 		}
 	}
-#endif
+
 	/* OSX might return > 0 for error */
 	if (res != 0)
 		res = -1;
@@ -112,7 +100,7 @@ mono_sem_wait (MonoSemType *sem, gboolean alertable)
 #ifndef USE_MACH_SEMA
 	while ((res = sem_wait (sem)) == -1 && errno == EINTR)
 #else
-	while ((res = semaphore_wait (*sem)) == -1 && errno == EINTR)
+	while ((res = semaphore_wait (*sem)) == KERN_ABORTED)
 #endif
 	{
 		if (alertable)
@@ -131,9 +119,9 @@ mono_sem_post (MonoSemType *sem)
 #ifndef USE_MACH_SEMA
 	while ((res = sem_post (sem)) == -1 && errno == EINTR);
 #else
-	while ((res = semaphore_signal (*sem)) == -1 && errno == EINTR);
+	res = semaphore_signal (*sem);
 	/* OSX might return > 0 for error */
-	if (res != 0)
+	if (res != KERN_SUCCESS)
 		res = -1;
 #endif
 	return res;

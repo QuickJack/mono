@@ -213,11 +213,7 @@ namespace System.ServiceModel.Dispatcher
 			case WebContentFormat.Json:
 				// FIXME: after name argument they are hack
 				if (json_serializer == null)
-#if MOONLIGHT
-					json_serializer = new DataContractJsonSerializer (part.Type);
-#else
 					json_serializer = isWrapped ? new DataContractJsonSerializer (part.Type, BodyName ?? part.Name, null, 0x100000, false, null, true) : new DataContractJsonSerializer (part.Type);
-#endif
 				return json_serializer;
 			default:
 				throw new NotImplementedException (msgfmt.ToString ());
@@ -646,16 +642,7 @@ namespace System.ServiceModel.Dispatcher
 				var ms = Stream as MemoryStream;
 				if (ms == null) {
 					ms = new MemoryStream ();
-#if NET_4_0 || NET_2_1
 					Stream.CopyTo (ms);
-#else
-					byte [] tmp = new byte [0x1000];
-					int size;
-					do {
-						size = Stream.Read (tmp, 0, tmp.Length);
-						ms.Write (tmp, 0, size);
-					} while (size > 0);
-#endif
 					this.Stream = ms;
 				}
 				return new RawMessageBuffer (ms.ToArray (), headers, properties);

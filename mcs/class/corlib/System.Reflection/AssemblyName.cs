@@ -54,8 +54,11 @@ namespace System.Reflection {
 	[Serializable]
 	[ClassInterfaceAttribute (ClassInterfaceType.None)]
 	[StructLayout (LayoutKind.Sequential)]
+#if MOBILE
+	public sealed class AssemblyName  : ICloneable, ISerializable, IDeserializationCallback {
+#else
 	public sealed class AssemblyName  : ICloneable, ISerializable, IDeserializationCallback, _AssemblyName {
-
+#endif
 #pragma warning disable 169
 		#region Synch with object-internals.h
 		string name;
@@ -72,7 +75,8 @@ namespace System.Reflection {
 		ProcessorArchitecture processor_architecture = ProcessorArchitecture.None;
 		#endregion
 #pragma warning restore 169		
-		
+
+		AssemblyContentType contentType;
 		public AssemblyName ()
 		{
 			// defaults
@@ -232,25 +236,21 @@ namespace System.Reflection {
 		{
 			if (keyToken != null)
 				return keyToken;
-			else if (publicKey == null)
+			if (publicKey == null)
 				return null;
-			else {
+
 				if (publicKey.Length == 0)
-					return new byte [0];
+					return EmptyArray<byte>.Value;
 
 				if (!IsPublicKeyValid)
 					throw new  SecurityException ("The public key is not valid.");
 
 				keyToken = ComputePublicKeyToken ();
 				return keyToken;
-			}
 		}
 
 		private bool IsPublicKeyValid {
 			get {
-#if FULL_AOT_RUNTIME
-				return true;
-#else
 				// check for ECMA key
 				if (publicKey.Length == 16) {
 					int i = 0;
@@ -264,27 +264,34 @@ namespace System.Reflection {
 				switch (publicKey [0]) {
 				case 0x00: // public key inside a header
 					if (publicKey.Length > 12 && publicKey [12] == 0x06) {
+#if MOBILE
+						return true;
+#else
 						try {
 							CryptoConvert.FromCapiPublicKeyBlob (
 								publicKey, 12);
 							return true;
 						} catch (CryptographicException) {
 						}
+#endif
 					}
 					break;
 				case 0x06: // public key
+#if MOBILE
+					return true;
+#else
 					try {
 						CryptoConvert.FromCapiPublicKeyBlob (publicKey);
 						return true;
 					} catch (CryptographicException) {
 					}
-					break;
+					break;					
+#endif
 				case 0x07: // private key
 					break;
 				}
 
 				return false;
-#endif
 			}
 		}
 
@@ -297,7 +304,7 @@ namespace System.Reflection {
 				return null;
 
 			if (publicKey.Length == 0)
-				return new byte [0];
+				return EmptyArray<byte>.Value;
 
 			if (!IsPublicKeyValid)
 				throw new  SecurityException ("The public key is not valid.");
@@ -305,31 +312,28 @@ namespace System.Reflection {
 			return ComputePublicKeyToken ();
 		}
 
-		private byte [] ComputePublicKeyToken ()
+		[MethodImplAttribute (MethodImplOptions.InternalCall)]
+		extern unsafe static void get_public_token (byte* token, byte* pubkey, int len);
+
+		private unsafe byte [] ComputePublicKeyToken ()
 		{
-#if FULL_AOT_RUNTIME
-			return new byte [0];
-#else
-			HashAlgorithm ha = SHA1.Create ();
-			byte [] hash = ha.ComputeHash (publicKey);
-			// we need the last 8 bytes in reverse order
 			byte [] token = new byte [8];
-			Array.Copy (hash, (hash.Length - 8), token, 0, 8);
-			Array.Reverse (token, 0, 8);
+			fixed (byte* pkt = token)
+			fixed (byte *pk = publicKey)
+				get_public_token (pkt, pk, publicKey.Length);
 			return token;
-#endif
 		}
 
-		[MonoTODO]
 		public static bool ReferenceMatchesDefinition (AssemblyName reference, AssemblyName definition)
 		{
 			if (reference == null)
 				throw new ArgumentNullException ("reference");
 			if (definition == null)
 				throw new ArgumentNullException ("definition");
-			if (reference.Name != definition.Name)
-				return false;
-			throw new NotImplementedException ();
+			
+			// we only compare the simple assembly name to be consistent with MS .NET,
+			// which is the result of a bug in their implementation (see https://connect.microsoft.com/VisualStudio/feedback/details/752902)
+			return string.Equals (reference.Name, definition.Name, StringComparison.OrdinalIgnoreCase);
 		}
 
 		public void SetPublicKey (byte[] publicKey) 
@@ -383,6 +387,7 @@ namespace System.Reflection {
 			an.publicKey = publicKey;
 			an.keyToken = keyToken;
 			an.versioncompat = versioncompat;
+			an.processor_architecture = processor_architecture;
 			return an;
 		}
 
@@ -401,6 +406,7 @@ namespace System.Reflection {
 			return aname;
 		}
 
+#if !MOBILE
 		void _AssemblyName.GetIDsOfNames ([In] ref Guid riid, IntPtr rgszNames, uint cNames, uint lcid, IntPtr rgDispId)
 		{
 			throw new NotImplementedException ();
@@ -420,6 +426,27 @@ namespace System.Reflection {
 			IntPtr pVarResult, IntPtr pExcepInfo, IntPtr puArgErr)
 		{
 			throw new NotImplementedException ();
+		}
+#endif
+
+		public string CultureName {
+			get {
+				if (cultureinfo == null)
+					return null;
+				if (cultureinfo.LCID == CultureInfo.InvariantCulture.LCID)
+					return "neutral";
+				return cultureinfo.Name;
+			}
+		}
+
+		[ComVisibleAttribute(false)]
+		public AssemblyContentType ContentType {
+			get {
+				return contentType;
+			}
+			set {
+				contentType = value;
+			}
 		}
 	}
 }

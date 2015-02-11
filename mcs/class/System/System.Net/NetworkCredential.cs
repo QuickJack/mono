@@ -1,12 +1,13 @@
 //
 // System.Net.NetworkCredential.cs
 //
-// Author: Duncan Mak (duncan@ximian.com)
-// Author: Rolf Bjarne KVinge (rolf@xamarin.com)
+// Authors: Duncan Mak (duncan@ximian.com)
+//          Rolf Bjarne KVinge (rolf@xamarin.com)
+//          Marek Safar (marek.safar@gmail.com)
 //
 // (C) Ximian, Inc.
 // Copyright (C) 2010 Novell, Inc (http://www.novell.com)
-// Copyright (C) 2011 Xamarin Inc (http://www.xamarin.com)
+// Copyright (C) 2011, 2014 Xamarin Inc (http://www.xamarin.com)
 //
 // Permission is hereby granted, free of charge, to any person obtaining
 // a copy of this software and associated documentation files (the
@@ -33,18 +34,14 @@ using System.Security;
 namespace System.Net
 {
 	public class NetworkCredential : ICredentials
-#if !MOONLIGHT
 					, ICredentialsByHost
-#endif
 	{
 		// Fields
 		string userName;
 		string password;
 		string domain;
 		
-#if NET_4_0
 		SecureString securePassword;
-#endif
 
 		// Constructors
 		public NetworkCredential ()
@@ -58,12 +55,22 @@ namespace System.Net
 		}
 
 		public NetworkCredential (string userName, string password, string domain)
+			: this (userName, password)
 		{
-			this.userName = userName;
-			this.password = password;
 			this.domain = domain;
 		}
 
+		public NetworkCredential (string userName, SecureString password)
+		{
+			this.userName = userName;
+			SecurePassword = password;
+		}
+
+		public NetworkCredential (string userName, SecureString password, string domain)
+			: this (userName, password)
+		{
+			this.domain = domain;
+		}
 		// Properties
 
 		public string Domain {
@@ -81,7 +88,6 @@ namespace System.Net
 			set { password = value; }
 		}
 
-#if NET_4_0
 		public SecureString SecurePassword {
 			get { return securePassword; }
 			set {
@@ -92,18 +98,15 @@ namespace System.Net
 				}
 			}
 		}
-#endif
 
 		public NetworkCredential GetCredential (Uri uri, string authType)
 		{
 			return this;
 		}
 
-#if !MOONLIGHT
 		public NetworkCredential GetCredential (string host, int port, string authenticationType)
 		{
 			return this;
 		}
-#endif
 	}
 }

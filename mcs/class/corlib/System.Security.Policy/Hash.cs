@@ -29,8 +29,6 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if !MOONLIGHT
-
 using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -44,9 +42,7 @@ namespace System.Security.Policy {
 [Serializable]
 [ComVisible (true)]
 public sealed class Hash :
-#if NET_4_0
 		EvidenceBase,
-#endif
 		ISerializable, IBuiltInEvidence {
 
 	private Assembly assembly;
@@ -211,6 +207,3 @@ public sealed class Hash :
 }
 
 }
-
-#endif
-

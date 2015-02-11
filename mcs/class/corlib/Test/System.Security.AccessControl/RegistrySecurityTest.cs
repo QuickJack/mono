@@ -3,6 +3,8 @@
 // Authors:
 //	James Bellinger (jfb@zer7.com)
 
+#if !MOBILE
+
 using System;
 using System.IO;
 using System.Security.AccessControl;
@@ -22,7 +24,7 @@ namespace MonoTests.System.Security.AccessControl
 
 			RegistrySecurity security;
 			if (PlatformID.Win32NT != Environment.OSVersion.Platform) {
-				Assert.Ignore (); return;
+				Assert.Ignore ();
 			}
 
 			try {
@@ -53,7 +55,7 @@ namespace MonoTests.System.Security.AccessControl
 
 			RegistrySecurity security;
 			if (PlatformID.Win32NT != Environment.OSVersion.Platform) {
-				Assert.Ignore (); return;
+				Assert.Ignore ();
 			}
 
 			try {
@@ -98,4 +100,6 @@ namespace MonoTests.System.Security.AccessControl
 		}
 	}
 }
+
+#endif
 

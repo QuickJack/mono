@@ -7,6 +7,8 @@
 // Copyright 2011 Xamarin Inc (http://www.xamarin.com).
 //
 
+#if !MONOTOUCH
+
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -176,7 +178,7 @@ namespace MonoTests.System.Reflection.Emit
 		}
 
 		public class Bar<T> {
-			public class Foo<T> {}
+			public class Foo<U> {}
 		}
 
 		[Test]
@@ -204,3 +206,5 @@ namespace MonoTests.System.Reflection.Emit
 		}
 	}
 }
+
+#endif

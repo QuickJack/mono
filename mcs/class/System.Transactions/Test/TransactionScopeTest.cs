@@ -17,6 +17,25 @@ namespace MonoTests.System.Transactions
 	[TestFixture]
 	public class TransactionScopeTest
 	{
+
+		[Test]
+		public void TransactionScopeWithInvalidTimeSpanThrows ()
+		{
+			try {
+				TransactionScope scope = new TransactionScope (TransactionScopeOption.Required, TimeSpan.FromSeconds (-1));
+				Assert.Fail ("Expected exception when passing TransactionScopeOption and an invalid TimeSpan.");
+			} catch (ArgumentOutOfRangeException ex) {
+				Assert.AreEqual (ex.ParamName, "timeout");
+			}
+
+			try {
+				TransactionScope scope = new TransactionScope (null, TimeSpan.FromSeconds (-1));
+				Assert.Fail ("Expected exception when passing TransactionScopeOption and an invalid TimeSpan.");
+			} catch (ArgumentOutOfRangeException ex) {
+				Assert.AreEqual (ex.ParamName, "timeout");
+			}
+		}
+
 		[Test]
 		public void TransactionScopeCommit ()
 		{

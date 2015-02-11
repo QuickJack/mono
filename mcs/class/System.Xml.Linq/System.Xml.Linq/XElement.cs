@@ -37,6 +37,7 @@ using System.Xml.Serialization;
 namespace System.Xml.Linq
 {
 	[XmlSchemaProvider (null, IsAny = true)]
+	[XmlTypeConvertor ("ConvertForAssignment")]
 	public class XElement : XContainer, IXmlSerializable
 	{
 		static IEnumerable <XElement> emptySequence =
@@ -90,6 +91,16 @@ namespace System.Xml.Linq
 			Add (other.Contents);
 		}
 
+		static object ConvertForAssignment (object value)
+		{
+			var node = value as XmlNode;
+			if (node == null)
+				return value;
+			var doc = new XmlDocument ();
+			doc.AppendChild (doc.ImportNode (node, true));
+			return XElement.Parse (doc.InnerXml);
+		}
+
 		[CLSCompliant (false)]
 		public static explicit operator bool (XElement element)
 		{
@@ -124,7 +135,6 @@ namespace System.Xml.Linq
 			return element.Value == null ? (DateTime?) null : XUtil.ToDateTime (element.Value);
 		}
 
-#if !TARGET_JVM // Same as for System.Xml.XmlConvert.ToDateTimeOffset
 
 		[CLSCompliant (false)]
 		public static explicit operator DateTimeOffset (XElement element)
@@ -143,7 +153,6 @@ namespace System.Xml.Linq
 			return element.Value == null ? (DateTimeOffset?) null : XmlConvert.ToDateTimeOffset (element.Value);
 		}
 
-#endif
 
 		[CLSCompliant (false)]
 		public static explicit operator decimal (XElement element)
@@ -382,7 +391,8 @@ namespace System.Xml.Linq
 
 		public XAttribute Attribute (XName name)
 		{
-			foreach (XAttribute a in Attributes ())
+			XAttribute next;
+			for (XAttribute a = attr_first; a != null; a = a.NextAttribute)
 				if (a.Name == name)
 					return a;
 			return null;
@@ -407,12 +417,7 @@ namespace System.Xml.Linq
 
 		static void DefineDefaultSettings (XmlReaderSettings settings, LoadOptions options)
 		{
-#if MOONLIGHT
-			// 2.1 has a DtdProcessing property which defaults to DtdProcessing.Prohibit
-			settings.DtdProcessing = DtdProcessing.Parse;
-#else
 			settings.ProhibitDtd = false;
-#endif
 
 			settings.IgnoreWhitespace = (options & LoadOptions.PreserveWhitespace) == 0;
 		}
@@ -467,7 +472,6 @@ namespace System.Xml.Linq
 			}
 		}
 
-#if MOONLIGHT || MOBILE || NET_4_0
 		public static XElement Load (Stream stream)
 		{
 			return Load (stream, LoadOptions.None);
@@ -482,7 +486,6 @@ namespace System.Xml.Linq
 				return LoadCore (r, options);
 			}
 		}
-#endif
 
 		internal static XElement LoadCore (XmlReader r, LoadOptions options)
 		{
@@ -549,10 +552,8 @@ namespace System.Xml.Linq
 
 			if ((options & SaveOptions.DisableFormatting) == SaveOptions.None)
 				s.Indent = true;
-#if NET_4_0 || MOONLIGHT || MOBILE
 			if ((options & SaveOptions.OmitDuplicateNamespaces) == SaveOptions.OmitDuplicateNamespaces)
 				s.NamespaceHandling |= NamespaceHandling.OmitDuplicates;
-#endif
 			using (XmlWriter w = XmlWriter.Create (fileName, s)) {
 				Save (w);
 			}
@@ -569,10 +570,8 @@ namespace System.Xml.Linq
 			
 			if ((options & SaveOptions.DisableFormatting) == SaveOptions.None)
 				s.Indent = true;
-#if NET_4_0 || MOONLIGHT || MOBILE
 			if ((options & SaveOptions.OmitDuplicateNamespaces) == SaveOptions.OmitDuplicateNamespaces)
 				s.NamespaceHandling |= NamespaceHandling.OmitDuplicates;
-#endif
 			using (XmlWriter w = XmlWriter.Create (textWriter, s)) {
 				Save (w);
 			}
@@ -583,7 +582,6 @@ namespace System.Xml.Linq
 			WriteTo (writer);
 		}
 
-#if NET_4_0 || MOONLIGHT || MOBILE
 		public void Save (Stream stream)
 		{
 			Save (stream, SaveOptions.None);
@@ -601,7 +599,6 @@ namespace System.Xml.Linq
 				Save (writer);
 			}
 		}
-#endif
 		public IEnumerable <XElement> AncestorsAndSelf ()
 		{
 			return GetAncestorList (null, true);
@@ -765,8 +762,9 @@ namespace System.Xml.Linq
 
 		public void ReplaceAll (object content)
 		{
-			RemoveNodes ();
-			Add (content);
+			// it's waste of resource, but from bug #11298 it must save content
+			// snapshot first and then remove existing attributes.
+			ReplaceAll (XUtil.ExpandArray (content).ToArray ());
 		}
 
 		public void ReplaceAll (params object [] content)
@@ -777,8 +775,9 @@ namespace System.Xml.Linq
 
 		public void ReplaceAttributes (object content)
 		{
-			RemoveAttributes ();
-			Add (content);
+			// it's waste of resource, but from bug #11298 it must save content
+			// snapshot first and then remove existing attributes.
+			ReplaceAttributes (XUtil.ExpandArray (content).ToArray ());
 		}
 
 		public void ReplaceAttributes (params object [] content)
@@ -790,8 +789,9 @@ namespace System.Xml.Linq
 		public void SetElementValue (XName name, object value)
 		{
 			var element = Element (name);
-			if (element == null && value != null) {
-				Add (new XElement (name, value));
+			if (element == null) {
+				if (value != null)
+					Add (new XElement (name, value));
 			} else if (element != null && value == null) {
 				element.Remove ();
 			} else

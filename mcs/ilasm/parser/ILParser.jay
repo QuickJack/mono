@@ -657,22 +657,14 @@ impl_class_refs		: K_IMPLEMENTS generic_class_ref
 formal_typars_clause           : /* EMPTY */
                         | OPEN_ANGLE_BRACKET formal_typars CLOSE_ANGLE_BRACKET
                           {
-#if NET_2_0 || BOOTSTRAP_NET_2_0
                                 $$ = $2;
-#else
-				Report.Error ("Use ilasm2 for generics support.");
-#endif
                           }
                         ;
 
 typars_clause           : /* EMPTY */
                         | OPEN_ANGLE_BRACKET typars CLOSE_ANGLE_BRACKET
                           {
-#if NET_2_0 || BOOTSTRAP_NET_2_0
                                 $$ = $2;
-#else
-				Report.Error ("Use ilasm2 for generics support.");
-#endif
                           }
                         ;
 
@@ -2463,7 +2455,6 @@ instr			: INSTR_NONE
                                         case MiscInstr.ldc_r8:
 						fpdata = (byte []) $2;
 						if (!BitConverter.IsLittleEndian) {
-							// FIXME: handle the stupid ARM FPA format
 							System.Array.Reverse (fpdata, 0, 8);
 						}
                                                 double d = BitConverter.ToDouble (fpdata, 0);
@@ -2851,11 +2842,7 @@ sec_decl		: D_PERMISSION sec_action type_spec OPEN_PARENS nameval_pairs CLOSE_PA
 			  }
 			| D_PERMISSIONSET sec_action ASSIGN OPEN_BRACE permissions CLOSE_BRACE
 			  {
-#if NET_2_0
 				$$ = new MIPermissionSet ((PEAPI.SecurityAction) $2, (ArrayList) $5);
-#else
-				Report.Error ("Use ilasm2 for 2.0 style declarative security attributes.");
-#endif
 			  }
 			;
 
@@ -3209,7 +3196,7 @@ exptype_head		: D_CLASS K_EXTERN expt_attr comp_name
 					}
 			;
 
-expt_attr 		: /* EMPTY */
+expt_attr 		: { $$ = 0; } /* EMPTY */
 			| expt_attr K_PRIVATE                   { $$ = (TypeAttr)$1 | TypeAttr.Private; }
 			| expt_attr K_PUBLIC                    { $$ = (TypeAttr)$1 | TypeAttr.Public; }
 			| expt_attr K_NESTED K_PUBLIC           { $$ = (TypeAttr)$1 | TypeAttr.NestedPublic; }

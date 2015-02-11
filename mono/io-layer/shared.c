@@ -18,7 +18,7 @@
 #include <string.h>
 #include <unistd.h>
 
-#ifdef HAVE_SYS_SEM_H
+#if defined(HAVE_SYS_SEM_H) && !(defined(__native_client__) && defined(__GLIBC__))
 #  include <sys/sem.h>
 #else
 #  define DISABLE_SHARED_HANDLES
@@ -44,17 +44,15 @@
 
 static mono_mutex_t noshm_sems[_WAPI_SHARED_SEM_COUNT];
 
-gboolean _wapi_shm_disabled = TRUE;
-
 static gpointer wapi_storage [16];
 
 static void
 noshm_semaphores_init (void)
 {
-       int i;
+	int i;
 
-       for (i = 0; i < _WAPI_SHARED_SEM_COUNT; i++) 
-               mono_mutex_init (&noshm_sems [i], NULL);
+	for (i = 0; i < _WAPI_SHARED_SEM_COUNT; i++) 
+		mono_mutex_init (&noshm_sems [i]);
 }
 
 static int
@@ -152,12 +150,13 @@ _wapi_shm_detach (_wapi_shm_t type)
 }
 
 gboolean
-_wapi_shm_enabled (void)
+_wapi_shm_enabled_internal (void)
 {
 	return FALSE;
 }
 
-#else
+#else /* DISABLE_SHARED_HANDLES */
+
 /*
  * Use POSIX shared memory if possible, it is simpler, and it has the advantage that 
  * writes to the shared area does not need to be written to disk, avoiding spinning up 
@@ -166,6 +165,8 @@ _wapi_shm_enabled (void)
 #ifdef HAVE_SHM_OPEN
 #define USE_SHM 1
 #endif
+
+static gboolean _wapi_shm_disabled = TRUE;
 
 static gchar *
 _wapi_shm_base_name (_wapi_shm_t type)
@@ -254,7 +255,8 @@ static gchar *
 _wapi_shm_file (_wapi_shm_t type)
 {
 	static gchar file[_POSIX_PATH_MAX];
-	gchar *name = NULL, *filename, *wapi_dir;
+	gchar *name = NULL, *filename;
+	const gchar *wapi_dir;
 
 	name = _wapi_shm_base_name (type);
 
@@ -262,7 +264,7 @@ _wapi_shm_file (_wapi_shm_t type)
 	 * nfs mounts breaks, then there should be an option to set
 	 * the directory.
 	 */
-	wapi_dir = getenv ("MONO_SHARED_DIR");
+	wapi_dir = g_getenv ("MONO_SHARED_DIR");
 	if (wapi_dir == NULL) {
 		filename = g_build_filename (g_get_home_dir (), ".wapi", name,
 					     NULL);
@@ -403,7 +405,7 @@ try_again:
 }
 
 gboolean
-_wapi_shm_enabled (void)
+_wapi_shm_enabled_internal (void)
 {
 	static gboolean env_checked;
 

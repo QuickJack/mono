@@ -27,6 +27,8 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
+#if !MOBILE
+
 using NUnit.Framework;
 using System;
 using System.Security;
@@ -149,13 +151,8 @@ namespace MonoTests.System.Security {
 			NamedPermissionSet nps = new NamedPermissionSet ("name", null);
 			Assert.AreEqual ("name", nps.Name, "Name");
 			Assert.IsNull (nps.Description, "Description");
-#if NET_2_0
 			Assert.IsTrue (!nps.IsUnrestricted (), "IsUnrestricted");
 			Assert.IsTrue (nps.IsEmpty (), "IsEmpty");
-#else
-			Assert.IsTrue (nps.IsUnrestricted (), "IsUnrestricted");
-			Assert.IsTrue (!nps.IsEmpty (), "IsEmpty");
-#endif
 			Assert.IsTrue (!nps.IsReadOnly, "IsReadOnly");
 			Assert.IsTrue (!nps.IsSynchronized, "IsSynchronized");
 			Assert.AreEqual (0, nps.Count, "Count");
@@ -346,10 +343,8 @@ namespace MonoTests.System.Security {
 
 			se = nps.ToXml ();
 			Assert.IsNull (se.Attribute ("Name"), "Name attribute");
-#if NET_2_0
 			Assert.AreEqual (0, nps.GetHashCode (), "GetHashCode");
 			Assert.IsTrue (nps.Equals (nps), "Equals-self");
-#endif
 		}
 
 		[Test]
@@ -405,7 +400,6 @@ namespace MonoTests.System.Security {
 			Assert.IsNull ((se.Attributes ["Description"] as string), "Unrestricted.Description");
 			Assert.AreEqual ("true", (se.Attributes ["Unrestricted"] as string), "Unrestricted.Unrestricted");
 		}
-#if NET_2_0
 		[Test]
 		public void Equals () 
 		{
@@ -440,6 +434,7 @@ namespace MonoTests.System.Security {
 			psu.Description = sentinel;
 			Assert.IsTrue (psu.GetHashCode () == uhc, "GetHashCode-3");
 		}
-#endif
 	}
 }
+
+#endif

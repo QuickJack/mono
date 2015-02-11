@@ -88,6 +88,7 @@ namespace System.ServiceModel.Channels
 
 		public XmlDictionaryReaderQuotas ReaderQuotas {
 			get { return quotas; }
+			set { quotas = value; }
 		}
 
 		public Encoding WriteEncoding {

@@ -33,9 +33,7 @@
 using System;
 using System.Text;
 using System.Runtime.InteropServices;
-#if NET_4_5
 using System.Threading.Tasks;
-#endif
 
 namespace System.IO {
 	[Serializable]
@@ -44,6 +42,11 @@ namespace System.IO {
 	{
 		sealed class NullStreamReader : StreamReader
 		{
+			internal NullStreamReader ()
+			{
+				base_stream = Stream.Null;
+			}
+
 			public override int Peek ()
 			{
 				return -1;
@@ -121,20 +124,18 @@ namespace System.IO {
 		
 		bool mayBlock;
 
-#if NET_4_5
-		Task async_task;
+		IDecoupledTask async_task;
 		readonly bool leave_open;
-#endif
 
 		public new static readonly StreamReader Null =  new NullStreamReader ();
 		
 		private StreamReader() {}
 
 		public StreamReader(Stream stream)
-			: this (stream, Encoding.UTF8Unmarked, true, DefaultBufferSize) { }
+			: this (stream, Encoding.UTF8, true, DefaultBufferSize) { }
 
 		public StreamReader(Stream stream, bool detectEncodingFromByteOrderMarks)
-			: this (stream, Encoding.UTF8Unmarked, detectEncodingFromByteOrderMarks, DefaultBufferSize) { }
+			: this (stream, Encoding.UTF8, detectEncodingFromByteOrderMarks, DefaultBufferSize) { }
 
 		public StreamReader(Stream stream, Encoding encoding)
 			: this (stream, encoding, true, DefaultBufferSize) { }
@@ -142,30 +143,22 @@ namespace System.IO {
 		public StreamReader(Stream stream, Encoding encoding, bool detectEncodingFromByteOrderMarks)
 			: this (stream, encoding, detectEncodingFromByteOrderMarks, DefaultBufferSize) { }
 
-#if NET_4_5
 		public StreamReader(Stream stream, Encoding encoding, bool detectEncodingFromByteOrderMarks, int bufferSize)
 			: this (stream, encoding, detectEncodingFromByteOrderMarks, bufferSize, false)
 		{
 		}
 
 		public StreamReader(Stream stream, Encoding encoding, bool detectEncodingFromByteOrderMarks, int bufferSize, bool leaveOpen)
-#else
-		const bool leave_open = false;
-
-		public StreamReader(Stream stream, Encoding encoding, bool detectEncodingFromByteOrderMarks, int bufferSize)
-#endif
 		{
-#if NET_4_5
 			leave_open = leaveOpen;
-#endif
 			Initialize (stream, encoding, detectEncodingFromByteOrderMarks, bufferSize);
 		}
 
 		public StreamReader(string path)
-			: this (path, Encoding.UTF8Unmarked, true, DefaultFileBufferSize) { }
+			: this (path, Encoding.UTF8, true, DefaultFileBufferSize) { }
 
 		public StreamReader(string path, bool detectEncodingFromByteOrderMarks)
-			: this (path, Encoding.UTF8Unmarked, detectEncodingFromByteOrderMarks, DefaultFileBufferSize) { }
+			: this (path, Encoding.UTF8, detectEncodingFromByteOrderMarks, DefaultFileBufferSize) { }
 
 		public StreamReader(string path, Encoding encoding)
 			: this (path, encoding, true, DefaultFileBufferSize) { }
@@ -258,8 +251,6 @@ namespace System.IO {
 
 		public virtual Encoding CurrentEncoding {
 			get {
-				if (encoding == null)
-					throw new Exception ();
 				return encoding;
 			}
 		}
@@ -587,13 +578,10 @@ namespace System.IO {
 			if (base_stream == null)
 				throw new ObjectDisposedException ("StreamReader", "Cannot read from a closed StreamReader");
 
-#if NET_4_5
 			if (async_task != null && !async_task.IsCompleted)
 				throw new InvalidOperationException ();
-#endif
 		}
 
-#if NET_4_5
 		public override int ReadBlock ([In, Out] char[] buffer, int index, int count)
 		{
 			if (buffer == null)
@@ -625,9 +613,9 @@ namespace System.IO {
 
 			CheckState ();
 
-			Task<int> res;
-			async_task = res = ReadAsyncCore (buffer, index, count);
-			return res;
+			DecoupledTask<int> res;
+			async_task = res = new DecoupledTask<int> (ReadAsyncCore (buffer, index, count));
+			return res.Task;
 		}
 
 		async Task<int> ReadAsyncCore (char[] buffer, int index, int count)
@@ -665,18 +653,18 @@ namespace System.IO {
 
 			CheckState ();
 
-			Task<int> res;
-			async_task = res = ReadAsyncCore (buffer, index, count);
-			return res;
+			DecoupledTask<int> res;
+			async_task = res = new DecoupledTask<int> (ReadAsyncCore (buffer, index, count));
+			return res.Task;
 		}
 
 		public override Task<string> ReadLineAsync ()
 		{
 			CheckState ();
 
-			Task<string> res;
-			async_task = res = ReadLineAsyncCore ();
-			return res;
+			DecoupledTask<string> res;
+			async_task = res = new DecoupledTask<string> (ReadLineAsyncCore ());
+			return res.Task;
 		}
 
 		async Task<string> ReadLineAsyncCore ()
@@ -731,9 +719,9 @@ namespace System.IO {
 		{
 			CheckState ();
 
-			Task<string> res;
-			async_task = res = ReadToEndAsyncCore ();
-			return res;
+			DecoupledTask<string> res;
+			async_task = res = new DecoupledTask<string> (ReadToEndAsyncCore ());
+			return res.Task;
 		}
 
 		async Task<string> ReadToEndAsyncCore ()
@@ -763,6 +751,5 @@ namespace System.IO {
 
 			return decoded_count;
 		}
-#endif
 	}
 }

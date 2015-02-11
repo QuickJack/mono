@@ -5,14 +5,16 @@ noinst_SCRIPTS = mono-wrapper monodis-wrapper
 etctmp = etc
 symlinks = etc/mono/1.0/machine.config etc/mono/2.0/machine.config etc/mono/2.0/web.config etc/mono/browscap.ini etc/mono/2.0/Browsers/Compat.browser
 
-if INSTALL_4_0
-symlinks += etc/mono/4.0/machine.config etc/mono/4.0/web.config etc/mono/4.5/web.config etc/mono/4.5/machine.config
+if INSTALL_4_5
+symlinks += etc/mono/4.0/machine.config etc/mono/4.0/web.config etc/mono/4.5/web.config etc/mono/4.5/machine.config etc/mono/4.0/Browsers/Compat.browser etc/mono/4.5/Browsers/Compat.browser
 endif
 
 etc/mono/2.0/machine.config: $(top_srcdir)/data/net_2_0/machine.config
 etc/mono/2.0/web.config: $(top_srcdir)/data/net_2_0/web.config
 etc/mono/browscap.ini: $(top_srcdir)/data/browscap.ini
-etc/mono/2.0/Browsers/Compat.browser: $(top_srcdir)/data/net_2_0/Browsers/Compat.browser
+etc/mono/2.0/Browsers/Compat.browser: $(top_srcdir)/data/Browsers/Compat.browser
+etc/mono/4.0/Browsers/Compat.browser: $(top_srcdir)/data/Browsers/Compat.browser
+etc/mono/4.5/Browsers/Compat.browser: $(top_srcdir)/data/Browsers/Compat.browser
 etc/mono/4.0/machine.config: $(top_srcdir)/data/net_4_0/machine.config
 etc/mono/4.0/web.config: $(top_srcdir)/data/net_4_0/web.config
 etc/mono/4.5/machine.config: $(top_srcdir)/data/net_4_5/machine.config
@@ -23,50 +25,16 @@ $(symlinks):
 
 SUPPORT_FILES = $(symlinks) mono-wrapper etc/mono/config
 
-if MOONLIGHT
-moon-do-basic: Makefile $(SUPPORT_FILES)
-	cd $(mcs_topdir)/ && $(MAKE) NO_DIR_CHECK=1 PROFILE=moonlight_raw
-
-moon-do-basic-clean:
-	cd $(mcs_topdir)/ && $(MAKE) NO_DIR_CHECK=1 PROFILE=moonlight_raw clean
-endif
-
 if ONLY_MONOTOUCH
 build_profiles = monotouch
 else
-if ONLY_MOONLIGHT
-build_profiles = moonlight_raw
-test_profiles = moonlight_raw
+if ONLY_XAMMAC
+build_profiles = xammac
 else
-
 build_profiles = 
 
-if MOONLIGHT
-build_profiles += moonlight_raw
-
-moon-do-moonlight-raw: Makefile $(SUPPORT_FILES)
-	cd $(mcs_topdir) && $(MAKE) NO_DIR_CHECK=1 PROFILES='moonlight_raw' CC='$(CC)' all-profiles
-
-moon-do-moonlight-raw-clean:
-	cd $(mcs_topdir) && $(MAKE) NO_DIR_CHECK=1 PROFILES='moonlight_raw' CC='$(CC)' clean-profiles
-
-moon-do-build: moon-do-moonlight-raw moon-do-basic
-moon-do-clean: moon-do-moonlight-raw-clean moon-do-basic-clean
-
-endif
-
-if INSTALL_2_0
-build_profiles += net_2_0 net_3_5
-al_profile = net_2_0
-endif
-
-if INSTALL_4_0
-build_profiles += net_4_0
-al_profile = net_4_0
-endif
-
 if INSTALL_4_5
-build_profiles += net_4_5
+build_profiles += net_4_0 net_4_5 xbuild_12 xbuild_14
 al_profile = net_4_5
 endif
 
@@ -76,6 +44,10 @@ endif
 
 if INSTALL_MONOTOUCH
 build_profiles += monotouch monotouch_runtime
+endif
+
+if INSTALL_XAMMAC
+build_profiles += xammac
 endif
 
 test_profiles = $(build_profiles)
@@ -115,14 +87,7 @@ clean-local:
 
 endif BUILD_MCS
 
-TEST_SUPPORT_FILES = $(tmpinst)/bin/mono $(tmpinst)/bin/ilasm $(tmpinst)/bin/mcs $(tmpinst)/bin/gmcs $(tmpinst)/bin/dmcs $(tmpinst)/bin/al2 $(tmpinst)/bin/al
-
-# now a misnomer, but it'll go away soon enough.
-if ENABLE_NUNIT_TESTS
-test_select =
-else
-test_select = ONLY_CENTUM_TESTS=yes
-endif
+TEST_SUPPORT_FILES = $(tmpinst)/bin/mono $(tmpinst)/bin/ilasm $(tmpinst)/bin/mcs $(tmpinst)/bin/dmcs $(tmpinst)/bin/al2 $(tmpinst)/bin/al
 
 mcs-do-test-profiles:
 	cd $(mcs_topdir) && $(MAKE) NO_DIR_CHECK=1 PROFILES='$(test_profiles)' test-profiles
@@ -145,15 +110,17 @@ endif
 
 # Compile all assemblies with the verifier turned on. Code must be valid but not verifiable.
 # TODO it would be nice to split assemblies without unsafe code to use the verifier with verifiable mode.
-# Skip net 4.0 assemblies because the contain metadata only
+# Skip net 4.0 assemblies because they contain metadata only
 mcs-compileall: mono-wrapper etc/mono/config
 	save_MONO_PATH=$$MONO_PATH; mcs_topdir=`cd $(mcs_topdir) && $(cur_dir_cmd)`; ok=:; \
 	for profile in $(test_profiles); do \
 	  if [ "net_4_0" = "$$profile" ]; then \
           continue; \
       fi; \
-	  if [ "net_3_5" = "$$profile" ]; then \
-		  MONO_PATH="$$mcs_topdir/class/lib/$$profile$(PLATFORM_PATH_SEPARATOR)$$mcs_topdir/class/lib/net_2_0$(PLATFORM_PATH_SEPARATOR)$$save_MONO_PATH"; \
+	  if [ "xbuild_12" = "$$profile" ]; then \
+		  MONO_PATH="$$mcs_topdir/class/lib/$$profile$(PLATFORM_PATH_SEPARATOR)$$mcs_topdir/class/lib/net_4_5$(PLATFORM_PATH_SEPARATOR)$$save_MONO_PATH"; \
+	  elif [ "xbuild_14" = "$$profile" ]; then \
+		  MONO_PATH="$$mcs_topdir/class/lib/$$profile$(PLATFORM_PATH_SEPARATOR)$$mcs_topdir/class/lib/net_4_5$(PLATFORM_PATH_SEPARATOR)$$save_MONO_PATH"; \
 	  else \
 		  MONO_PATH="$$mcs_topdir/class/lib/$$profile$(PLATFORM_PATH_SEPARATOR)$$save_MONO_PATH"; \
 	  fi; \
@@ -162,15 +129,19 @@ mcs-compileall: mono-wrapper etc/mono/config
 		if [ ! -f $$i ] ; then \
 			continue ; \
 		fi ;  \
-	    if ./mono-wrapper --compile-all --verify-all --security=validil $$i; then \
+	    if ./mono-wrapper --compile-all --verify-all --security=verifiable $$i; then \
 	      echo $$i verified OK; \
 	    else \
 	      echo $$i verification failed; ok=false; \
 	    fi; done; done; \
 	$$ok
 
+if NACL_CODEGEN
+check-local:
+else
 check-local: mcs-compileall mcs-do-test-profiles
-	$(MAKE) $(test_select) mcs-do-run-test-profiles
+	$(MAKE) mcs-do-run-test-profiles
+endif
 
 # Compile all mcs tests
 test: mcs-do-test-profiles
@@ -180,9 +151,9 @@ CLEANFILES = etc/mono/config
 # depend on $(symlinks) to ensure 'etc/mono' directory exists
 etc/mono/config: ../data/config Makefile $(symlinks)
 	d=`cd ../support && pwd`; \
-	sed 's,target="libMonoPosixHelper[^"]*",target="'$$d/libMonoPosixHelper.la'",' ../data/config > $@t
+	sed 's,target="$(prefix)/$(reloc_libdir)/libMonoPosixHelper$(libsuffix)",target="'$$d'/libMonoPosixHelper.la",' ../data/config > $@t
 	if test -z "$(libgdiplus_loc)"; then :; else \
-	  sed 's,<configuration>,& <dllmap dll="gdiplus.dll" target="$(libgdiplus_loc)" />,' $@t > $@tt; \
+	  sed 's,target="$(libgdiplus_install_loc)",target="$(libgdiplus_loc)",' $@t > $@tt; \
 	  mv -f $@tt $@t; fi
 	mv -f $@t $@
 
@@ -194,12 +165,6 @@ $(tmpinst)/bin/mcs: $(tmpinst)/bin/mono Makefile
 	echo '#! /bin/sh' > $@ ; \
 	r=`pwd`; m=`cd $(mcs_topdir) && pwd`; \
 	echo 'exec "'"$$r/$(tmpinst)/bin/mono"'" "'"$$m/class/lib/build/mcs.exe"'" "$$@"' >> $@ ; \
-	chmod +x $@
-
-$(tmpinst)/bin/gmcs: $(tmpinst)/bin/mono Makefile
-	echo '#! /bin/sh' > $@ ; \
-	r=`pwd`; m=`cd $(mcs_topdir) && pwd`; \
-	echo 'exec "'"$$r/$(tmpinst)/bin/mono"'" "'"$$m/class/lib/build/mcs.exe -sdk:2"'" "$$@"' >> $@ ; \
 	chmod +x $@
 
 $(tmpinst)/bin/dmcs: $(tmpinst)/bin/mono Makefile

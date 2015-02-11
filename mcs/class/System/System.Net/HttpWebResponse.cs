@@ -43,12 +43,8 @@ using System.Text;
 
 namespace System.Net 
 {
-#if MOONLIGHT
-	internal class HttpWebResponse : WebResponse, ISerializable, IDisposable {
-#else
 	[Serializable]
 	public class HttpWebResponse : WebResponse, ISerializable, IDisposable {
-#endif
 		Uri uri;
 		WebHeaderCollection webHeaders;
 		CookieCollection cookieCollection;
@@ -159,6 +155,7 @@ namespace System.Net
 			}
 		}
 		
+		virtual
 		public CookieCollection Cookies {
 			get {
 				CheckDisposed ();
@@ -203,6 +200,7 @@ namespace System.Net
 			}
 		}
 		
+		virtual
 		public string Method {
 			get {
 				CheckDisposed ();
@@ -231,12 +229,14 @@ namespace System.Net
 			}
 		}
 		
+		virtual
 		public HttpStatusCode StatusCode {
 			get {
 				return statusCode; 
 			}
 		}
 		
+		virtual
 		public string StatusDescription {
 			get {
 				CheckDisposed ();
@@ -269,7 +269,7 @@ namespace System.Net
 			CheckDisposed ();
 			if (stream == null)
 				return Stream.Null;  
-			if (0 == String.Compare (method, "HEAD", true)) // see par 4.3 & 9.4
+			if (string.Equals (method, "HEAD", StringComparison.OrdinalIgnoreCase))  // see par 4.3 & 9.4
 				return Stream.Null;  
 
 			return stream;
@@ -311,14 +311,12 @@ namespace System.Net
 		void IDisposable.Dispose ()
 		{
 			Dispose (true);
-			GC.SuppressFinalize (this);  
 		}
-
-		void Dispose (bool disposing) 
+		
+		protected override void Dispose (bool disposing)
 		{
 			this.disposed = true;
-			if (disposing)
-				Close ();
+			base.Dispose (true);
 		}
 		
 		private void CheckDisposed () 
@@ -332,37 +330,33 @@ namespace System.Net
 			if (webHeaders == null)
 				return;
 
-			string value = webHeaders.Get ("Set-Cookie");
-			if (value != null) {
-				SetCookie (value);
+			//
+			// Don't terminate response reading on bad cookie value
+			//
+			string value;
+			CookieCollection cookies = null;
+			try {
+				value = webHeaders.Get ("Set-Cookie");
+				if (value != null)
+					cookies = cookie_container.CookieCutter (uri, HttpKnownHeaderNames.SetCookie, value, false);
+			} catch {
 			}
 
-			value = webHeaders.Get ("Set-Cookie2");
-			if (value != null) {
-				SetCookie (value);
-			}
-		}
+			try {
+				value = webHeaders.Get ("Set-Cookie2");
+				if (value != null) {
+					var cookies2 = cookie_container.CookieCutter (uri, HttpKnownHeaderNames.SetCookie2, value, false);
 
-		void SetCookie (string header)
-		{
-			if (cookieCollection == null)
-				cookieCollection = new CookieCollection ();
-
-			var parser = new CookieParser (header);
-			foreach (var cookie in parser.Parse ()) {
-				if (cookie.Domain == "") {
-					cookie.Domain = uri.Host;
-					cookie.HasDomain = false;
+					if (cookies != null && cookies.Count != 0) {
+						cookies.Add (cookies2);
+					} else {
+						cookies = cookies2;
+					}
 				}
-
-				if (cookie.HasDomain &&
-				    !CookieContainer.CheckSameOrigin (uri, cookie.Domain))
-					continue;
-
-				cookieCollection.Add (cookie);
-				if (cookie_container != null)
-					cookie_container.Add (uri, cookie);
+			} catch {
 			}
+
+			this.cookieCollection = cookies;
 		}
 	}	
 }

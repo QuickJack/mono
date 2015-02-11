@@ -41,20 +41,14 @@ using System.Web.Configuration;
 
 namespace System.Web.Util
 {
-#if NET_4_0
 	public
-#endif
 	class HttpEncoder
 	{
 		static char [] hexChars = "0123456789abcdef".ToCharArray ();
 		static object entitiesLock = new object ();
 		static SortedDictionary <string, char> entities;
-#if NET_4_0
 		static Lazy <HttpEncoder> defaultEncoder;
 		static Lazy <HttpEncoder> currentEncoderLazy;
-#else
-		static HttpEncoder defaultEncoder;
-#endif
 		static HttpEncoder currentEncoder;
 
 		static IDictionary <string, char> Entities {
@@ -70,50 +64,33 @@ namespace System.Web.Util
 		
 		public static HttpEncoder Current {
 			get {
-#if NET_4_0
 				if (currentEncoder == null)
 					currentEncoder = currentEncoderLazy.Value;
-#endif
 				return currentEncoder;
 			}
-#if NET_4_0
 			set {
 				if (value == null)
 					throw new ArgumentNullException ("value");
 				currentEncoder = value;
 			}
-#endif
 		}
 
 		public static HttpEncoder Default {
 			get {
-#if NET_4_0
 				return defaultEncoder.Value;
-#else
-				return defaultEncoder;
-#endif
 			}
 		}
 
 		static HttpEncoder ()
 		{
-#if NET_4_0
 			defaultEncoder = new Lazy <HttpEncoder> (() => new HttpEncoder ());
 			currentEncoderLazy = new Lazy <HttpEncoder> (new Func <HttpEncoder> (GetCustomEncoderFromConfig));
-#else
-			defaultEncoder = new HttpEncoder ();
-			currentEncoder = defaultEncoder;
-#endif
 		}
 		
 		public HttpEncoder ()
 		{
 		}
-#if NET_4_0	
 		protected internal virtual
-#else
-		internal static
-#endif
 		void HeaderNameValueEncode (string headerName, string headerValue, out string encodedHeaderName, out string encodedHeaderValue)
 		{
 			if (String.IsNullOrEmpty (headerName))
@@ -138,10 +115,9 @@ namespace System.Web.Util
 		static string EncodeHeaderString (string input)
 		{
 			StringBuilder sb = null;
-			char ch;
 			
 			for (int i = 0; i < input.Length; i++) {
-				ch = input [i];
+				char ch = input [i];
 
 				if ((ch < 32 && ch != 9) || ch == 127)
 					StringBuilderAppend (String.Format ("%{0:x2}", (int)ch), ref sb);
@@ -152,7 +128,6 @@ namespace System.Web.Util
 
 			return input;
 		}
-#if NET_4_0		
 		protected internal virtual void HtmlAttributeEncode (string value, TextWriter output)
 		{
 
@@ -209,12 +184,7 @@ namespace System.Web.Util
 			return Activator.CreateInstance (t, false) as HttpEncoder;
 #endif
 		}
-#endif
-#if NET_4_0
 		protected internal virtual
-#else
-		internal static
-#endif
 		string UrlPathEncode (string value)
 		{
 			if (String.IsNullOrEmpty (value))
@@ -263,9 +233,7 @@ namespace System.Web.Util
 			for (int i = 0; i < s.Length; i++) {
 				char c = s [i];
 				if (c == '&' || c == '"' || c == '<' || c == '>' || c > 159
-#if NET_4_0
 				    || c == '\''
-#endif
 				) {
 					needEncode = true;
 					break;
@@ -276,11 +244,11 @@ namespace System.Web.Util
 				return s;
 
 			StringBuilder output = new StringBuilder ();
-			char ch;
 			int len = s.Length;
 			
 			for (int i = 0; i < len; i++) {
-				switch (s [i]) {
+				char ch = s [i];
+				switch (ch) {
 					case '&' :
 						output.Append ("&amp;");
 						break;
@@ -293,11 +261,9 @@ namespace System.Web.Util
 					case '"' :
 						output.Append ("&quot;");
 						break;
-#if NET_4_0
 					case '\'':
 						output.Append ("&#39;");
 						break;
-#endif
 					case '\uff1c':
 						output.Append ("&#65308;");
 						break;
@@ -307,7 +273,6 @@ namespace System.Web.Util
 						break;
 						
 					default:
-						ch = s [i];
 						if (ch > 159 && ch < 256) {
 							output.Append ("&#");
 							output.Append (((int) ch).ToString (Helpers.InvariantCulture));
@@ -323,23 +288,13 @@ namespace System.Web.Util
 		
 		internal static string HtmlAttributeEncode (string s) 
 		{
-#if NET_4_0
 			if (String.IsNullOrEmpty (s))
 				return String.Empty;
-#else
-			if (s == null) 
-				return null;
-			
-			if (s.Length == 0)
-				return String.Empty;
-#endif			
 			bool needEncode = false;
 			for (int i = 0; i < s.Length; i++) {
 				char c = s [i];
 				if (c == '&' || c == '"' || c == '<'
-#if NET_4_0
 				    || c == '\''
-#endif
 				) {
 					needEncode = true;
 					break;
@@ -351,27 +306,28 @@ namespace System.Web.Util
 
 			StringBuilder output = new StringBuilder ();
 			int len = s.Length;
-			for (int i = 0; i < len; i++)
-				switch (s [i]) {
-				case '&' : 
-					output.Append ("&amp;");
-					break;
-				case '"' :
-					output.Append ("&quot;");
-					break;
-				case '<':
-					output.Append ("&lt;");
-					break;
-#if NET_4_0
-				case '\'':
-					output.Append ("&#39;");
-					break;
-#endif
-				default:
-					output.Append (s [i]);
-					break;
+
+			for (int i = 0; i < len; i++) {
+				char ch = s [i];
+				switch (ch) {
+					case '&' : 
+						output.Append ("&amp;");
+						break;
+					case '"' :
+						output.Append ("&quot;");
+						break;
+					case '<':
+						output.Append ("&lt;");
+						break;
+					case '\'':
+						output.Append ("&#39;");
+						break;
+					default:
+						output.Append (ch);
+						break;
 				}
-	
+			}
+
 			return output.ToString();
 		}
 		
@@ -385,9 +341,7 @@ namespace System.Web.Util
 			
 			if (s.IndexOf ('&') == -1)
 				return s;
-#if NET_4_0
 			StringBuilder rawEntity = new StringBuilder ();
-#endif
 			StringBuilder entity = new StringBuilder ();
 			StringBuilder output = new StringBuilder ();
 			int len = s.Length;
@@ -405,9 +359,7 @@ namespace System.Web.Util
 				if (state == 0) {
 					if (c == '&') {
 						entity.Append (c);
-#if NET_4_0
 						rawEntity.Append (c);
-#endif
 						state = 1;
 					} else {
 						output.Append (c);
@@ -443,9 +395,7 @@ namespace System.Web.Util
 							state = 3;
 						}
 						entity.Append (c);
-#if NET_4_0
 						rawEntity.Append (c);
-#endif
 					}
 				} else if (state == 2) {
 					entity.Append (c);
@@ -457,17 +407,13 @@ namespace System.Web.Util
 						output.Append (key);
 						state = 0;
 						entity.Length = 0;
-#if NET_4_0
 						rawEntity.Length = 0;
-#endif
 					}
 				} else if (state == 3) {
 					if (c == ';') {
-#if NET_4_0
 						if (number == 0)
 							output.Append (rawEntity.ToString () + ";");
 						else
-#endif
 						if (number > 65535) {
 							output.Append ("&#");
 							output.Append (number.ToString (Helpers.InvariantCulture));
@@ -477,27 +423,19 @@ namespace System.Web.Util
 						}
 						state = 0;
 						entity.Length = 0;
-#if NET_4_0
 						rawEntity.Length = 0;
-#endif
 						have_trailing_digits = false;
 					} else if (is_hex_value &&  Uri.IsHexDigit(c)) {
 						number = number * 16 + Uri.FromHex(c);
 						have_trailing_digits = true;
-#if NET_4_0
 						rawEntity.Append (c);
-#endif
 					} else if (Char.IsDigit (c)) {
 						number = number * 10 + ((int) c - '0');
 						have_trailing_digits = true;
-#if NET_4_0
 						rawEntity.Append (c);
-#endif
 					} else if (number == 0 && (c == 'x' || c == 'X')) {
 						is_hex_value = true;
-#if NET_4_0
 						rawEntity.Append (c);
-#endif
 					} else {
 						state = 2;
 						if (have_trailing_digits) {
@@ -520,9 +458,6 @@ namespace System.Web.Util
 		internal static bool NotEncoded (char c)
 		{
 			return (c == '!' || c == '(' || c == ')' || c == '*' || c == '-' || c == '.' || c == '_'
-#if !NET_4_0
-				|| c == '\''
-#endif
 			);
 		}
 		

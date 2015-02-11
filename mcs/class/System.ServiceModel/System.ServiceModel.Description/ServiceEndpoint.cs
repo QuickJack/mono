@@ -27,6 +27,7 @@
 //
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.ServiceModel;
 using System.ServiceModel.Channels;
@@ -67,15 +68,18 @@ namespace System.ServiceModel.Description
 			get { return behaviors; }
 		}
 
+		[MonoTODO]
+		public KeyedCollection<Type,IEndpointBehavior> EndpointBehaviors {
+			get { throw new NotImplementedException (); }
+		}
+
 		public ContractDescription Contract {
 			get { return contract; }
-#if NET_4_0
 			set {
 				if (value == null)
 					throw new ArgumentNullException ("value");
 				contract = value;
 			}
-#endif
 		}
 
 		public EndpointAddress Address {
@@ -88,11 +92,7 @@ namespace System.ServiceModel.Description
 			set { binding = value; }
 		}
 
-#if NET_4_0
 		public
-#else
-		internal
-#endif
 		bool IsSystemEndpoint { get; set; }
 
 		public Uri ListenUri {

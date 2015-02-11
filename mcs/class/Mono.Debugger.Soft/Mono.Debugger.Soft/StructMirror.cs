@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 
 namespace Mono.Debugger.Soft
 {
@@ -41,6 +42,24 @@ namespace Mono.Debugger.Soft
 				}
 				throw new ArgumentException ("Unknown struct field '" + field + "'.", "field");
 			}
+			set {
+				FieldInfoMirror[] field_info = Type.GetFields ();
+				int nf = 0;
+				for (int i = 0; i < field_info.Length; ++i) {
+					if (!field_info [i].IsStatic) {
+						if (field_info [i].Name == field) {
+							fields [nf] = value;
+							return;
+						}
+						nf++;
+					}
+				}
+				throw new ArgumentException ("Unknown struct field '" + field + "'.", "field");
+			}
+		}
+
+		internal void SetFields (Value[] fields) {
+			this.fields = fields;
 		}
 
 		internal void SetField (int index, Value value) {
@@ -65,7 +84,51 @@ namespace Mono.Debugger.Soft
 		}
 
 		public Value EndInvokeMethod (IAsyncResult asyncResult) {
-			return ObjectMirror.EndInvokeMethodInternal (asyncResult);
+			var result = ObjectMirror.EndInvokeMethodInternalWithResult (asyncResult);
+			var outThis = result.OutThis as StructMirror;
+			if (outThis != null) {
+				SetFields (outThis.Fields);
+			}
+			return result.Result;
+		}
+
+		public InvokeResult EndInvokeMethodWithResult (IAsyncResult asyncResult) {
+			var result = ObjectMirror.EndInvokeMethodInternalWithResult (asyncResult);
+			var outThis = result.OutThis as StructMirror;
+			if (outThis != null) {
+				SetFields (outThis.Fields);
+			}
+			return result;
+		}
+
+		public Task<Value> InvokeMethodAsync (ThreadMirror thread, MethodMirror method, IList<Value> arguments, InvokeOptions options = InvokeOptions.None) {
+			var tcs = new TaskCompletionSource<Value> ();
+			BeginInvokeMethod (thread, method, arguments, options, iar =>
+					{
+						try {
+							tcs.SetResult (EndInvokeMethod (iar));
+						} catch (OperationCanceledException) {
+							tcs.TrySetCanceled ();
+						} catch (Exception ex) {
+							tcs.TrySetException (ex);
+						}
+					}, null);
+			return tcs.Task;
+		}
+
+		public Task<InvokeResult> InvokeMethodAsyncWithResult (ThreadMirror thread, MethodMirror method, IList<Value> arguments, InvokeOptions options = InvokeOptions.None) {
+			var tcs = new TaskCompletionSource<InvokeResult> ();
+			BeginInvokeMethod (thread, method, arguments, options, iar =>
+					{
+						try {
+							tcs.SetResult (ObjectMirror.EndInvokeMethodInternalWithResult (iar));
+						} catch (OperationCanceledException) {
+							tcs.TrySetCanceled ();
+						} catch (Exception ex) {
+							tcs.TrySetException (ex);
+						}
+					}, null);
+			return tcs.Task;
 		}
 	}
 }

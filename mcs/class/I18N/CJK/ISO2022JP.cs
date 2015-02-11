@@ -379,11 +379,9 @@ namespace I18N.CJK
 					SwitchMode (bytes, ref byteIndex, ref byteCount, ref m, ISO2022JPMode.ASCII);
 					value = (int) ch;
 				} else {
-#if NET_2_0
 					HandleFallback (
 						chars, ref i, ref charCount,
 						bytes, ref byteIndex, ref byteCount, this);
-#endif
 					// skip non-convertible character
 					continue;
 				}
@@ -525,10 +523,8 @@ namespace I18N.CJK
 				}
 				else
 				{
-#if NET_2_0
 					HandleFallback (chars, ref i, ref charCount,
 						bytes, ref byteIndex, ref byteCount, this);
-#endif
 					// skip non-convertible character
 					continue;
 				}
@@ -578,13 +574,11 @@ namespace I18N.CJK
 		}
 #endif
 
-#if NET_2_0
 		public override void Reset ()
 		{
 			m = ISO2022JPMode.ASCII;
 			shifted_in_conv = shifted_in_count = false;
 		}
-#endif
 	}
 
 
@@ -642,7 +636,7 @@ namespace I18N.CJK
 						continue;
 					}
 					i++;
-					if (bytes [i] == 0x42)
+					if (bytes [i] == 0x42 || bytes [i] == 0x40)
 						m = wide ? ISO2022JPMode.JISX0208 : ISO2022JPMode.ASCII;
 					else if (bytes [i] == 0x4A) // obsoleted
 						m = ISO2022JPMode.ASCII;
@@ -730,7 +724,7 @@ namespace I18N.CJK
 						continue;
 					}
 					i++;
-					if (bytes [i] == 0x42)
+					if (bytes [i] == 0x42 || bytes [i] == 0x40)
 						m = wide ? ISO2022JPMode.JISX0208 : ISO2022JPMode.ASCII;
 					else if (bytes [i] == 0x4A) // obsoleted
 						m = ISO2022JPMode.ASCII;
@@ -747,13 +741,11 @@ namespace I18N.CJK
 			return charIndex - start;
 		}
 
-#if NET_2_0
 		public override void Reset ()
 		{
 			m = ISO2022JPMode.ASCII;
 			shifted_in_count = shifted_in_conv = false;
 		}
-#endif
 	}
 
 	[Serializable]

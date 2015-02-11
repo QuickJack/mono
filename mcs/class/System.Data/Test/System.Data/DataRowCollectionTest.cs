@@ -112,9 +112,7 @@ namespace MonoTests.System.Data
 			Assert.AreEqual (1, Rows.Count, "test#01");
 			Assert.IsFalse (Rows.IsReadOnly, "test#02");
 			Assert.IsFalse (Rows.IsSynchronized, "test#03");
-#if !TARGET_JVM
 			Assert.AreEqual ("System.Data.DataRowCollection", Rows.ToString (), "test#04");
-#endif
 			
 			string [] cols = new string [2];
 			cols [0] = "first";
@@ -126,9 +124,7 @@ namespace MonoTests.System.Data
 			Rows.Add (cols);
 			
 			Assert.AreEqual (3, Rows.Count, "test#05");
-#if !TARGET_JVM
 			Assert.AreEqual ("System.Data.DataRow",  Rows [0].ToString (), "test#06");
-#endif
 			Assert.AreEqual (DBNull.Value, Rows [0] [0], "test#07");
 			Assert.AreEqual (DBNull.Value, Rows [0] [1], "test#08");
 			Assert.AreEqual ("first", Rows [1] [0], "test#09");
@@ -763,7 +759,6 @@ namespace MonoTests.System.Data
 			Assert.AreEqual ("c", Rows [0] [0], "test#19");
 		}
 
-#if NET_2_0
 		[Test]
 		public void IndexOf () {
 			DataSet ds = new DataSet ();
@@ -830,6 +825,39 @@ namespace MonoTests.System.Data
 			Assert.AreEqual (-1, dt.Rows.IndexOf (dr3));
 			Assert.AreEqual (-1, dt.Rows.IndexOf (null));
 		}
-#endif
+
+		[Test]
+		public void Find_DoesntThrowWithNullObjectInArray () // Novell bug 519648
+		{
+			var dt = new DataTable ("datatable");
+
+			var column = new DataColumn ();
+			dt.Columns.Add (column);
+			var columns = new DataColumn [] { column };
+			dt.PrimaryKey = columns;
+
+			try {
+				Assert.AreEqual (null, dt.Rows.Find (new object [] { null }));
+			} catch (IndexOutOfRangeException) {
+				Assert.Fail ("Bug #519648 (https://bugzilla.novell.com/show_bug.cgi?id=519648) is not fixed.");
+			}
+		}
+
+		[Test]
+		public void Find_DoesntThrowWithNullObject () // Novell bug 519648
+		{
+			var dt = new DataTable ("datatable");
+
+			var column = new DataColumn ();
+			dt.Columns.Add (column);
+			var columns = new DataColumn [] { column };
+			dt.PrimaryKey = columns;
+
+			try {
+				Assert.AreEqual (null, dt.Rows.Find ( (object)null));
+			} catch (IndexOutOfRangeException) {
+				Assert.Fail ("Bug #519648 (https://bugzilla.novell.com/show_bug.cgi?id=519648) is not fixed.");
+			}
+		}
 	}
 }

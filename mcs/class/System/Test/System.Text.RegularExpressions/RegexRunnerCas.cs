@@ -27,6 +27,9 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
+
+#if !MOBILE
+
 using NUnit.Framework;
 
 using System;
@@ -111,9 +114,7 @@ namespace MonoCasTests.System.Text.RegularExpressions {
 			TransferCapture (0, 0, 0, 0);
 			Uncapture ();
 			Assert.IsNotNull (Scan (new Regex (String.Empty), "mono", 0, 0, 0, 0, true), "Scan");
-#if NET_2_0
 			Assert.IsTrue (CharInSet ('a', "a", String.Empty), "CharInSet");
-#endif
 		}
 	}
 
@@ -147,3 +148,5 @@ namespace MonoCasTests.System.Text.RegularExpressions {
 		}
 	}
 }
+
+#endif

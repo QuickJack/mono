@@ -1,8 +1,9 @@
 //
 // System.Security.Principal.GenericIdentity.cs
 //
-// Author:
+// Authors:
 //   Miguel de Icaza (miguel@ximian.com)
+//   Marek Safar (marek.safar@gmail.com)
 //
 // (C) Ximian, Inc.  http://www.ximian.com
 // Copyright (C) 2004-2006 Novell, Inc (http://www.novell.com)
@@ -28,12 +29,16 @@
 //
 
 using System.Runtime.InteropServices;
+using System.Collections.Generic;
+using System.Security.Claims;
 
 namespace System.Security.Principal {
 
 	[Serializable]
 	[ComVisible (true)]
-	public class GenericIdentity : IIdentity {
+	public class GenericIdentity :
+		ClaimsIdentity
+	{
 
 		// field names are serialization compatible with .net
 		private string m_name;
@@ -49,6 +54,8 @@ namespace System.Security.Principal {
 
 			m_name = name;
 			m_type = type;
+
+			AddDefaultClaim (name);
 		}
 
 		public GenericIdentity (string name)
@@ -56,21 +63,35 @@ namespace System.Security.Principal {
 		{
 		}
 
-		public virtual string AuthenticationType {
+		protected GenericIdentity (GenericIdentity identity)
+			: base (identity)
+		{
+		}
+
+		override
+		public string AuthenticationType {
 			get {
 				return m_type;
 			}
 		}
 
-		public virtual string Name {
+		override
+		public string Name {
 			get {
 				return m_name;
 			}
 		}
 
-		public virtual bool IsAuthenticated {
+		override
+		public bool IsAuthenticated {
 			get {
 				return (m_name.Length > 0);
+			}
+		}
+
+		public override IEnumerable<Claim> Claims {
+			get {
+				return base.Claims;
 			}
 		}
 	}

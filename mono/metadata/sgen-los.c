@@ -38,6 +38,7 @@
 #include "metadata/sgen-cardtable.h"
 #include "metadata/sgen-memory-governor.h"
 #include "utils/mono-mmap.h"
+#include "utils/mono-compiler.h"
 
 #define LOS_SECTION_SIZE	(1024 * 1024)
 
@@ -67,7 +68,7 @@ struct _LOSFreeChunks {
 typedef struct _LOSSection LOSSection;
 struct _LOSSection {
 	LOSSection *next;
-	int num_free_chunks;
+	size_t num_free_chunks;
 	unsigned char *free_chunk_map;
 };
 
@@ -143,7 +144,7 @@ los_consistency_check (void)
 static void
 add_free_chunk (LOSFreeChunks *free_chunks, size_t size)
 {
-	int num_chunks = size >> LOS_CHUNK_BITS;
+	size_t num_chunks = size >> LOS_CHUNK_BITS;
 
 	free_chunks->size = size;
 
@@ -158,7 +159,8 @@ get_from_size_list (LOSFreeChunks **list, size_t size)
 {
 	LOSFreeChunks *free_chunks = NULL;
 	LOSSection *section;
-	int num_chunks, i, start_index;
+	size_t i, num_chunks, start_index;
+
 
 	g_assert ((size & (LOS_CHUNK_SIZE - 1)) == 0);
 
@@ -198,7 +200,7 @@ get_los_section_memory (size_t size)
 {
 	LOSSection *section;
 	LOSFreeChunks *free_chunks;
-	int num_chunks;
+	size_t num_chunks;
 
 	size += LOS_CHUNK_SIZE - 1;
 	size &= ~(LOS_CHUNK_SIZE - 1);
@@ -212,7 +214,7 @@ get_los_section_memory (size_t size)
 	if (num_chunks >= LOS_NUM_FAST_SIZES) {
 		free_chunks = get_from_size_list (&los_fast_free_lists [0], size);
 	} else {
-		int i;
+		size_t i;
 		for (i = num_chunks; i < LOS_NUM_FAST_SIZES; ++i) {
 			free_chunks = get_from_size_list (&los_fast_free_lists [i], size);
 			if (free_chunks)
@@ -257,7 +259,7 @@ static void
 free_los_section_memory (LOSObject *obj, size_t size)
 {
 	LOSSection *section = LOS_SECTION_FOR_OBJ (obj);
-	int num_chunks, i, start_index;
+	size_t num_chunks, i, start_index;
 
 	size += LOS_CHUNK_SIZE - 1;
 	size &= ~(LOS_CHUNK_SIZE - 1);
@@ -334,6 +336,16 @@ sgen_los_alloc_large_inner (MonoVTable *vtable, size_t size)
 	g_assert (size > SGEN_MAX_SMALL_OBJ_SIZE);
 	g_assert ((size & 1) == 0);
 
+	/*
+	 * size + sizeof (LOSObject) <= SSIZE_MAX - (mono_pagesize () - 1)
+	 *
+	 * therefore:
+	 *
+	 * size <= SSIZE_MAX - (mono_pagesize () - 1) - sizeof (LOSObject)
+	 */
+	if (size > SSIZE_MAX - (mono_pagesize () - 1) - sizeof (LOSObject))
+		return NULL;
+
 #ifdef LOS_DUMMY
 	if (!los_segment)
 		los_segment = sgen_alloc_os_memory (LOS_SEGMENT_SIZE, SGEN_ALLOC_HEAP | SGEN_ALLOC_ACTIVATE, NULL);
@@ -383,9 +395,6 @@ sgen_los_alloc_large_inner (MonoVTable *vtable, size_t size)
 #ifdef LOS_CONSISTENCY_CHECK
 	los_consistency_check ();
 #endif
-
-	if (sgen_remember_major_object_for_concurrent_mark (obj->data))
-		sgen_los_pin_object (obj->data);
 
 	return obj->data;
 }
@@ -513,10 +522,10 @@ mono_sgen_los_describe_pointer (char *ptr)
 		vtable = (MonoVTable*)SGEN_LOAD_VTABLE (obj->data);
 
 		if (obj->data == ptr) {
-			SGEN_LOG (0, "%s (size %td pin %d)\n", los_kind, size, pinned ? 1 : 0);
+			SGEN_LOG (0, "%s (size %d pin %d)\n", los_kind, (int)size, pinned ? 1 : 0);
 		} else {
-			SGEN_LOG (0, "%s (interior-ptr offset %td size %td pin %d)",
-					los_kind, ptr - obj->data, size, pinned ? 1 : 0);
+			SGEN_LOG (0, "%s (interior-ptr offset %td size %d pin %d)",
+					  los_kind, ptr - obj->data, (int)size, pinned ? 1 : 0);
 		}
 
 		return TRUE;
@@ -535,21 +544,53 @@ sgen_los_iterate_live_block_ranges (sgen_cardtable_block_callback callback)
 	}
 }
 
-#ifdef SGEN_HAVE_CARDTABLE
 void
 sgen_los_scan_card_table (gboolean mod_union, SgenGrayQueue *queue)
 {
 	LOSObject *obj;
 
 	for (obj = los_object_list; obj; obj = obj->next) {
-		guint8 *cards = NULL;
+		guint8 *cards;
+
+		if (!SGEN_OBJECT_HAS_REFERENCES (obj->data))
+			continue;
+
 		if (mod_union) {
 			cards = obj->cardtable_mod_union;
 			g_assert (cards);
+		} else {
+			cards = NULL;
 		}
 
 		sgen_cardtable_scan_object (obj->data, obj->size, cards, mod_union, queue);
 	}
+}
+
+void
+sgen_los_count_cards (long long *num_total_cards, long long *num_marked_cards)
+{
+	LOSObject *obj;
+	long long total_cards = 0;
+	long long marked_cards = 0;
+
+	for (obj = los_object_list; obj; obj = obj->next) {
+		int i;
+		guint8 *cards = sgen_card_table_get_card_scan_address ((mword) obj->data);
+		guint8 *cards_end = sgen_card_table_get_card_scan_address ((mword) obj->data + obj->size - 1);
+		mword num_cards = (cards_end - cards) + 1;
+
+		if (!SGEN_OBJECT_HAS_REFERENCES (obj->data))
+			continue;
+
+		total_cards += num_cards;
+		for (i = 0; i < num_cards; ++i) {
+			if (cards [i])
+				++marked_cards;
+		}
+	}
+
+	*num_total_cards = total_cards;
+	*num_marked_cards = marked_cards;
 }
 
 void
@@ -558,22 +599,12 @@ sgen_los_update_cardtable_mod_union (void)
 	LOSObject *obj;
 
 	for (obj = los_object_list; obj; obj = obj->next) {
-		guint8 *start_card = sgen_card_table_get_card_scan_address ((mword)obj->data);
-		guint8 *end_card = sgen_card_table_get_card_scan_address ((mword)obj->data + obj->size - 1) + 1;
-		size_t num_cards = end_card - start_card;
-
-		if (!obj->cardtable_mod_union) {
-			obj->cardtable_mod_union = sgen_alloc_internal_dynamic (num_cards,
-					INTERNAL_MEM_CARDTABLE_MOD_UNION, TRUE);
-			memcpy (obj->cardtable_mod_union, start_card, num_cards);
-		} else {
-			int i;
-			for (i = 0; i < num_cards; ++i)
-				obj->cardtable_mod_union [i] |= start_card [i];
-		}
+		if (!SGEN_OBJECT_HAS_REFERENCES (obj->data))
+			continue;
+		obj->cardtable_mod_union = sgen_card_table_update_mod_union (obj->cardtable_mod_union,
+				obj->data, obj->size, NULL);
 	}
 }
-#endif
 
 mword
 sgen_los_object_size (LOSObject *obj)
@@ -584,7 +615,11 @@ sgen_los_object_size (LOSObject *obj)
 LOSObject*
 sgen_los_header_for_object (char *data)
 {
-	return (LOSObject*)(data - (sizeof (LOSObject*) + sizeof (mword)));
+#if _MSC_VER
+	return (LOSObject*)(data - (int)(&(((LOSObject*)0)->data)));
+#else
+	return (LOSObject*)(data - sizeof (LOSObject));
+#endif
 }
 
 void

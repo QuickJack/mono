@@ -27,7 +27,6 @@
 //
 using System;
 
-#if NET_4_0 || MOONLIGHT || MOBILE
 namespace System.Runtime.Versioning
 {
 	[AttributeUsageAttribute(AttributeTargets.Assembly, AllowMultiple = false, Inherited = false)]
@@ -50,4 +49,3 @@ namespace System.Runtime.Versioning
 		}
 	}
 }
-#endif

@@ -13,11 +13,12 @@ using System.Collections;
 using System.ComponentModel;
 using DescriptionAttribute = System.ComponentModel.DescriptionAttribute;
 using System.ComponentModel.Design;
-using System.Drawing.Design;
 using System.Globalization;
 using System.Reflection;
 using System.Runtime.InteropServices;
-
+#if !MOBILE
+using System.Drawing.Design;
+#endif
 using NUnit.Framework;
 
 namespace MonoTests.System.ComponentModel
@@ -371,9 +372,7 @@ namespace MonoTests.System.ComponentModel
 
 		class DisplayName_test
 		{
-#if NET_2_0
 			[DisplayName ("An explicit displayname")]
-#endif
 			public bool Explicit {
 				get { return false; }
 			}
@@ -399,7 +398,13 @@ namespace MonoTests.System.ComponentModel
 				get { return null; }
 			}
 
-			[TypeConverter("System.ComponentModel.CharConverter, " + Consts.AssemblySystem)]
+#if MOBILE
+			[TypeConverter("System.ComponentModel.CharConverter, System, Version=2.0.5.0, Culture=neutral, PublicKeyToken=b77a5c561934e089")]
+#elif NET_4_0
+			[TypeConverter("System.ComponentModel.CharConverter, System, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089")]
+#else
+			[TypeConverter("System.ComponentModel.CharConverter, System, Version=2.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089")]
+#endif
 			public virtual Version WithConverterNamedAssmQuald {
 				get { return null; }
 			}
@@ -725,11 +730,7 @@ namespace MonoTests.System.ComponentModel
 			PropertyDescriptor p = TypeDescriptor.GetProperties (typeof (CanResetNoSetter_test))["Prop"];
 			CanResetNoSetter_test test = new CanResetNoSetter_test ();
 
-#if NET_2_0
 			Assert.IsFalse (p.CanResetValue (test), "1");
-#else
-			Assert.IsTrue (p.CanResetValue (test), "1");
-#endif
 			Assert.AreEqual (5, test.Prop, "2");
 			p.ResetValue (test);
 			Assert.AreEqual (10, test.Prop, "3");
@@ -782,27 +783,8 @@ namespace MonoTests.System.ComponentModel
 			PropertyDescriptor p1 = TypeDescriptor.GetProperties (typeof (DisplayName_test)) ["Explicit"];
 			PropertyDescriptor p2 = TypeDescriptor.GetProperties (typeof (DisplayName_test)) ["Implicit"];
 
-#if NET_2_0
 			Assert.AreEqual ("An explicit displayname", p1.DisplayName, "#1");
-#else
-			Assert.AreEqual ("Explicit", p1.DisplayName, "#1");
-#endif
 			Assert.AreEqual ("Implicit", p2.DisplayName, "#2");
-		}
-
-		[Test]
-		public void GetEditorTest ()
-		{
-			PropertyDescriptorCollection col;
-			PropertyDescriptor pd;
-			UITypeEditor ed;
-
-			col = TypeDescriptor.GetProperties (typeof (GetEditor_test));
-			pd = col [0];
-			ed = pd.GetEditor (typeof (UITypeEditor)) as UITypeEditor;
-
-			Assert.IsNotNull (ed, "#01");
-			Assert.AreEqual (ed.GetType ().Name, "UIEditor", "#02");
 		}
 
 		[Test]
@@ -868,7 +850,6 @@ namespace MonoTests.System.ComponentModel
 			}
 		}
 
-#if NET_2_0
 		[Test]
 		public void GetInvocationTarget_Instance_Null ()
 		{
@@ -977,7 +958,6 @@ namespace MonoTests.System.ComponentModel
 			Assert.AreEqual (handlerC, handler.GetInvocationList () [1], "#I4");
 			Assert.IsNull (pd.GetValueChangedHandler (compB), "#I5");
 		}
-#endif
 
 		[Test]
 		public void RemoveValueChanged ()
@@ -1075,7 +1055,7 @@ namespace MonoTests.System.ComponentModel
 					return attr;
 			return null;
 		}
-
+#if !MOBILE
 		class GetEditor_test 
 		{
 			[Editor (typeof (UIEditor), typeof (UITypeEditor))]
@@ -1086,9 +1066,24 @@ namespace MonoTests.System.ComponentModel
 		}
 
 		class UIEditor : UITypeEditor
-		{
-			
+		{		
 		}
+
+		[Test]
+		public void GetEditorTest ()
+		{
+			PropertyDescriptorCollection col;
+			PropertyDescriptor pd;
+			UITypeEditor ed;
+			
+			col = TypeDescriptor.GetProperties (typeof (GetEditor_test));
+			pd = col [0];
+			ed = pd.GetEditor (typeof (UITypeEditor)) as UITypeEditor;
+			
+			Assert.IsNotNull (ed, "#01");
+			Assert.AreEqual (ed.GetType ().Name, "UIEditor", "#02");
+		}
+#endif
 
 		class MockPropertyDescriptor : PropertyDescriptor
 		{
@@ -1147,7 +1142,6 @@ namespace MonoTests.System.ComponentModel
 				base.OnValueChanged (component, e);
 			}
 
-#if NET_2_0
 			public new object GetInvocationTarget (Type type, object instance)
 			{
 				return base.GetInvocationTarget (type, instance);
@@ -1157,7 +1151,6 @@ namespace MonoTests.System.ComponentModel
 			{
 				return base.GetValueChangedHandler (component);
 			}
-#endif
 		}
 
 		[AttributeUsage (AttributeTargets.Field | AttributeTargets.Property)]

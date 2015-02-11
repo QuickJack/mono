@@ -91,11 +91,7 @@ namespace System.Data
 			AddInternal (row);
 		}
 
-#if NET_2_0
 		public
-#else
-		internal
-#endif
 		int IndexOf (DataRow row)
 		{
 			if (row == null || row.Table != table)
@@ -287,7 +283,7 @@ namespace System.Data
 		{
 			if (row == null)
 				throw new IndexOutOfRangeException ("The given datarow is not in the current DataRowCollection.");
-			int index = List.IndexOf (row);
+			int index = this.IndexOf (row);
 			if (index < 0)
 				throw new IndexOutOfRangeException ("The given datarow is not in the current DataRowCollection.");
 			List.RemoveAt (index);

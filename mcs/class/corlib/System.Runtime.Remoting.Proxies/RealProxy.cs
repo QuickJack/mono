@@ -41,6 +41,7 @@ using System.Runtime.Remoting.Contexts;
 using System.Runtime.CompilerServices;
 using System.Runtime.Serialization;
 using System.Runtime.InteropServices;
+using System.Threading;
 
 namespace System.Runtime.Remoting.Proxies
 {
@@ -162,13 +163,9 @@ namespace System.Runtime.Remoting.Proxies
 						      out object [] out_args)
 		{
 			MonoMethodMessage mMsg = (MonoMethodMessage) msg;
-			mMsg.LogicalCallContext = CallContext.CreateLogicalCallContext (true);
+			mMsg.LogicalCallContext = ExecutionContext.CreateLogicalCallContext (true);
 			CallType call_type = mMsg.CallType;
-#if MOONLIGHT
-			bool is_remproxy = false;
-#else
 			bool is_remproxy = (rp is RemotingProxy);
-#endif
 
 			out_args = null;
 			IMethodReturnMessage res_msg = null;
@@ -183,11 +180,9 @@ namespace System.Runtime.Remoting.Proxies
 			// Check for constructor msg
 			if (mMsg.MethodBase.IsConstructor) 
 			{
-#if !MOONLIGHT
 				if (is_remproxy) 
 					res_msg = (IMethodReturnMessage) (rp as RemotingProxy).ActivateRemoteObject ((IMethodMessage) msg);
 				else 
-#endif
 					msg = new ConstructionCall (rp.GetProxiedType ());
 			}
 				
@@ -224,7 +219,7 @@ namespace System.Runtime.Remoting.Proxies
 			}
 			
 			if (res_msg.LogicalCallContext != null && res_msg.LogicalCallContext.HasInfo)
-				CallContext.UpdateCurrentCallContext (res_msg.LogicalCallContext);
+				CallContext.UpdateCurrentLogicalCallContext (res_msg.LogicalCallContext);
 
 			exc = res_msg.Exception;
 

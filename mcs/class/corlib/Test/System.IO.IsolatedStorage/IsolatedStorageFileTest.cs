@@ -56,10 +56,8 @@ namespace MonoTests.System.IO.IsolatedStorageTest {
 				Assert.IsNotNull (isf.AssemblyIdentity, prefix + "AssemblyIdentity");
 			if ((isf.Scope & IsolatedStorageScope.Domain) != 0)
 				Assert.IsNotNull (isf.DomainIdentity, prefix + "DomainIdentity");
-#if NET_2_0
 			if ((isf.Scope & IsolatedStorageScope.Application) != 0)
 				Assert.IsNotNull (isf.ApplicationIdentity, prefix + "ApplicationIdentity");
-#endif
 		}
 
 		private void GetEnumerator (IsolatedStorageScope scope)
@@ -100,7 +98,6 @@ namespace MonoTests.System.IO.IsolatedStorageTest {
 			// giving more details is bad
 			GetEnumerator (IsolatedStorageScope.User | IsolatedStorageScope.Assembly | IsolatedStorageScope.Domain | IsolatedStorageScope.Roaming);
 		}
-#if NET_2_0
 		[Test]
 		public void GetEnumerator_Machine ()
 		{
@@ -121,7 +118,6 @@ namespace MonoTests.System.IO.IsolatedStorageTest {
 			// we can't enum application
 			GetEnumerator (IsolatedStorageScope.Application);
 		}
-#endif
 		[Test]
 		public void GetUserStoreForAssembly ()
 		{
@@ -147,7 +143,6 @@ namespace MonoTests.System.IO.IsolatedStorageTest {
 			object o = isf.DomainIdentity;
 		}
 
-#if NET_2_0
 		[Test]
 		[ExpectedException (typeof (InvalidOperationException))]
 		public void GetUserStoreForAssembly_ApplicationIdentity ()
@@ -155,7 +150,6 @@ namespace MonoTests.System.IO.IsolatedStorageTest {
 			IsolatedStorageFile isf = IsolatedStorageFile.GetUserStoreForAssembly ();
 			object o = isf.ApplicationIdentity;
 		}
-#endif
 
 		[Test]
 		public void GetUserStoreForDomain ()
@@ -178,7 +172,6 @@ namespace MonoTests.System.IO.IsolatedStorageTest {
 			Assert.IsTrue ((isf.CurrentSize >= 0), "CurrentSize");
 		}
 
-#if NET_2_0
 		[Test]
 		[ExpectedException (typeof (InvalidOperationException))]
 		public void GetUserStoreForDomain_ApplicationIdentity ()
@@ -188,7 +181,9 @@ namespace MonoTests.System.IO.IsolatedStorageTest {
 		}
 
 		[Test]
+#if !MOBILE
 		[ExpectedException (typeof (IsolatedStorageException))]
+#endif
 		public void GetUserStoreForApplication_WithoutApplicationIdentity ()
 		{
 			// note: a manifest is required
@@ -196,7 +191,9 @@ namespace MonoTests.System.IO.IsolatedStorageTest {
 		}
 
 		[Test]
+#if !MOBILE
 		[ExpectedException (typeof (IsolatedStorageException))]
+#endif
 		public void GetUserStoreForApplication ()
 		{
 			IsolatedStorageFile isf = IsolatedStorageFile.GetUserStoreForApplication ();
@@ -226,7 +223,6 @@ namespace MonoTests.System.IO.IsolatedStorageTest {
 			object o = isf.DomainIdentity;
 		}
 #endif
-#endif
 
 #if NET_4_0
 		// This is supposed to be working only in SL.
@@ -255,7 +251,9 @@ namespace MonoTests.System.IO.IsolatedStorageTest {
 		}
 
 		[Test]
+#if !MOBILE
 		[ExpectedException (typeof (IsolatedStorageException))]
+#endif
 		public void GetStore_Domain_NonPresentEvidences ()
 		{
 			IsolatedStorageScope scope = IsolatedStorageScope.User | IsolatedStorageScope.Domain | IsolatedStorageScope.Assembly;
@@ -280,6 +278,7 @@ namespace MonoTests.System.IO.IsolatedStorageTest {
 			Assert.IsTrue ((isf.CurrentSize >= 0), "CurrentSize");
 		}
 
+#if !MOBILE
 		[Test]
 		[ExpectedException (typeof (ArgumentNullException))]
 		public void GetStore_Domain_DomainNullObject ()
@@ -329,7 +328,8 @@ namespace MonoTests.System.IO.IsolatedStorageTest {
 			Assert.IsTrue ((isf.DomainIdentity.ToString ().IndexOf ("Internet") > 0), "Zone - Domain");
 			Assert.IsTrue ((isf.CurrentSize >= 0), "CurrentSize");
 		}
-#if NET_2_0
+#endif
+
 		[Test]
 		[ExpectedException (typeof (ArgumentNullException))]
 		public void GetStore_Application_NullObject ()
@@ -339,15 +339,17 @@ namespace MonoTests.System.IO.IsolatedStorageTest {
 		}
 
 		[Test]
+#if !MOBILE
 		[ExpectedException (typeof (IsolatedStorageException))]
+#endif
 		public void GetStore_Application_NullType ()
 		{
 			IsolatedStorageScope scope = IsolatedStorageScope.User | IsolatedStorageScope.Application;
 			IsolatedStorageFile isf = IsolatedStorageFile.GetStore (scope, (Type)null);
 			// again it's the lack of a manifest
 		}
-#endif
 
+#if !MOBILE
 		[Test]
 		public void GetStore_DomainScope_Evidences ()
 		{
@@ -412,6 +414,7 @@ namespace MonoTests.System.IO.IsolatedStorageTest {
 			ae.AddHost (new Zone (SecurityZone.Internet));
 			IsolatedStorageFile isf = IsolatedStorageFile.GetStore (scope, null, null, ae, typeof (Zone));
 		}
+#endif
 
 		[Test]
 		public void RegressionBNC354539 ()
@@ -454,7 +457,7 @@ namespace MonoTests.System.IO.IsolatedStorageTest {
 				try {
 					isf.CreateDirectory (path);
 				}
-#if NET_4_0 || NET_2_1
+#if NET_4_0
 				catch (IsolatedStorageException ex) {
 					Assert.IsFalse (ex.Message.IndexOf (path) >= 0, "Message");
 					Assert.IsNull (ex.InnerException, "InnerException");
@@ -495,7 +498,7 @@ namespace MonoTests.System.IO.IsolatedStorageTest {
 		}
 
 		[Test]
-#if NET_4_0 || NET_2_1
+#if NET_4_0
 		[ExpectedException (typeof (ArgumentException))]
 #else
 		[ExpectedException (typeof (SecurityException))]

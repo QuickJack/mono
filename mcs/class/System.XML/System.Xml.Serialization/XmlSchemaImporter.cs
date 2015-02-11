@@ -30,12 +30,13 @@
 //
 
 using System.Xml;
-#if !TARGET_JVM && !MOBILE
+#if !MOBILE
 using System.CodeDom.Compiler;
 #endif
 using System.Xml.Schema;
 using System.Collections;
-#if NET_2_0 && CONFIGURATION_DEP
+using System.Collections.Generic;
+#if CONFIGURATION_DEP
 using System.Configuration;
 using System.Xml.Serialization.Configuration;
 #endif
@@ -43,7 +44,7 @@ using System.Xml.Serialization.Configuration;
 namespace System.Xml.Serialization 
 {
 	public class XmlSchemaImporter
-#if NET_2_0 && !MOBILE
+#if !MOBILE
 		: SchemaImporter
 #endif
 	{
@@ -97,7 +98,7 @@ namespace System.Xml.Serialization
 			this.typeIdentifiers = typeIdentifiers;
 		}
 		
-#if !TARGET_JVM && !MOBILE
+#if !MOBILE
 		[MonoTODO]
 		public XmlSchemaImporter (XmlSchemas schemas, CodeGenerationOptions options, CodeDomProvider codeProvider, ImportContext context)
 		{
@@ -160,7 +161,7 @@ namespace System.Xml.Serialization
 
 		void InitializeExtensions ()
 		{
-#if NET_2_0 && CONFIGURATION_DEP
+#if CONFIGURATION_DEP
 			SerializationSectionGroup root = ConfigurationManager.GetSection ("system.xml.serialization") as SerializationSectionGroup;
 			if (root == null)
 				return;
@@ -345,7 +346,6 @@ namespace System.Xml.Serialization
 			return new XmlMembersMapping (mapping);
 		}
 		
-#if NET_2_0
 		[MonoTODO]
 		public XmlMembersMapping ImportMembersMapping (string name, string ns, SoapSchemaMember[] members)
 		{
@@ -370,7 +370,6 @@ namespace System.Xml.Serialization
 				(XmlSchemaType) schemas.Find (typeName, typeof (XmlSchemaSimpleType));
 			return ImportTypeCommon (typeName, typeName, stype, true);
 		}
-#endif
 		
 		internal XmlMembersMapping ImportEncodedMembersMapping (string name, string ns, SoapSchemaMember[] members, bool hasWrapperElement)
 		{
@@ -744,6 +743,25 @@ namespace System.Xml.Serialization
 				}
 			}
 		}
+		
+		IEnumerable<XmlSchemaAttribute> EnumerateAttributes (XmlSchemaObjectCollection col, List<XmlSchemaAttributeGroup> recurse)
+		{
+			foreach (var o in col) {
+				if (o is XmlSchemaAttributeGroupRef) {
+					var gr = (XmlSchemaAttributeGroupRef) o;
+					var g = FindRefAttributeGroup (gr.RefName);
+					if (recurse.Contains (g))
+						continue;
+					recurse.Add (g);
+					if (g == null)
+						throw new InvalidOperationException (string.Format ("Referenced AttributeGroup '{0}' was not found.", gr.RefName));
+					foreach (var a in EnumerateAttributes (g.Attributes, recurse))
+						yield return a;
+				}
+				else
+					yield return (XmlSchemaAttribute) o;
+			}
+		}
 
 		// Attributes might be redefined, so there is an existing attribute for the same name, skip it.
 		// FIXME: this is nothing more than just a hack.
@@ -753,7 +771,7 @@ namespace System.Xml.Serialization
 			XmlSchemaObjectCollection src, ClassMap map)
 		{
 			XmlSchemaObjectCollection atts = new XmlSchemaObjectCollection ();
-			foreach (XmlSchemaAttribute a in src)
+			foreach (var a in EnumerateAttributes (src, new List<XmlSchemaAttributeGroup> ()))
 				if (map.GetAttribute (a.QualifiedName.Name, a.QualifiedName.Namespace) == null)
 					atts.Add (a);
 			return atts;
@@ -941,12 +959,8 @@ namespace System.Xml.Serialization
 							// It is a simple list (space separated list).
 							// Since this is not supported, map as a single item value
 							member = new XmlTypeMapMemberElement ();
-#if NET_2_0
 							// In MS.NET those types are mapped to a string
 							typeData = TypeTranslator.GetTypeData(typeof(string));
-#else
-							typeData = typeData.ListItemTypeData;
-#endif
 						}
 						else
 							member = new XmlTypeMapMemberList ();

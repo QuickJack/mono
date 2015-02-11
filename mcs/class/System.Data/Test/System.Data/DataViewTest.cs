@@ -240,6 +240,38 @@ namespace MonoTests.System.Data
 			AssertEquals ("Deleted.Value", "1", v);
 		}
 
+		//xamarin bug #18898 # / novell bug #595899
+		[Test]
+		public void Bug18898 ()
+		{
+			var table = new DataTable();
+			table.Columns.Add("col1");
+			table.Columns.Add("col2");
+			
+			table.Rows.Add("1", "2");
+			table.Rows.Add("4", "3");
+
+			table.AcceptChanges();
+
+			table.Rows.Add("5", "6");
+
+			DataView dv = new DataView(table, string.Empty, string.Empty, DataViewRowState.Added);
+			dv.AllowNew = true;
+			var new_row = dv.AddNew();
+			new_row[0] = "7";
+			new_row[1] = "8";
+
+			var another_new_row = dv.AddNew();
+			another_new_row[0] = "9";
+			another_new_row[1] = "10";
+
+			AssertEquals ("#1", dv[2][0], "9");
+
+			//This should not throw a System.Data.VersionNotFoundException: "There is no Proposed data to accces"
+			AssertEquals ("#1", dv[1][0], "7");	
+
+		}
+
 		[Test]
 		public void NullTableGetItemPropertiesTest ()
 		{
@@ -406,7 +438,6 @@ namespace MonoTests.System.Data
 			AssertEquals ("#4", 2, table.Columns.Count);
 		}
 
-#if NET_2_0
 		private bool dvInitialized;
                 private void OnDataViewInitialized (object src, EventArgs args)
                 {
@@ -441,7 +472,6 @@ namespace MonoTests.System.Data
 			AssertEquals ("#4", 2, table.Columns.Count);
 			AssertEquals("DataViewInitialized #5", dvInitialized, true);
 		}
-#endif
 
 		[Test]
 		[ExpectedException(typeof(ArgumentException))]
@@ -479,9 +509,6 @@ namespace MonoTests.System.Data
 
 		[Test]
 		[ExpectedException (typeof (ArgumentException))]
-#if TARGET_JVM
-		[NUnit.Framework.Category ("NotWorking")] // defect 5446
-#endif
 		public void Find_3 ()
 		{
 			dataView.Sort = "itemID, itemName";
@@ -908,7 +935,6 @@ table changed.
 		[Test]
 		public void DefaultColumnNameAddListChangedTest ()
 		{
-#if NET_2_0
 			string result = @"setting table...
 ---- OnListChanged PropertyDescriptorChanged,0,0
 ----- UpdateIndex : True
@@ -927,30 +953,6 @@ table was set.
 ---- OnListChanged PropertyDescriptorAdded,0,0
  add a column with an empty name.
 ";
-#else
-			string result = @"setting table...
----- OnListChanged PropertyDescriptorChanged,0,0
------ UpdateIndex : True
----- OnListChanged Reset,-1,-1
-table was set.
----- OnListChanged PropertyDescriptorChanged,0,0
----- OnListChanged PropertyDescriptorAdded,0,0
- default named column added.
----- OnListChanged PropertyDescriptorAdded,0,0
- non-default named column added.
----- OnListChanged PropertyDescriptorChanged,0,0
----- OnListChanged PropertyDescriptorAdded,0,0
- another default named column added (Column2).
----- OnListChanged PropertyDescriptorAdded,0,0
- add a column with the same name as the default columnnames.
----- OnListChanged PropertyDescriptorChanged,0,0
----- OnListChanged PropertyDescriptorAdded,0,0
- add a column with a null name.
----- OnListChanged PropertyDescriptorChanged,0,0
----- OnListChanged PropertyDescriptorAdded,0,0
- add a column with an empty name.
-";
-#endif
 			eventWriter = new StringWriter ();
 			DataTable dt = new DataTable ("table");
 			ComplexEventSequence1View dv =

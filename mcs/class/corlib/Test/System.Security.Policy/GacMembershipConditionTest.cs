@@ -26,7 +26,6 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if NET_2_0
 
 using NUnit.Framework;
 using System;
@@ -152,6 +151,9 @@ namespace MonoTests.System.Security.Policy {
 		}
 
 		[Test]
+#if MOBILE
+		[Ignore]
+#endif
 		[ExpectedException (typeof (ArgumentNullException))]
 		public void FromXml_SecurityElementNull ()
 		{
@@ -182,6 +184,9 @@ namespace MonoTests.System.Security.Policy {
 		}
 
 		[Test]
+#if MOBILE
+		[Ignore]
+#endif
 		public void ToXml ()
 		{
 			GacMembershipCondition gac = new GacMembershipCondition ();
@@ -195,4 +200,3 @@ namespace MonoTests.System.Security.Policy {
 	}
 }
 
-#endif

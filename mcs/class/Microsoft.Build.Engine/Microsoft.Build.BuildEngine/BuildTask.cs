@@ -35,7 +35,7 @@ using Microsoft.Build.Framework;
 using Microsoft.Build.Utilities;
 
 namespace Microsoft.Build.BuildEngine {
-	public class BuildTask {
+	public class BuildTask : IBuildTask {
 	
 		ITaskHost		hostObject;
 		Target			parentTarget;
@@ -78,43 +78,38 @@ namespace Microsoft.Build.BuildEngine {
 			if (propertyName != null)
 				element.SetAttribute ("PropertyName", propertyName);
 		}
-		
-		[MonoTODO]
+
 		public bool Execute ()
 		{
-			bool		result = false;
 			TaskEngine	taskEngine;
 
 			LogTaskStarted ();
-			ITask task = null;
+			ITask task;
 
 			try {
-				try {
-					task = InitializeTask ();
-				} catch (Exception e) {
-					LogError ("Error initializing task {0}: {1}", taskElement.LocalName, e.Message);
-					LogMessage (MessageImportance.Low, "Error initializing task {0}: {1}",
-							taskElement.LocalName, e.ToString ());
-					return false;
-				}
-
-				try {
-					taskEngine = new TaskEngine (parentTarget.Project);
-					taskEngine.Prepare (task, this.taskElement, GetParameters (), this.Type);
-					result = taskEngine.Execute ();
-					if (result)
-						taskEngine.PublishOutput ();
-				} catch (Exception e) {
-					task_logger.LogError ("Error executing task {0}: {1}", taskElement.LocalName, e.Message);
-					task_logger.LogMessage (MessageImportance.Low,
-							"Error executing task {0}: {1}", taskElement.LocalName, e.ToString ());
-					result = false;
-				}
-			} finally {
-				LogTaskFinished (result);
+				task = InitializeTask ();
+			} catch (Exception e) {
+				LogError ("Error initializing task {0}: {1}", taskElement.LocalName, e.Message);
+				LogMessage (MessageImportance.Low, "Error initializing task {0}: {1}",
+						taskElement.LocalName, e.ToString ());
+				return false;
 			}
 
-			return result;
+			try {
+				taskEngine = new TaskEngine (parentTarget.Project, task, Type);
+				taskEngine.Prepare (GetParameters ());
+				var result = taskEngine.Execute ();
+				if (result)
+					taskEngine.PublishOutput (taskElement, taskEngine.ValueFromExecution);
+
+				LogTaskFinished (result);
+				return result;
+			} catch (Exception e) {
+				task_logger.LogError ("Error executing task {0}: {1}", taskElement.LocalName, e.Message);
+				task_logger.LogMessage (MessageImportance.Low,
+						"Error executing task {0}: {1}", taskElement.LocalName, e.ToString ());
+				return false;
+			}
 		}
 
 
@@ -127,7 +122,7 @@ namespace Microsoft.Build.BuildEngine {
 					continue;
 				tempNames.Add (xmlAttribute.Name);
 			}
-			
+
 			return tempNames.ToArray ();
 		}
 		
@@ -139,6 +134,21 @@ namespace Microsoft.Build.BuildEngine {
 				throw new ArgumentException ("ContinueOnError attribute cannot be accessed using this method.");
 
 			return taskElement.GetAttribute (attributeName);
+		}
+
+		bool IBuildTask.ResolveOutputItems ()
+		{
+			var taskEngine = new TaskEngine (parentTarget.Project, null, Type);
+
+			taskEngine.PublishOutput (taskElement, l => {
+				var pv = GetParameterValue (l.Name);
+
+				Expression exp = new Expression ();
+				exp.Parse (pv, ParseOptions.AllowItemsMetadataAndSplit);
+				return exp.ConvertTo (parentTarget.Project, l.PropertyType);
+			});
+
+			return true;
 		}
 		
 		public void SetParameterValue (string parameterName,
@@ -156,7 +166,7 @@ namespace Microsoft.Build.BuildEngine {
 			else
 				taskElement.SetAttribute (parameterName, parameterValue);
 		}
-		
+
 		void LogTaskStarted ()
 		{
 			TaskStartedEventArgs tsea = new TaskStartedEventArgs ("Task started.", null,
@@ -266,11 +276,29 @@ namespace Microsoft.Build.BuildEngine {
 			get { return taskElement; }
 			set { taskElement = value; }
 		}
-		
+
 		[MonoTODO]
 		public Type Type {
 			get { return parentTarget.Project.TaskDatabase.GetTypeFromClassName (Name); }
 		}
+
+		public IEnumerable<string> GetAttributes ()
+		{
+			foreach (XmlAttribute attrib in TaskElement.Attributes)
+				yield return attrib.Value;
 		
+			foreach (XmlNode xn in TaskElement.ChildNodes) {
+				XmlElement xe = xn as XmlElement;
+				if (xe == null)
+					continue;
+			
+				//FIXME: error on any other child
+				if (String.Compare (xe.LocalName, "Output", StringComparison.Ordinal) == 0) {
+					foreach (XmlAttribute attrib in xe.Attributes)
+						yield return attrib.Value;
+				}
+			}
+		}
+
 	}
 }

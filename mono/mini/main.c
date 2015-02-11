@@ -1,10 +1,8 @@
 #include <config.h>
 #include "mini.h"
 #ifndef HOST_WIN32
-#ifdef HAVE_SGEN_GC
-#include "buildver-sgen.h"
-#else
-#include "buildver.h"
+#ifndef BUILDVER_INCLUDED
+#include "buildver-boehm.h"
 #endif
 #endif
 
@@ -16,12 +14,12 @@
 static int
 mono_main_with_options (int argc, char *argv [])
 {
-	const char *env_options = getenv ("MONO_ENV_OPTIONS");
+	const char *env_options = g_getenv ("MONO_ENV_OPTIONS");
 	if (env_options != NULL){
 		GPtrArray *array = g_ptr_array_new ();
 		GString *buffer = g_string_new ("");
 		const char *p;
-		int i;
+		unsigned i;
 		gboolean in_quotes = FALSE;
 		char quote_char = '\0';
 
@@ -96,7 +94,7 @@ mono_main_with_options (int argc, char *argv [])
 #ifdef HOST_WIN32
 
 int
-main ()
+main (void)
 {
 	int argc;
 	gunichar2** argvw;

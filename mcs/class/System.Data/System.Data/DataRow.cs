@@ -43,17 +43,12 @@ using System.Data.Common;
 using System.Collections;
 using System.Globalization;
 using System.Xml;
-#if NET_2_0
 using System.ComponentModel;
-#endif
 
 namespace System.Data {
 	/// <summary>
 	/// Represents a row of data in a DataTable.
 	/// </summary>
-#if !NET_2_0
-	[Serializable]
-#endif
 	public class DataRow {
 		#region Fields
 
@@ -96,6 +91,7 @@ namespace System.Data {
 		{
 			_table = table;
 			_rowId = rowId;
+			rowError = String.Empty;
 		}
 
 		#endregion // Constructors
@@ -117,11 +113,11 @@ namespace System.Data {
 		/// </summary>
 		public bool HasErrors {
 			get {
-				if (RowError != string.Empty)
+				if (!string.IsNullOrEmpty (RowError))
 					return true;
 
 				foreach (String columnError in ColumnErrors) {
-					if (columnError != null && columnError != string.Empty)
+					if (!string.IsNullOrEmpty (columnError))
 						return true;
 				}
 				return false;
@@ -134,10 +130,7 @@ namespace System.Data {
 		public object this [string columnName] {
 			get { return this [columnName, DataRowVersion.Default]; }
 			set {
-				DataColumn column = _table.Columns [columnName];
-				if (column == null)
-					throw new ArgumentException ("The column '" + columnName +
-						"' does not belong to the table : " + _table.TableName);
+				DataColumn column = GetColumn (columnName);
 				this [column.Ordinal] = value;
 			}
 		}
@@ -173,11 +166,7 @@ namespace System.Data {
 				DataColumn column = _table.Columns [columnIndex];
 				_table.ChangingDataColumn (this, column, value);
 
-#if NET_2_0
 				if (value == null && column.DataType.IsValueType)
-#else
-				if (value == null && column.DataType != typeof (string))
-#endif
 					throw new ArgumentException ("Canot set column '"
 						+ column.ColumnName + "' to be null."
 						+ " Please use DBNull instead.");
@@ -202,10 +191,7 @@ namespace System.Data {
 		/// </summary>
 		public object this [string columnName, DataRowVersion version] {
 			get {
-				DataColumn column = _table.Columns [columnName];
-				if (column == null)
-					throw new ArgumentException ("The column '" + columnName +
-						"' does not belong to the table : " + _table.TableName);
+				DataColumn column = GetColumn (columnName);
 				return this [column.Ordinal, version];
 			}
 		}
@@ -341,7 +327,6 @@ namespace System.Data {
 					return DataRowState.Deleted;
 				return DataRowState.Modified;
 			}
-#if NET_2_0
 			internal set {
 				if (DataRowState.Detached == value) {
 					Original = -1;
@@ -354,10 +339,8 @@ namespace System.Data {
 				if (DataRowState.Deleted == value)
 					Current = -1;
 			}
-#endif
 		}
 
-#if NET_2_0
 		public void SetAdded ()
 		{
 			if (RowState != DataRowState.Unchanged)
@@ -372,16 +355,13 @@ namespace System.Data {
 			Current = _table.RecordCache.NewRecord ();
 			_table.RecordCache.CopyRecord (_table, Original, Current);
 		}
-#endif
 
 		/// <summary>
 		/// Gets the DataTable for which this row has a schema.
 		/// </summary>
 		public DataTable Table {
 			get { return _table; }
-#if NET_2_0
 			internal set { _table = value; }
-#endif
 		}
 
 		/// <summary>
@@ -447,10 +427,8 @@ namespace System.Data {
 				Current = Proposed;
 				Proposed = -1;
 			}
-#if NET_2_0
 			if ((action & (DataRowAction.ChangeCurrentAndOriginal | DataRowAction.ChangeOriginal)) != 0)
 				Original = Current;
-#endif
 		}
 
 		void Detach ()
@@ -514,7 +492,7 @@ namespace System.Data {
 		/// </summary>
 		public string RowError {
 			get { return rowError; }
-			set { rowError = value; }
+			set { rowError = value ?? string.Empty; }
 		}
 
 		internal int IndexFromVersion (DataRowVersion version)
@@ -548,7 +526,7 @@ namespace System.Data {
 			if (index >= 0)
 				return index;
 
-			throw new VersionNotFoundException (String.Format ("There is no {0} data to accces.", version));
+			throw new VersionNotFoundException (String.Format ("There is no {0} data to access.", version));
 		}
 
 		internal DataRowVersion VersionFromIndex (int index)
@@ -627,9 +605,7 @@ namespace System.Data {
 		/// <summary>
 		/// Begins an edit operation on a DataRow object.
 		/// </summary>
-#if NET_2_0
 		[EditorBrowsable (EditorBrowsableState.Advanced)]
-#endif
 		public void BeginEdit ()
 		{
 			if (_inChangingEvent)
@@ -650,9 +626,7 @@ namespace System.Data {
 		/// <summary>
 		/// Cancels the current edit on the row.
 		/// </summary>
-#if NET_2_0
 		[EditorBrowsable (EditorBrowsableState.Advanced)]
-#endif
 		public void CancelEdit ()
 		{
 			 if (_inChangingEvent)
@@ -817,9 +791,7 @@ namespace System.Data {
 		/// <summary>
 		/// Ends the edit occurring on the row.
 		/// </summary>
-#if NET_2_0
 		[EditorBrowsable (EditorBrowsableState.Advanced)]
-#endif
 		public void EndEdit ()
 		{
 			if (_inChangingEvent)
@@ -1248,7 +1220,7 @@ namespace System.Data {
 		/// </summary>
 		public bool IsNull (string columnName)
 		{
-			return IsNull (Table.Columns [columnName]);
+			return IsNull (GetColumn (columnName));
 		}
 
 		/// <summary>
@@ -1257,6 +1229,17 @@ namespace System.Data {
 		/// </summary>
 		public bool IsNull (DataColumn column, DataRowVersion version)
 		{
+			if (column == null)
+				throw new ArgumentNullException ("column");
+
+			// use the expresion if there is one
+			if (column.Expression != String.Empty) {
+				// FIXME: how does this handle 'version'?
+				// TODO: Can we avoid the Eval each time by using the cached value?
+				object o = column.CompiledExpression.Eval (this);
+				return o == null && o == DBNull.Value;
+			}
+
 			return column.DataContainer.IsNull (IndexFromVersion (version));
 		}
 
@@ -1365,7 +1348,7 @@ namespace System.Data {
 		/// </summary>
 		public void SetParentRow (DataRow parentRow, DataRelation relation)
 		{
-			if (_table == null || parentRow.Table == null)
+			if (_table == null || (parentRow != null && parentRow.Table == null))
 				throw new RowNotInTableException ("This row has been removed from a table and does not have any data.  BeginEdit() will allow creation of new data in this row.");
 
 			if (parentRow != null && _table.DataSet != parentRow.Table.DataSet)
@@ -1378,10 +1361,13 @@ namespace System.Data {
 			BeginEdit();
 
 			IEnumerable relations;
-			if (relation == null)
-				relations = _table.ParentRelations;
-			else
+			if (relation != null) {
+				if (parentRow != null && relation.ParentColumns [0].Table != parentRow.Table)
+					throw new InvalidConstraintException (string.Format ("Parent belongs to table {0} but relation is for table {1}", parentRow.Table, relation.ParentColumns [0].Table));
 				relations = new DataRelation [] { relation };
+			} else {
+				relations = _table.ParentRelations;
+			}
 
 			foreach (DataRelation rel in relations) {
 				DataColumn [] childCols = rel.ChildColumns;
@@ -1390,7 +1376,7 @@ namespace System.Data {
 				for (int i = 0; i < parentCols.Length; i++) {
 					if (parentRow == null) {
 						childCols [i].DataContainer [Proposed] = DBNull.Value;
-					} else {
+					} else if (parentCols [i].Table == parentRow.Table) {
 						int defaultIdx = parentRow.IndexFromVersion (DataRowVersion.Default);
 						childCols [i].DataContainer.CopyValue(parentCols [i].DataContainer, defaultIdx, Proposed);
 					}
@@ -1627,7 +1613,6 @@ namespace System.Data {
 
 		#endregion // Methods
 
-#if NET_2_0
 		/// <summary>
 		///    This method loads a given value into the existing row affecting versions,
 		///    state based on the LoadOption.  The matrix of changes for this method are as
@@ -1688,6 +1673,15 @@ namespace System.Data {
 				}
 			}
 		}
-#endif // NET_2_0
+
+		DataColumn GetColumn (string columnName)
+		{
+			DataColumn column = _table.Columns [columnName];
+
+			if (column == null)
+				throw new ArgumentException ("The column '" + columnName + "' does not belong to the table " + _table.TableName);
+
+			return column;
+		}
 	}
 }

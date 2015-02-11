@@ -39,7 +39,11 @@ namespace System.Reflection {
 	[Serializable]
 	[ClassInterface(ClassInterfaceType.None)]
 	[PermissionSet (SecurityAction.InheritanceDemand, Unrestricted = true)]
+#if MOBILE
+	public abstract class MemberInfo : ICustomAttributeProvider {
+#else
 	public abstract class MemberInfo : ICustomAttributeProvider, _MemberInfo {
+#endif
 
 		protected MemberInfo ()
 		{
@@ -78,7 +82,6 @@ namespace System.Reflection {
 			get;
 		}
 
-#if NET_4_0
 		public override bool Equals (object obj)
 		{
 			return obj == (object) this;
@@ -110,11 +113,21 @@ namespace System.Reflection {
 		public virtual IList<CustomAttributeData> GetCustomAttributesData () {
 			throw new NotImplementedException ();
 		}
-#endif
 
+		public virtual IEnumerable<CustomAttributeData> CustomAttributes {
+			get { return GetCustomAttributesData (); }
+		}
+
+#if !MOBILE
 		void _MemberInfo.GetIDsOfNames ([In] ref Guid riid, IntPtr rgszNames, uint cNames, uint lcid, IntPtr rgDispId)
 		{
 			throw new NotImplementedException ();
+		}
+
+		Type _MemberInfo.GetType ()
+		{
+			// Required or object::GetType becomes virtual final
+			return base.GetType ();
 		}
 
 		void _MemberInfo.GetTypeInfo (uint iTInfo, uint lcid, IntPtr ppTInfo)
@@ -131,5 +144,6 @@ namespace System.Reflection {
 		{
 			throw new NotImplementedException ();
 		}
+#endif
 	}
 }

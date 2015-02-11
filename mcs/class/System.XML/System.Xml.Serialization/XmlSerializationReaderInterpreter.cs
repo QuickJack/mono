@@ -94,9 +94,6 @@ namespace System.Xml.Serialization
 
 		object ReadEncodedObject (XmlTypeMapping typeMap)
 		{
-#if MOONLIGHT
-			throw new NotSupportedException ();
-#else
 			object ob = null;
 			Reader.MoveToContent();
 			if (Reader.NodeType == System.Xml.XmlNodeType.Element) 
@@ -111,14 +108,10 @@ namespace System.Xml.Serialization
 
 			ReadReferencedElements();
 			return ob;
-#endif
 		}
 
 		protected virtual object ReadMessage (XmlMembersMapping typeMap)
 		{
-#if MOONLIGHT
-			throw new NotSupportedException ();
-#else
 			object[] parameters = new object[typeMap.Count];
 
 			if (typeMap.HasWrapperElement)
@@ -175,7 +168,6 @@ namespace System.Xml.Serialization
 				ReadReferencedElements();
 
 			return parameters;
-#endif
 		}
 
 		object ReadRoot (XmlTypeMapping rootMap)
@@ -186,7 +178,7 @@ namespace System.Xml.Serialization
 			}
 			else
 			{
-				if (Reader.LocalName != rootMap.ElementName || Reader.NamespaceURI != rootMap.Namespace)
+				if (!rootMap.IsAny && (Reader.LocalName != rootMap.ElementName || Reader.NamespaceURI != rootMap.Namespace))
 					throw CreateUnknownNodeException();
 				
 				return ReadObject (rootMap, rootMap.IsNullable, true);
@@ -279,7 +271,6 @@ namespace System.Xml.Serialization
 							nss.Add ("", Reader.Value);
 					}
 				}	
-#if !MOONLIGHT
 				else if (anyAttrMember != null) 
 				{
 					XmlAttribute attr = (XmlAttribute) Document.ReadNode(Reader);
@@ -288,16 +279,13 @@ namespace System.Xml.Serialization
 				}
 				else
 					ProcessUnknownAttribute(ob);
-#endif
 			}
 
-#if !MOONLIGHT
 			if (anyAttrMember != null)
 			{
 				anyAttributeArray = ShrinkArray ((Array)anyAttributeArray, anyAttributeIndex, anyAttrMember.TypeData.Type.GetElementType(), true);
 				SetMemberValue (anyAttrMember, ob, anyAttributeArray, isValueList);
 			}
-#endif
 			Reader.MoveToElement ();
 		}
 
@@ -517,15 +505,13 @@ namespace System.Xml.Serialization
 						XmlTypeMapMemberElement mem = (XmlTypeMapMemberElement) map.XmlTextCollector;
 						XmlTypeMapElementInfo info = (XmlTypeMapElementInfo) mem.ElementInfo [0];
 						if (info.TypeData.Type == typeof (string))
-							SetMemberValue (mem, ob, ReadString ((string) GetMemberValue (mem, ob, isValueList)), isValueList);
+							SetMemberValue (mem, ob, Reader.ReadString (), isValueList);
 						else
 							SetMemberValue (mem, ob, GetValueFromXmlString (Reader.ReadString(), info.TypeData, info.MappedType), isValueList);
 					}
 				}
-#if !MOONLIGHT
 				else 
 					UnknownNode(ob);
-#endif
 				Reader.MoveToContent();
 			}
 
@@ -599,6 +585,10 @@ namespace System.Xml.Serialization
 
 		void SetMemberValue (XmlTypeMapMember member, object ob, object value, bool isValueList)
 		{
+			var memberType = member.TypeData.Type;
+			if (value != null && !value.GetType().IsAssignableFrom (memberType))
+				value = XmlSerializationWriterInterpreter.ImplicitConvert (value, memberType);
+
 			if (isValueList)
 				((object[])ob)[member.GlobalIndex] = value;
 			else
@@ -764,11 +754,7 @@ namespace System.Xml.Serialization
 
 		static object CreateInstance (Type type, bool nonPublic)
 		{
-#if MOONLIGHT
-			return Activator.CreateInstance (type); // always false
-#else
 			return Activator.CreateInstance (type, nonPublic);
-#endif
 		}
 
 		object CreateInstance (Type type)
@@ -817,14 +803,10 @@ namespace System.Xml.Serialization
 		
 		object ReadXmlNode (TypeData type, bool wrapped)
 		{
-#if MOONLIGHT
-			throw new NotSupportedException ();
-#else
 			if (type.Type == typeof (XmlDocument))
 				return ReadXmlDocument (wrapped);
 			else
 				return ReadXmlNode (wrapped);
-#endif
 		}
 
 		object ReadPrimitiveElement (XmlTypeMapping typeMap, bool isNullable)
@@ -857,7 +839,7 @@ namespace System.Xml.Serialization
 			Reader.MoveToContent ();
 			if (Reader.NodeType == XmlNodeType.Element)
 			{
-				if (Reader.LocalName == typeMap.ElementName && Reader.NamespaceURI == typeMap.Namespace)
+				if (typeMap.IsAny || (Reader.LocalName == typeMap.ElementName && Reader.NamespaceURI == typeMap.Namespace))
 				{
 					object ob = CreateInstance (typeMap.TypeData.Type, true);
 					return ReadSerializable ((IXmlSerializable)ob);

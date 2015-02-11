@@ -11,21 +11,20 @@
 
 #if defined(__MACH__)
 
+/* For pthread_main_np, pthread_get_stackaddr_np and pthread_get_stacksize_np */
+#define _DARWIN_C_SOURCE 1
+
 #include <mono/utils/mach-support.h>
 #include <mono/utils/mono-compiler.h>
 #include <mono/utils/mono-semaphore.h>
 #include <mono/utils/mono-threads.h>
 #include <mono/utils/hazard-pointer.h>
-#include <mono/metadata/gc-internal.h>
-#include <mono/metadata/appdomain.h>
-#include <mono/metadata/threads-types.h>
-
-#include <pthread.h>
-#include <errno.h>
+#include <mono/utils/mono-mmap.h>
 
 void
 mono_threads_init_platform (void)
-{	
+{
+	mono_threads_init_dead_letter ();
 }
 
 void
@@ -46,16 +45,21 @@ mono_threads_core_needs_abort_syscall (void)
 }
 
 gboolean
-mono_threads_core_suspend (MonoThreadInfo *info)
+mono_threads_core_suspend (MonoThreadInfo *info, gboolean interrupt_kernel)
 {
 	kern_return_t ret;
+	gboolean res;
+
 	g_assert (info);
 
 	ret = thread_suspend (info->native_handle);
 	if (ret != KERN_SUCCESS)
 		return FALSE;
-	return mono_threads_get_runtime_callbacks ()->
-		thread_state_init_from_handle (&info->suspend_state, mono_thread_info_get_tid (info), info->native_handle);
+	res = mono_threads_get_runtime_callbacks ()->
+		thread_state_init_from_handle (&info->suspend_state, info);
+	if (!res)
+		thread_resume (info->native_handle);
+	return res;
 }
 
 gboolean
@@ -81,7 +85,11 @@ mono_threads_core_resume (MonoThreadInfo *info)
 			return FALSE;
 
 		mono_mach_arch_thread_state_to_mcontext (state, mctx);
+#ifdef TARGET_ARM64
+		g_assert_not_reached ();
+#else
 		uctx.uc_mcontext = mctx;
+#endif
 		mono_monoctx_to_sigctx (&tmp, &uctx);
 
 		mono_mach_arch_mcontext_to_thread_state (mctx, state);
@@ -100,6 +108,7 @@ void
 mono_threads_platform_register (MonoThreadInfo *info)
 {
 	info->native_handle = mach_thread_self ();
+	mono_threads_install_dead_letter ();
 }
 
 void
@@ -129,6 +138,32 @@ gboolean
 mono_native_thread_create (MonoNativeThreadId *tid, gpointer func, gpointer arg)
 {
 	return pthread_create (tid, NULL, func, arg) == 0;
+}
+
+void
+mono_threads_core_set_name (MonoNativeThreadId tid, const char *name)
+{
+	/* pthread_setnmae_np() on Mac is not documented and doesn't receive thread id. */
+}
+
+void
+mono_threads_core_get_stack_bounds (guint8 **staddr, size_t *stsize)
+{
+	*staddr = (guint8*)pthread_get_stackaddr_np (pthread_self());
+	*stsize = pthread_get_stacksize_np (pthread_self());
+
+#ifdef TARGET_OSX
+	/*
+	 * Mavericks reports stack sizes as 512kb:
+	 * http://permalink.gmane.org/gmane.comp.java.openjdk.hotspot.devel/11590
+	 * https://bugs.openjdk.java.net/browse/JDK-8020753
+	 */
+	if (pthread_main_np () && *stsize == 512 * 1024)
+		*stsize = 2048 * mono_pagesize ();
+#endif
+
+	/* staddr points to the start of the stack, not the end */
+	*staddr -= *stsize;
 }
 
 #endif

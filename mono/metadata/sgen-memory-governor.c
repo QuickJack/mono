@@ -48,6 +48,7 @@ static double save_target_ratio = SGEN_DEFAULT_SAVE_TARGET_RATIO;
 /**/
 static mword allocated_heap;
 static mword total_alloc = 0;
+static mword total_alloc_max = 0;
 
 /* GC triggers. */
 
@@ -57,14 +58,14 @@ static gboolean debug_print_allowance = FALSE;
 /* use this to tune when to do a major/minor collection */
 static mword memory_pressure = 0;
 static mword minor_collection_allowance;
-static int minor_collection_sections_alloced = 0;
+static mword minor_collection_sections_alloced = 0;
 
-static int last_major_num_sections = 0;
-static int last_los_memory_usage = 0;
+static mword last_major_num_sections = 0;
+static mword last_los_memory_usage = 0;
 
 static gboolean need_calculate_minor_collection_allowance;
 
-static int last_collection_old_num_major_sections;
+static mword last_collection_old_num_major_sections;
 static mword last_collection_los_memory_usage = 0;
 static mword last_collection_old_los_memory_usage;
 static mword last_collection_los_memory_alloced;
@@ -72,21 +73,13 @@ static mword last_collection_los_memory_alloced;
 static mword sgen_memgov_available_free_space (void);
 
 
-static mword
-double_to_mword_with_saturation (double value)
-{
-	if (value >= (double)MWORD_MAX_VALUE)
-		return MWORD_MAX_VALUE;
-	return (mword)value;
-}
-
 /* GC trigger heuristics. */
 
 static void
 sgen_memgov_try_calculate_minor_collection_allowance (gboolean overwrite)
 {
-	int num_major_sections, num_major_sections_saved;
-	mword los_memory_saved, new_major, new_heap_size, save_target, allowance_target;
+	size_t num_major_sections;
+	mword new_major, new_heap_size, allowance_target;
 
 	if (overwrite)
 		g_assert (need_calculate_minor_collection_allowance);
@@ -102,32 +95,16 @@ sgen_memgov_try_calculate_minor_collection_allowance (gboolean overwrite)
 
 	num_major_sections = major_collector.get_num_major_sections ();
 
-	num_major_sections_saved = MAX (last_collection_old_num_major_sections - num_major_sections, 0);
-	los_memory_saved = MAX (last_collection_old_los_memory_usage - last_collection_los_memory_usage, 1);
-
 	new_major = num_major_sections * major_collector.section_size;
 	new_heap_size = new_major + last_collection_los_memory_usage;
 
-	save_target = (mword)((new_major + last_collection_los_memory_usage) * SGEN_DEFAULT_SAVE_TARGET_RATIO);
-
 	/*
-	 * We aim to allow the allocation of as many sections as is
-	 * necessary to reclaim save_target sections in the next
-	 * collection.  We assume the collection pattern won't change.
-	 * In the last cycle, we had num_major_sections_saved for
-	 * minor_collection_sections_alloced.  Assuming things won't
-	 * change, this must be the same ratio as save_target for
-	 * allowance_target, i.e.
-	 *
-	 *    num_major_sections_saved            save_target
-	 * --------------------------------- == ----------------
-	 * minor_collection_sections_alloced    allowance_target
-	 *
-	 * hence:
+	 * We allow the heap to grow by one third its current size before we start the next
+	 * major collection.
 	 */
-	allowance_target = double_to_mword_with_saturation ((double)save_target * (double)(minor_collection_sections_alloced * major_collector.section_size + last_collection_los_memory_alloced) / (double)(num_major_sections_saved * major_collector.section_size + los_memory_saved));
+	allowance_target = new_heap_size / 3;
 
-	minor_collection_allowance = MAX (MIN (allowance_target, num_major_sections * major_collector.section_size + los_memory_usage), MIN_MINOR_COLLECTION_ALLOWANCE);
+	minor_collection_allowance = MAX (allowance_target, MIN_MINOR_COLLECTION_ALLOWANCE);
 
 	if (new_heap_size + minor_collection_allowance > soft_heap_limit) {
 		if (new_heap_size > soft_heap_limit)
@@ -139,11 +116,11 @@ sgen_memgov_try_calculate_minor_collection_allowance (gboolean overwrite)
 	if (debug_print_allowance) {
 		mword old_major = last_collection_old_num_major_sections * major_collector.section_size;
 
-		SGEN_LOG (1, "Before collection: %td bytes (%td major, %td LOS)",
-				old_major + last_collection_old_los_memory_usage, old_major, last_collection_old_los_memory_usage);
-		SGEN_LOG (1, "After collection: %td bytes (%td major, %td LOS)",
-				new_heap_size, new_major, last_collection_los_memory_usage);
-		SGEN_LOG (1, "Allowance: %td bytes", minor_collection_allowance);
+		SGEN_LOG (1, "Before collection: %ld bytes (%ld major, %ld LOS)",
+				  (long)(old_major + last_collection_old_los_memory_usage), (long)old_major, (long)last_collection_old_los_memory_usage);
+		SGEN_LOG (1, "After collection: %ld bytes (%ld major, %ld LOS)",
+				  (long)new_heap_size, (long)new_major, (long)last_collection_los_memory_usage);
+		SGEN_LOG (1, "Allowance: %ld bytes", (long)minor_collection_allowance);
 	}
 
 	if (major_collector.have_computed_minor_collection_allowance)
@@ -210,17 +187,17 @@ static void
 log_timming (GGTimingInfo *info)
 {
 	//unsigned long stw_time, unsigned long bridge_time, gboolean is_overflow
-	int num_major_sections = major_collector.get_num_major_sections ();
+	mword num_major_sections = major_collector.get_num_major_sections ();
 	char full_timing_buff [1024];
 	full_timing_buff [0] = '\0';
 
 	if (!info->is_overflow)
-	        sprintf (full_timing_buff, "total %.2fms, bridge %.2f", info->stw_time / 1000.0f, (int)info->bridge_time / 1000.0f);
+	        sprintf (full_timing_buff, "total %.2fms, bridge %.2fms", info->stw_time / 10000.0f, (int)info->bridge_time / 10000.0f);
 	if (info->generation == GENERATION_OLD)
 	        mono_trace (G_LOG_LEVEL_INFO, MONO_TRACE_GC, "GC_MAJOR%s: (%s) pause %.2fms, %s major %dK/%dK los %dK/%dK",
 	                info->is_overflow ? "_OVERFLOW" : "",
 	                info->reason ? info->reason : "",
-	                (int)info->total_time / 1000.0f,
+	                (int)info->total_time / 10000.0f,
 	                full_timing_buff,
 	                major_collector.section_size * num_major_sections / 1024,
 	                major_collector.section_size * last_major_num_sections / 1024,
@@ -230,7 +207,7 @@ log_timming (GGTimingInfo *info)
 	        mono_trace (G_LOG_LEVEL_INFO, MONO_TRACE_GC, "GC_MINOR%s: (%s) pause %.2fms, %s promoted %dK major %dK los %dK",
 	        		info->is_overflow ? "_OVERFLOW" : "",
 	                info->reason ? info->reason : "",
-	                (int)info->total_time / 1000.0f,
+	                (int)info->total_time / 10000.0f,
 	                full_timing_buff,
 	                (num_major_sections - last_major_num_sections) * major_collector.section_size / 1024,
 	                major_collector.section_size * num_major_sections / 1024,
@@ -248,7 +225,7 @@ sgen_memgov_collection_end (int generation, GGTimingInfo* info, int info_count)
 }
 
 void
-sgen_register_major_sections_alloced (int num_sections)
+sgen_register_major_sections_alloced (size_t num_sections)
 {
 	minor_collection_sections_alloced += num_sections;
 }
@@ -311,6 +288,7 @@ sgen_alloc_os_memory (size_t size, SgenAllocFlags flags, const char *assert_desc
 		SGEN_ATOMIC_ADD_P (total_alloc, size);
 		if (flags & SGEN_ALLOC_HEAP)
 			MONO_GC_HEAP_ALLOC ((mword)ptr, size);
+		total_alloc_max = MAX (total_alloc_max, total_alloc);
 	}
 	return ptr;
 }
@@ -329,6 +307,7 @@ sgen_alloc_os_memory_aligned (size_t size, mword alignment, SgenAllocFlags flags
 		SGEN_ATOMIC_ADD_P (total_alloc, size);
 		if (flags & SGEN_ALLOC_HEAP)
 			MONO_GC_HEAP_ALLOC ((mword)ptr, size);
+		total_alloc_max = MAX (total_alloc_max, total_alloc);
 	}
 	return ptr;
 }
@@ -342,9 +321,10 @@ sgen_free_os_memory (void *addr, size_t size, SgenAllocFlags flags)
 	g_assert (!(flags & ~SGEN_ALLOC_HEAP));
 
 	mono_vfree (addr, size);
-	SGEN_ATOMIC_ADD_P (total_alloc, -size);
+	SGEN_ATOMIC_ADD_P (total_alloc, -(gssize)size);
 	if (flags & SGEN_ALLOC_HEAP)
 		MONO_GC_HEAP_FREE ((mword)addr, size);
+	total_alloc_max = MAX (total_alloc_max, total_alloc);
 }
 
 int64_t
@@ -369,14 +349,16 @@ sgen_memgov_available_free_space (void)
 void
 sgen_memgov_release_space (mword size, int space)
 {
-	SGEN_ATOMIC_ADD_P (allocated_heap, -size);
+	SGEN_ATOMIC_ADD_P (allocated_heap, -(gssize)size);
 }
 
 gboolean
 sgen_memgov_try_alloc_space (mword size, int space)
 {
-	if (sgen_memgov_available_free_space () < size)
+	if (sgen_memgov_available_free_space () < size) {
+		SGEN_ASSERT (4, !sgen_is_worker_thread (mono_native_thread_id_get ()), "Memory shouldn't run out in worker thread");
 		return FALSE;
+	}
 
 	SGEN_ATOMIC_ADD_P (allocated_heap, size);
 	mono_runtime_resource_check_limit (MONO_RESOURCE_GC_HEAP, allocated_heap);
@@ -384,34 +366,37 @@ sgen_memgov_try_alloc_space (mword size, int space)
 }
 
 void
-sgen_memgov_init (glong max_heap, glong soft_limit, gboolean debug_allowance, double allowance_ratio, double save_target)
+sgen_memgov_init (size_t max_heap, size_t soft_limit, gboolean debug_allowance, double allowance_ratio, double save_target)
 {
 	if (soft_limit)
 		soft_heap_limit = soft_limit;
 
 	debug_print_allowance = debug_allowance;
+	minor_collection_allowance = MIN_MINOR_COLLECTION_ALLOWANCE;
+
+	mono_counters_register ("Memgov alloc", MONO_COUNTER_GC | MONO_COUNTER_WORD | MONO_COUNTER_BYTES | MONO_COUNTER_VARIABLE, &total_alloc);
+	mono_counters_register ("Memgov max alloc", MONO_COUNTER_GC | MONO_COUNTER_WORD | MONO_COUNTER_BYTES | MONO_COUNTER_MONOTONIC, &total_alloc_max);
 
 	if (max_heap == 0)
 		return;
 
 	if (max_heap < soft_limit) {
-		fprintf (stderr, "max-heap-size must be at least as large as soft-heap-limit.\n");
-		exit (1);
+		sgen_env_var_error (MONO_GC_PARAMS_NAME, "Setting to minimum.", "`max-heap-size` must be at least as large as `soft-heap-limit`.");
+		max_heap = soft_limit;
 	}
 
 	if (max_heap < sgen_nursery_size * 4) {
-		fprintf (stderr, "max-heap-size must be at least 4 times larger than nursery size.\n");
-		exit (1);
+		sgen_env_var_error (MONO_GC_PARAMS_NAME, "Setting to minimum.", "`max-heap-size` must be at least 4 times as large as `nursery size`.");
+		max_heap = sgen_nursery_size * 4;
 	}
 	max_heap_size = max_heap - sgen_nursery_size;
-
-	minor_collection_allowance = MIN_MINOR_COLLECTION_ALLOWANCE;
 
 	if (allowance_ratio)
 		default_allowance_nursery_size_ratio = allowance_ratio;
 
 	if (save_target)
 		save_target_ratio = save_target;
+	minor_collection_allowance = MIN_MINOR_COLLECTION_ALLOWANCE;
 }
 
 #endif

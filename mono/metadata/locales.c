@@ -24,6 +24,7 @@
 #include <mono/metadata/locales.h>
 #include <mono/metadata/culture-info.h>
 #include <mono/metadata/culture-info-tables.h>
+#include <mono/utils/bsearch.h>
 
 #ifndef DISABLE_NORMALIZATION
 #include <mono/metadata/normalization-tables.h>
@@ -156,52 +157,76 @@ create_names_array_idx_dynamic (const guint16 *names, int ml)
 	return ret;
 }
 
-void
-ves_icall_System_Globalization_CultureInfo_construct_datetime_format (MonoCultureInfo *this)
+MonoBoolean
+ves_icall_System_Globalization_CalendarData_fill_calendar_data (MonoCalendarData *this, MonoString *name, gint32 calendar_index)
 {
 	MonoDomain *domain;
-	MonoDateTimeFormatInfo *datetime;
+	const DateTimeFormatEntry *dfe;
+	const CultureInfoNameEntry *ne;
+	const CultureInfoEntry *ci;
+	char *n;
+
+	MONO_ARCH_SAVE_REGS;
+
+	n = mono_string_to_utf8 (name);
+	ne = mono_binary_search (n, culture_name_entries, NUM_CULTURE_ENTRIES,
+			sizeof (CultureInfoNameEntry), culture_name_locator);
+	g_free (n);
+	if (ne == NULL) {
+		return FALSE;
+	}
+
+	ci = &culture_entries [ne->culture_entry_index];
+	dfe = &datetime_format_entries [ci->datetime_format_index];
+
+	domain = mono_domain_get ();
+
+	MONO_OBJECT_SETREF (this, NativeName, mono_string_new (domain, idx2string (ci->nativename)));
+	MONO_OBJECT_SETREF (this, ShortDatePatterns, create_names_array_idx_dynamic (dfe->short_date_patterns,
+			NUM_SHORT_DATE_PATTERNS));
+	MONO_OBJECT_SETREF (this, YearMonthPatterns, create_names_array_idx_dynamic (dfe->year_month_patterns,
+			NUM_YEAR_MONTH_PATTERNS));
+
+	MONO_OBJECT_SETREF (this, LongDatePatterns, create_names_array_idx_dynamic (dfe->long_date_patterns,
+			NUM_LONG_DATE_PATTERNS));
+	MONO_OBJECT_SETREF (this, MonthDayPattern, mono_string_new (domain, idx2string (dfe->month_day_pattern)));
+
+	MONO_OBJECT_SETREF (this, DayNames, create_names_array_idx (dfe->day_names, NUM_DAYS));
+	MONO_OBJECT_SETREF (this, AbbreviatedDayNames, create_names_array_idx (dfe->abbreviated_day_names, 
+			NUM_DAYS));
+	MONO_OBJECT_SETREF (this, SuperShortDayNames, create_names_array_idx (dfe->shortest_day_names, NUM_DAYS));
+	MONO_OBJECT_SETREF (this, MonthNames, create_names_array_idx (dfe->month_names, NUM_MONTHS));
+	MONO_OBJECT_SETREF (this, AbbreviatedMonthNames, create_names_array_idx (dfe->abbreviated_month_names,
+			NUM_MONTHS));
+	MONO_OBJECT_SETREF (this, GenitiveMonthNames, create_names_array_idx (dfe->month_genitive_names, NUM_MONTHS));
+	MONO_OBJECT_SETREF (this, GenitiveAbbreviatedMonthNames, create_names_array_idx (dfe->abbreviated_month_genitive_names, NUM_MONTHS));
+
+	return TRUE;
+}
+
+void
+ves_icall_System_Globalization_CultureData_fill_culture_data (MonoCultureData *this, gint32 datetime_index)
+{
+	MonoDomain *domain;
 	const DateTimeFormatEntry *dfe;
 
 	MONO_ARCH_SAVE_REGS;
 
-	g_assert (this->datetime_index >= 0);
+	g_assert (datetime_index >= 0);
 
-	datetime = this->datetime_format;
-	dfe = &datetime_format_entries [this->datetime_index];
+	dfe = &datetime_format_entries [datetime_index];
 
 	domain = mono_domain_get ();
 
-	datetime->readOnly = this->is_read_only;
-	MONO_OBJECT_SETREF (datetime, AbbreviatedDayNames, create_names_array_idx (dfe->abbreviated_day_names, 
-			NUM_DAYS));
-	MONO_OBJECT_SETREF (datetime, AbbreviatedMonthNames, create_names_array_idx (dfe->abbreviated_month_names,
-			NUM_MONTHS));
-	MONO_OBJECT_SETREF (datetime, AMDesignator, mono_string_new (domain, idx2string (dfe->am_designator)));
-	datetime->CalendarWeekRule = dfe->calendar_week_rule;
-	MONO_OBJECT_SETREF (datetime, DateSeparator, mono_string_new (domain, idx2string (dfe->date_separator)));
-	MONO_OBJECT_SETREF (datetime, DayNames, create_names_array_idx (dfe->day_names, NUM_DAYS));
-	MONO_OBJECT_SETREF (datetime, ShortestDayNames, create_names_array_idx (dfe->shortest_day_names, NUM_DAYS));
-	datetime->FirstDayOfWeek = dfe->first_day_of_week;
-	MONO_OBJECT_SETREF (datetime, LongDatePattern, mono_string_new (domain, idx2string (dfe->long_date_pattern)));
-	MONO_OBJECT_SETREF (datetime, LongTimePattern, mono_string_new (domain, idx2string (dfe->long_time_pattern)));
-	MONO_OBJECT_SETREF (datetime, MonthDayPattern, mono_string_new (domain, idx2string (dfe->month_day_pattern)));
-	MONO_OBJECT_SETREF (datetime, MonthNames, create_names_array_idx (dfe->month_names, NUM_MONTHS));
-	MONO_OBJECT_SETREF (datetime, PMDesignator, mono_string_new (domain, idx2string (dfe->pm_designator)));
-	MONO_OBJECT_SETREF (datetime, ShortDatePattern, mono_string_new (domain, idx2string (dfe->short_date_pattern)));
-	MONO_OBJECT_SETREF (datetime, ShortTimePattern, mono_string_new (domain, idx2string (dfe->short_time_pattern)));
-	MONO_OBJECT_SETREF (datetime, TimeSeparator, mono_string_new (domain, idx2string (dfe->time_separator)));
-	MONO_OBJECT_SETREF (datetime, YearMonthPattern, mono_string_new (domain, idx2string (dfe->year_month_pattern)));
-	MONO_OBJECT_SETREF (datetime, ShortDatePatterns, create_names_array_idx_dynamic (dfe->short_date_patterns,
-			NUM_SHORT_DATE_PATTERNS));
-	MONO_OBJECT_SETREF (datetime, LongDatePatterns, create_names_array_idx_dynamic (dfe->long_date_patterns,
-			NUM_LONG_DATE_PATTERNS));
-	MONO_OBJECT_SETREF (datetime, ShortTimePatterns, create_names_array_idx_dynamic (dfe->short_time_patterns,
-			NUM_SHORT_TIME_PATTERNS));
-	MONO_OBJECT_SETREF (datetime, LongTimePatterns, create_names_array_idx_dynamic (dfe->long_time_patterns,
+	MONO_OBJECT_SETREF (this, AMDesignator, mono_string_new (domain, idx2string (dfe->am_designator)));
+	MONO_OBJECT_SETREF (this, PMDesignator, mono_string_new (domain, idx2string (dfe->pm_designator)));
+	MONO_OBJECT_SETREF (this, TimeSeparator, mono_string_new (domain, idx2string (dfe->time_separator)));
+	MONO_OBJECT_SETREF (this, LongTimePatterns, create_names_array_idx_dynamic (dfe->long_time_patterns,
 			NUM_LONG_TIME_PATTERNS));
-	MONO_OBJECT_SETREF (datetime, GenitiveMonthNames, create_names_array_idx (dfe->month_genitive_names, NUM_MONTHS));
-	MONO_OBJECT_SETREF (datetime, GenitiveAbbreviatedMonthNames, create_names_array_idx (dfe->abbreviated_month_genitive_names, NUM_MONTHS));
+	MONO_OBJECT_SETREF (this, ShortTimePatterns, create_names_array_idx_dynamic (dfe->short_time_patterns,
+			NUM_SHORT_TIME_PATTERNS));
+	this->FirstDayOfWeek = dfe->first_day_of_week;
+	this->CalendarWeekRule = dfe->calendar_week_rule;
 }
 
 void
@@ -305,34 +330,12 @@ construct_region (MonoRegionInfo *this, const RegionInfoEntry *ri)
 	return TRUE;
 }
 
-static gboolean
-construct_culture_from_specific_name (MonoCultureInfo *ci, gchar *name)
-{
-	const CultureInfoEntry *entry;
-	const CultureInfoNameEntry *ne;
-
-	MONO_ARCH_SAVE_REGS;
-
-	ne = bsearch (name, culture_name_entries, NUM_CULTURE_ENTRIES,
-			sizeof (CultureInfoNameEntry), culture_name_locator);
-
-	if (ne == NULL)
-		return FALSE;
-
-	entry = &culture_entries [ne->culture_entry_index];
-
-	if (entry)
-		return construct_culture (ci, entry);
-	else
-		return FALSE;
-}
-
 static const CultureInfoEntry*
 culture_info_entry_from_lcid (int lcid)
 {
 	const CultureInfoEntry *ci;
 
-	ci = bsearch (&lcid, culture_entries, NUM_CULTURE_ENTRIES, sizeof (CultureInfoEntry), culture_lcid_locator);
+	ci = mono_binary_search (&lcid, culture_entries, NUM_CULTURE_ENTRIES, sizeof (CultureInfoEntry), culture_lcid_locator);
 
 	return ci;
 }
@@ -345,7 +348,7 @@ region_info_entry_from_lcid (int lcid)
 
 	MONO_ARCH_SAVE_REGS;
 
-	ne = bsearch (&lcid, culture_entries, NUM_CULTURE_ENTRIES, sizeof (CultureInfoEntry), culture_lcid_locator);
+	ne = mono_binary_search (&lcid, culture_entries, NUM_CULTURE_ENTRIES, sizeof (CultureInfoEntry), culture_lcid_locator);
 
 	if (ne == NULL)
 		return FALSE;
@@ -355,47 +358,18 @@ region_info_entry_from_lcid (int lcid)
 	return entry;
 }
 
-/*
- * The following two methods are modified from the ICU source code. (http://oss.software.ibm.com/icu)
- * Copyright (c) 1995-2003 International Business Machines Corporation and others
- * All rights reserved.
- */
-static gchar*
-get_posix_locale (void)
-{
-	const gchar* posix_locale = NULL;
-
-	posix_locale = g_getenv("LC_ALL");
-	if (posix_locale == 0) {
-		posix_locale = g_getenv("LANG");
-		if (posix_locale == 0) {
-			posix_locale = setlocale(LC_ALL, NULL);
-		}
-	}
-
-	if (posix_locale == NULL)
-		return NULL;
-
-	if ((strcmp ("C", posix_locale) == 0) || (strchr (posix_locale, ' ') != NULL)
-			|| (strchr (posix_locale, '/') != NULL)) {
-		/*
-		 * HPUX returns 'C C C C C C C'
-		 * Solaris can return /en_US/C/C/C/C/C on the second try.
-		 * Maybe we got some garbage.
-		 */
-		return NULL;
-	}
-
-	return g_strdup (posix_locale);
-}
-
 #if defined (__APPLE__)
 static gchar*
 get_darwin_locale (void)
 {
 	static gchar *darwin_locale = NULL;
 	CFLocaleRef locale = NULL;
+	CFStringRef locale_language = NULL;
+	CFStringRef locale_country = NULL;
+	CFStringRef locale_script = NULL;
 	CFStringRef locale_cfstr = NULL;
+	CFIndex bytes_converted;
+	CFIndex bytes_written;
 	CFIndex len;
 	int i;
 
@@ -405,21 +379,51 @@ get_darwin_locale (void)
 	locale = CFLocaleCopyCurrent ();
 
 	if (locale) {
-		locale_cfstr = CFLocaleGetIdentifier (locale);
+		locale_language = CFLocaleGetValue (locale, kCFLocaleLanguageCode);
+		if (locale_language != NULL && CFStringGetBytes(locale_language, CFRangeMake (0, CFStringGetLength (locale_language)), kCFStringEncodingMacRoman, 0, FALSE, NULL, 0, &bytes_converted) > 0) {
+			len = bytes_converted + 1;
 
-		if (locale_cfstr) {
-			len = CFStringGetMaximumSizeForEncoding (CFStringGetLength (locale_cfstr), kCFStringEncodingMacRoman) + 1;
-			darwin_locale = (char *) malloc (len);
-			if (!CFStringGetCString (locale_cfstr, darwin_locale, len, kCFStringEncodingMacRoman)) {
-				free (darwin_locale);
-				CFRelease (locale);
-				darwin_locale = NULL;
-				return NULL;
+			locale_country = CFLocaleGetValue (locale, kCFLocaleCountryCode);
+			if (locale_country != NULL && CFStringGetBytes (locale_country, CFRangeMake (0, CFStringGetLength (locale_country)), kCFStringEncodingMacRoman, 0, FALSE, NULL, 0, &bytes_converted) > 0) {
+				len += bytes_converted + 1;
+
+				locale_script = CFLocaleGetValue (locale, kCFLocaleScriptCode);
+				if (locale_script != NULL && CFStringGetBytes (locale_script, CFRangeMake (0, CFStringGetLength (locale_script)), kCFStringEncodingMacRoman, 0, FALSE, NULL, 0, &bytes_converted) > 0) {
+					len += bytes_converted + 1;
+				}
+
+				darwin_locale = (char *) malloc (len + 1);
+				CFStringGetBytes (locale_language, CFRangeMake (0, CFStringGetLength (locale_language)), kCFStringEncodingMacRoman, 0, FALSE, (UInt8 *) darwin_locale, len, &bytes_converted);
+
+				darwin_locale[bytes_converted] = '-';
+				bytes_written = bytes_converted + 1;
+				if (locale_script != NULL && CFStringGetBytes (locale_script, CFRangeMake (0, CFStringGetLength (locale_script)), kCFStringEncodingMacRoman, 0, FALSE, (UInt8 *) &darwin_locale[bytes_written], len - bytes_written, &bytes_converted) > 0) {
+					darwin_locale[bytes_written + bytes_converted] = '-';
+					bytes_written += bytes_converted + 1;
+				}
+
+				CFStringGetBytes (locale_country, CFRangeMake (0, CFStringGetLength (locale_country)), kCFStringEncodingMacRoman, 0, FALSE, (UInt8 *) &darwin_locale[bytes_written], len - bytes_written, &bytes_converted);
+				darwin_locale[bytes_written + bytes_converted] = '\0';
 			}
+		}
 
-			for (i = 0; i < strlen (darwin_locale); i++)
-				if (darwin_locale [i] == '_')
-					darwin_locale [i] = '-';
+		if (darwin_locale == NULL) {
+			locale_cfstr = CFLocaleGetIdentifier (locale);
+
+			if (locale_cfstr) {
+				len = CFStringGetMaximumSizeForEncoding (CFStringGetLength (locale_cfstr), kCFStringEncodingMacRoman) + 1;
+				darwin_locale = (char *) malloc (len);
+				if (!CFStringGetCString (locale_cfstr, darwin_locale, len, kCFStringEncodingMacRoman)) {
+					free (darwin_locale);
+					CFRelease (locale);
+					darwin_locale = NULL;
+					return NULL;
+				}
+
+				for (i = 0; i < strlen (darwin_locale); i++)
+					if (darwin_locale [i] == '_')
+						darwin_locale [i] = '-';
+			}			
 		}
 
 		CFRelease (locale);
@@ -429,14 +433,34 @@ get_darwin_locale (void)
 }
 #endif
 
-static gchar*
+static char *
+get_posix_locale (void)
+{
+	const char *locale;
+
+	locale = g_getenv ("LC_ALL");
+	if (locale == NULL) {
+		locale = g_getenv ("LANG");
+		if (locale == NULL)
+			locale = setlocale (LC_ALL, NULL);
+	}
+	if (locale == NULL)
+		return NULL;
+
+	/* Skip English-only locale 'C' */
+	if (strcmp (locale, "C") == 0)
+		return NULL;
+
+	return g_strdup (locale);
+}
+
+
+static gchar *
 get_current_locale_name (void)
 {
-	gchar *locale;
-	gchar *corrected = NULL;
-	const gchar *p;
-	gchar *c;
-
+	char *locale;
+	char *p, *ret;
+		
 #ifdef HOST_WIN32
 	locale = g_win32_getlocale ();
 #elif defined (__APPLE__)	
@@ -445,69 +469,43 @@ get_current_locale_name (void)
 		locale = get_posix_locale ();
 #else
 	locale = get_posix_locale ();
-#endif	
+#endif
 
 	if (locale == NULL)
 		return NULL;
 
-	if ((p = strchr (locale, '.')) != NULL) {
-		/* assume new locale can't be larger than old one? */
-		corrected = g_malloc (strlen (locale));
-		strncpy (corrected, locale, p - locale);
-		corrected [p - locale] = 0;
+	p = strchr (locale, '.');
+	if (p != NULL)
+		*p = 0;
+	p = strchr (locale, '@');
+	if (p != NULL)
+		*p = 0;
+	p = strchr (locale, '_');
+	if (p != NULL)
+		*p = '-';
 
-		/* do not copy after the @ */
-		if ((p = strchr (corrected, '@')) != NULL)
-			corrected [p - corrected] = 0;
-	}
+	ret = g_ascii_strdown (locale, -1);
+	g_free (locale);
 
-	/* Note that we scan the *uncorrected* ID. */
-	if ((p = strrchr (locale, '@')) != NULL) {
+	return ret;
+}
 
-		/*
-		 * In Mono we dont handle the '@' modifier because we do
-		 * not have any cultures that use it. We just trim it
-		 * off of the end of the name.
-		 */
-
-		if (corrected == NULL) {
-			corrected = g_malloc (strlen (locale));
-			strncpy (corrected, locale, p - locale);
-			corrected [p - locale] = 0;
-		}
-	}
-
-	if (corrected == NULL)
-		corrected = locale;
-	else
-		g_free (locale);
-
-	if ((c = strchr (corrected, '_')) != NULL)
-		*c = '-';
-
-	c = corrected;
-	corrected = g_ascii_strdown (c, -1);
-	g_free (c);
-
-	return corrected;
-}	 
-
-MonoBoolean
-ves_icall_System_Globalization_CultureInfo_construct_internal_locale_from_current_locale (MonoCultureInfo *ci)
+MonoString*
+ves_icall_System_Globalization_CultureInfo_get_current_locale_name (void)
 {
 	gchar *locale;
-	gboolean ret;
+	MonoString* ret;
+	MonoDomain *domain;
 
 	MONO_ARCH_SAVE_REGS;
 
 	locale = get_current_locale_name ();
 	if (locale == NULL)
-		return FALSE;
+		return NULL;
 
-	ret = construct_culture_from_specific_name (ci, locale);
+	domain = mono_domain_get ();
+	ret = mono_string_new (domain, locale);
 	g_free (locale);
-	ci->is_read_only = TRUE;
-	ci->use_user_override = TRUE;
 
 	return ret;
 }
@@ -537,7 +535,7 @@ ves_icall_System_Globalization_CultureInfo_construct_internal_locale_from_name (
 	MONO_ARCH_SAVE_REGS;
 
 	n = mono_string_to_utf8 (name);
-	ne = bsearch (n, culture_name_entries, NUM_CULTURE_ENTRIES,
+	ne = mono_binary_search (n, culture_name_entries, NUM_CULTURE_ENTRIES,
 			sizeof (CultureInfoNameEntry), culture_name_locator);
 
 	if (ne == NULL) {
@@ -549,7 +547,7 @@ ves_icall_System_Globalization_CultureInfo_construct_internal_locale_from_name (
 
 	return construct_culture (this, &culture_entries [ne->culture_entry_index]);
 }
-
+/*
 MonoBoolean
 ves_icall_System_Globalization_CultureInfo_construct_internal_locale_from_specific_name (MonoCultureInfo *ci,
 		MonoString *name)
@@ -565,7 +563,7 @@ ves_icall_System_Globalization_CultureInfo_construct_internal_locale_from_specif
 
 	return ret;
 }
-
+*/
 MonoBoolean
 ves_icall_System_Globalization_RegionInfo_construct_internal_region_from_lcid (MonoRegionInfo *this,
 		gint lcid)
@@ -591,7 +589,7 @@ ves_icall_System_Globalization_RegionInfo_construct_internal_region_from_name (M
 	MONO_ARCH_SAVE_REGS;
 
 	n = mono_string_to_utf8 (name);
-	ne = bsearch (n, region_name_entries, NUM_REGION_ENTRIES,
+	ne = mono_binary_search (n, region_name_entries, NUM_REGION_ENTRIES,
 		sizeof (RegionInfoNameEntry), region_name_locator);
 
 	if (ne == NULL) {

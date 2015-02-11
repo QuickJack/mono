@@ -11,6 +11,8 @@
 // (C) 2003 Martin Willemoes Hansen
 //
 
+#if !MOBILE
+
 using NUnit.Framework;
 using System;
 using System.Text;
@@ -46,12 +48,10 @@ namespace MonoTests.System.Diagnostics {
 			}
 		}
 
-#if NET_2_0
 		public string [] ExposeSupportedAttributes ()
 		{
 			return GetSupportedAttributes ();
 		}
-#endif
 
 		public bool Validate ()
 		{
@@ -75,6 +75,12 @@ namespace MonoTests.System.Diagnostics {
 			ops.Append ("OnSwitchSettingChanged\n");
 
 			GetSetting ();
+		}
+	}
+
+	class TestNullSwitch : Switch {
+		public TestNullSwitch () : base (null, null)
+		{
 		}
 	}
 
@@ -138,16 +144,13 @@ namespace MonoTests.System.Diagnostics {
 		}
 
 		[Test]
-#if NET_2_0
 		[Ignore ("this test depends on 1.x configuration type")]
-#endif
 		public void NewSwitch ()
 		{
 			Assert.AreEqual ("42", tns.TestValue, "#NS:TestValue");
 			Assert.IsTrue (tns.Validate(), "#NS:Validate");
 		}
 
-#if NET_2_0
 		[Test]
 		public void GetSupportedAttributes ()
 		{
@@ -182,7 +185,15 @@ namespace MonoTests.System.Diagnostics {
 			BooleanSwitch s = new BooleanSwitch ("test", "", "hoge");
 			Assert.IsTrue (!s.Enabled);
 		}
-#endif
+
+		[Test]
+		public void NullSwitchHasEmptyDisplayNameAndDescription ()
+		{
+			var s = new TestNullSwitch ();
+			Assert.IsEmpty (s.DisplayName);
+			Assert.IsEmpty (s.Description);
+		}
 	}
 }
 
+#endif

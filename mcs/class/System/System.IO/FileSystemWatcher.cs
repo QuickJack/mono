@@ -93,7 +93,7 @@ namespace System.IO {
 				throw new ArgumentException ("Empty path", "path");
 
 			if (!Directory.Exists (path))
-				throw new ArgumentException ("Directory does not exists", "path");
+				throw new ArgumentException ("Directory does not exist", "path");
 
 			this.enableRaisingEvents = false;
 			this.filter = filter;
@@ -183,7 +183,10 @@ namespace System.IO {
 		internal SearchPattern2 Pattern {
 			get {
 				if (pattern == null) {
-					pattern = new SearchPattern2 (MangledFilter);
+					if (watcher.GetType () == typeof (KeventWatcher))
+						pattern = new SearchPattern2 (MangledFilter, true); //assume we want to ignore case (OS X)
+					else
+						pattern = new SearchPattern2 (MangledFilter);
 				}
 				return pattern;
 			}
@@ -312,7 +315,7 @@ namespace System.IO {
 					throw new ArgumentException ("Invalid directory name", "value", exc);
 
 				if (!exists)
-					throw new ArgumentException ("Directory does not exists", "value");
+					throw new ArgumentException ("Directory does not exist", "value");
 
 				path = value;
 				fullpath = null;
@@ -378,16 +381,18 @@ namespace System.IO {
 				return;
 
 			if (synchronizingObject == null) {
-				switch (evtype) {
-				case EventType.RenameEvent:
-					((RenamedEventHandler)ev).BeginInvoke (this, (RenamedEventArgs) arg, null, null);
-					break;
-				case EventType.ErrorEvent:
-					((ErrorEventHandler)ev).BeginInvoke (this, (ErrorEventArgs) arg, null, null);
-					break;
-				case EventType.FileSystemEvent:
-					((FileSystemEventHandler)ev).BeginInvoke (this, (FileSystemEventArgs) arg, null, null);
-					break;
+				foreach (var target in ev.GetInvocationList()) {
+					switch (evtype) {
+					case EventType.RenameEvent:
+						((RenamedEventHandler)target).BeginInvoke (this, (RenamedEventArgs)arg, null, null);
+						break;
+					case EventType.ErrorEvent:
+						((ErrorEventHandler)target).BeginInvoke (this, (ErrorEventArgs)arg, null, null);
+						break;
+					case EventType.FileSystemEvent:
+						((FileSystemEventHandler)target).BeginInvoke (this, (FileSystemEventArgs)arg, null, null);
+						break;
+					}
 				}
 				return;
 			}
@@ -445,6 +450,11 @@ namespace System.IO {
 				result.TimedOut = true;
 
 			return result;
+		}
+
+		internal void DispatchErrorEvents (ErrorEventArgs args)
+		{
+			OnError (args);
 		}
 
 		internal void DispatchEvents (FileAction act, string filename, ref RenamedEventArgs renamed)

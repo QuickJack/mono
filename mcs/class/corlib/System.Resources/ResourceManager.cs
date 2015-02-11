@@ -45,17 +45,15 @@ namespace System.Resources
 	public class ResourceManager
 	{
 		static readonly object thisLock = new object ();
-		static readonly Hashtable ResourceCache = new Hashtable (); 
-		static readonly Hashtable NonExistent = Hashtable.Synchronized (new Hashtable ());
+		static readonly Hashtable ResourceCache = new Hashtable ();
+		readonly Hashtable NonExistent = new Hashtable ();
 		public static readonly int HeaderVersionNumber = 1;
 		public static readonly int MagicNumber = unchecked ((int) 0xBEEFCACE);
 
 		protected string BaseNameField;
 		protected Assembly MainAssembly;
 		// Maps cultures to ResourceSet objects
-#if NET_4_0
 		[Obsolete ("Use InternalGetResourceSet instead.")]
-#endif
 		protected Hashtable ResourceSets;
 		
 		private bool ignoreCase;
@@ -285,11 +283,9 @@ namespace System.Resources
 
 		private string GetResourceFilePath (CultureInfo culture)
 		{
-#if !MOONLIGHT
 			if (resourceDir != null)
 				return Path.Combine (resourceDir, GetResourceFileName (culture));
 			else
-#endif
 				return GetResourceFileName (culture);
 		}
 		

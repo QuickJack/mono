@@ -7,7 +7,6 @@
 //     the code is regenerated.
 // </auto-generated>
 //------------------------------------------------------------------------------
-#if NET_2_0
 
 #pragma warning disable 1591
 
@@ -23,7 +22,7 @@ namespace MonoTests.System.Data {
     [global::System.ComponentModel.ToolboxItem(true)]
     [global::System.Xml.Serialization.XmlSchemaProviderAttribute("GetTypedDataSetSchema")]
     [global::System.Xml.Serialization.XmlRootAttribute("DataSet1")]
-    [global::System.ComponentModel.Design.HelpKeywordAttribute("vs.data.DataSet")]
+//    [global::System.ComponentModel.Design.HelpKeywordAttribute("vs.data.DataSet")]
     public partial class DataSet1 : global::System.Data.DataSet {
         
         private DataTable1DataTable tableDataTable1;
@@ -492,4 +491,3 @@ namespace MonoTests.System.Data {
 
 #pragma warning restore 1591
 
-#endif

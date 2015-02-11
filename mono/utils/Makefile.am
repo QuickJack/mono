@@ -22,6 +22,9 @@ monoutils_sources = \
 	mono-counters.c		\
 	mono-compiler.h		\
 	mono-dl.c		\
+	mono-dl-windows.c	\
+	mono-dl-darwin.c	\
+	mono-dl-posix.c		\
 	mono-dl.h		\
 	mono-internal-hash.c	\
 	mono-internal-hash.h	\
@@ -32,6 +35,9 @@ monoutils_sources = \
 	mono-math.c  		\
 	mono-mmap.c  		\
 	mono-mmap.h  		\
+	mono-mmap-internal.h	\
+	mono-mutex.c  		\
+	mono-mutex.h  		\
 	mono-networkinterfaces.c		\
 	mono-networkinterfaces.h		\
 	mono-proclib.c		\
@@ -95,11 +101,34 @@ monoutils_sources = \
 	mono-threads.c	\
 	mono-threads-posix.c	\
 	mono-threads-mach.c	\
+	mono-threads-mach-helper.c	\
 	mono-threads-windows.c	\
+	mono-threads-linux.c	\
+	mono-threads-freebsd.c	\
+	mono-threads-openbsd.c	\
+	mono-threads-android.c	\
 	mono-threads.h	\
 	mono-tls.h	\
+	mono-tls.c	\
 	linux_magic.h	\
-	mono-memory-model.h
+	mono-memory-model.h	\
+	atomic.h	\
+	atomic.c	\
+	mono-hwcap.h	\
+	mono-hwcap.c	\
+	bsearch.h	\
+	bsearch.c	\
+	mono-signal-handler.h	\
+	mono-conc-hashtable.h	\
+	mono-conc-hashtable.c	\
+	sha1.h		\
+	sha1.c	\
+	networking.c	\
+	networking-posix.c	\
+	networking-fallback.c	\
+	networking-missing.c	\
+	networking-windows.c	\
+	networking.h
 
 arch_sources = 
 
@@ -117,10 +146,58 @@ if ARM
 arch_sources += mach-support-arm.c
 endif
 
+if ARM64
+arch_sources += mach-support-arm.c
+endif
+
 else
 
 arch_sources += mach-support-unknown.c
 
+endif
+
+if X86
+arch_sources += mono-hwcap-x86.c mono-hwcap-x86.h
+endif
+
+if AMD64
+arch_sources += mono-hwcap-x86.c mono-hwcap-x86.h
+endif
+
+if ARM
+arch_sources += mono-hwcap-arm.c mono-hwcap-arm.h
+endif
+
+if ARM64
+arch_sources += mono-hwcap-arm64.c mono-hwcap-arm64.h
+endif
+
+if MIPS
+arch_sources += mono-hwcap-mips.c mono-hwcap-mips.h
+endif
+
+if POWERPC
+arch_sources += mono-hwcap-ppc.c mono-hwcap-ppc.h
+endif
+
+if POWERPC64
+arch_sources += mono-hwcap-ppc.c mono-hwcap-ppc.h
+endif
+
+if SPARC
+arch_sources += mono-hwcap-sparc.c mono-hwcap-sparc.h
+endif
+
+if SPARC64
+arch_sources += mono-hwcap-sparc.c mono-hwcap-sparc.h
+endif
+
+if IA64
+arch_sources += mono-hwcap-ia64.c mono-hwcap-ia64.h
+endif
+
+if S390X
+arch_sources += mono-hwcap-s390x.c mono-hwcap-s390x.h
 endif
 
 libmonoutils_la_SOURCES = $(monoutils_sources) $(arch_sources)
@@ -130,6 +207,7 @@ libmonoutilsinclude_HEADERS = 	\
 	mono-logger.h		\
 	mono-error.h		\
 	mono-publib.h		\
-	mono-dl-fallback.h
+	mono-dl-fallback.h	\
+	mono-counters.h
 
 EXTRA_DIST = ChangeLog mono-embed.h mono-embed.c

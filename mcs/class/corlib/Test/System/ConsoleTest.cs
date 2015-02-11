@@ -330,6 +330,21 @@ public class ConsoleTest
 		Console.WriteLine ("text {0}", (object[]) null);
 	}
 
+#if !MOBILE
+
+#if NET_4_5
+	[Test]
+	public void RedirectedTest ()
+	{
+		if (Console.IsErrorRedirected) {
+			Assert.Ignore ("The error output stream of the console is redirected.");
+		}
+
+		Console.SetError (TextWriter.Null);
+		Assert.IsFalse (Console.IsErrorRedirected);
+	}
+#endif
+
 	// Bug 678357
 	[Test]
 	public void EncodingTest ()
@@ -339,5 +354,6 @@ public class ConsoleTest
 		Console.OutputEncoding = Encoding.UTF8;
 		Assert.AreEqual (Console.OutputEncoding, Console.Out.Encoding);
 	}
+#endif
 }
 }

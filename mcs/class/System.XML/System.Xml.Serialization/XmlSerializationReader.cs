@@ -40,21 +40,15 @@ using System.Reflection;
 
 namespace System.Xml.Serialization 
 {
-#if NET_2_0
 	[MonoTODO]
 	// FIXME: provide expected elements/attributes on unknown elements/attributs
-#endif
 	public abstract class XmlSerializationReader 
-#if NET_2_0
 		: XmlSerializationGeneratedCode
-#endif
 	{
 
 		#region Fields
 
-#if !MOONLIGHT
 		XmlDocument document;
-#endif
 		XmlReader reader;
 		ArrayList fixups;
 		Hashtable collFixups;
@@ -117,7 +111,6 @@ namespace System.Xml.Serialization
 		{
 		}
 
-#if !MOONLIGHT
 		protected XmlDocument Document
 		{
 			get {
@@ -127,7 +120,6 @@ namespace System.Xml.Serialization
 				return document;
 			}
 		}
-#endif
 
 		protected XmlReader Reader {
 			get { return reader; }
@@ -145,11 +137,9 @@ namespace System.Xml.Serialization
 
 		}
 
-#if NET_2_0
 		protected int ReaderCount {
 			get { return readCount; }
 		}
-#endif
 
 		#region Methods
 
@@ -279,13 +269,11 @@ namespace System.Xml.Serialization
 			return new InvalidOperationException (message);
 		}
 
-#if NET_2_0
 		protected void CheckReaderCount (ref int whileIterations, ref int readerCount)
 		{
 			whileIterations = whileIterationCount;
 			readerCount = readCount;
 		}
-#endif
 
 		protected Array EnsureArrayIndex (Array a, int index, Type elementType)
 		{
@@ -387,7 +375,6 @@ namespace System.Xml.Serialization
 			return name.StartsWith ("xmlns:");
 		}
 
-#if !MOONLIGHT
 		protected void ParseWsdlArrayType (XmlAttribute attr)
 		{
 			if (attr.NamespaceURI == wsdlNS && attr.LocalName == arrayType)
@@ -398,7 +385,6 @@ namespace System.Xml.Serialization
 				attr.Value = ns + type + dimensions;
 			}
 		}
-#endif
 
 		protected XmlQualifiedName ReadElementQualifiedName ()
 		{
@@ -442,13 +428,8 @@ namespace System.Xml.Serialization
 			}
 
 			reader.ReadStartElement();
-#if MOONLIGHT
-			while (reader.NodeType != XmlNodeType.EndElement)
-				reader.Skip ();
-#else
 			while (reader.NodeType != XmlNodeType.EndElement)
 				UnknownNode (null);
-#endif
 
 			ReadEndElement ();
 			return true;
@@ -769,11 +750,6 @@ namespace System.Xml.Serialization
 			TypeData typeData = TypeTranslator.FindPrimitiveTypeData (qname.Name);
 			if (typeData == null || typeData.SchemaType != SchemaTypes.Primitive)
 			{
-#if MOONLIGHT
-				// skip everything
-				reader.Skip ();
-				return new Object ();
-#else
 				// Put everything into a node array
 				readCount++;
 				XmlNode node = Document.ReadNode (reader);
@@ -797,7 +773,6 @@ namespace System.Xml.Serialization
 						nodes[n++] = no;
 					return nodes;
 				}
-#endif
 			}
 
 			if (typeData.Type == typeof (XmlQualifiedName)) return ReadNullableQualifiedName ();
@@ -805,7 +780,6 @@ namespace System.Xml.Serialization
 			return XmlCustomFormatter.FromXmlString (typeData, Reader.ReadElementString ());
 		}
 
-#if !MOONLIGHT
 		protected XmlNode ReadXmlNode (bool wrapped)
 		{
 			readCount++;
@@ -832,7 +806,6 @@ namespace System.Xml.Serialization
 				
 			return doc;
 		}
-#endif
 
 		protected void Referenced (object o)
 		{
@@ -900,17 +873,10 @@ namespace System.Xml.Serialization
 			return XmlCustomFormatter.ToDateTime (value);
 		}
 
-#if MOONLIGHT
-		protected static long ToEnum (string value, IDictionary h, string typeName)
-		{
-			return XmlCustomFormatter.ToEnum (value, (Hashtable) h, typeName, true);
-		}
-#else
 		protected static long ToEnum (string value, Hashtable h, string typeName)
 		{
 			return XmlCustomFormatter.ToEnum (value, h, typeName, true);
 		}
-#endif
 
 		protected static DateTime ToTime (string value)
 		{
@@ -958,20 +924,12 @@ namespace System.Xml.Serialization
 			return new XmlQualifiedName (name, ns);
 		}
 
-#if MOONLIGHT
-		protected void UnknownNode (object o)
-		{
-			throw new NotSupportedException ();
-		}
-#else
 		protected void UnknownAttribute (object o, XmlAttribute attr)
 		{
 			UnknownAttribute (o, attr, null);
 		}
 
-#if NET_2_0
 		protected
-#endif
 		void UnknownAttribute (object o, XmlAttribute attr, string qnames)
 		{
 			int line_number, line_position;
@@ -985,9 +943,7 @@ namespace System.Xml.Serialization
 			}
 
 			XmlAttributeEventArgs args = new XmlAttributeEventArgs (attr, line_number, line_position, o);
-#if NET_2_0
 			args.ExpectedAttributes = qnames;
-#endif
 
 			if (eventSource != null)
 				eventSource.OnUnknownAttribute (args);
@@ -998,9 +954,7 @@ namespace System.Xml.Serialization
 			UnknownElement (o, elem, null);
 		}
 
-#if NET_2_0
 		protected
-#endif
 		void UnknownElement (object o, XmlElement elem, string qnames)
 		{
 			int line_number, line_position;
@@ -1014,9 +968,7 @@ namespace System.Xml.Serialization
 			}
 
 			XmlElementEventArgs args = new XmlElementEventArgs (elem, line_number, line_position, o);
-#if NET_2_0
 			args.ExpectedElements = qnames;
-#endif
 
 			if (eventSource != null)
 				eventSource.OnUnknownElement (args);
@@ -1027,9 +979,7 @@ namespace System.Xml.Serialization
 			UnknownNode (o, null);
 		}
 
-#if NET_2_0
 		protected
-#endif
 		void UnknownNode (object o, string qnames)
 		{
 			OnUnknownNode (ReadXmlNode (false), o, qnames);
@@ -1066,7 +1016,6 @@ namespace System.Xml.Serialization
 					throw new InvalidOperationException ("End of document found");
 			}
 		}
-#endif // !NET_2_1
 
 		protected void UnreferencedObject (string id, object o)
 		{
@@ -1180,7 +1129,6 @@ namespace System.Xml.Serialization
 			}
 		}
 		
-#if NET_2_0
 		[MonoTODO]
 		protected bool DecodeName
 		{
@@ -1235,7 +1183,6 @@ namespace System.Xml.Serialization
 			throw new NotImplementedException ();
 		}
 
-#endif
 
 	}
 }

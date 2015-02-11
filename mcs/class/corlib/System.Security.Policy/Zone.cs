@@ -28,8 +28,6 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if !MOONLIGHT
-
 using System.IO;
 using System.Globalization;
 using System.Security.Permissions;
@@ -42,9 +40,7 @@ namespace System.Security.Policy {
 	[Serializable]
 	[ComVisible (true)]
 	public sealed class Zone :
-#if NET_4_0
 		EvidenceBase,
-#endif
 		IIdentityPermissionFactory, IBuiltInEvidence	{
 
 		private SecurityZone zone;
@@ -158,6 +154,3 @@ namespace System.Security.Policy {
 		}
 	}
 }
-
-#endif
-

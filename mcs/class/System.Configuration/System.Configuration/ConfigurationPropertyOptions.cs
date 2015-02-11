@@ -26,7 +26,6 @@
 // Copyright (C) 2004 Novell, Inc (http://www.novell.com)
 //
 
-#if NET_2_0
 namespace System.Configuration
 {
         [Flags]
@@ -35,7 +34,9 @@ namespace System.Configuration
                 None = 0,
                 IsDefaultCollection = 1,
                 IsRequired = 2,
-                IsKey = 4
+                IsKey = 4,
+                IsTypeStringTransformationRequired  = 8,
+                IsAssemblyStringTransformationRequired = 16,
+                IsVersionCheckRequired = 32
         }
 }
-#endif

@@ -24,11 +24,7 @@
 namespace System.Xml {
 
 	[Flags]
-#if NET_2_1 || NET_4_0
 	public
-#else
-	internal
-#endif
 	enum NamespaceHandling {
 		Default,
 		OmitDuplicates = 1,

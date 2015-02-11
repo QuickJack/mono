@@ -5,7 +5,9 @@
 
 using System;
 using System.Reflection;
+#if !MONOTOUCH
 using System.Reflection.Emit;
+#endif
 using System.Threading;
 
 using NUnit.Framework;
@@ -15,7 +17,6 @@ namespace MonoTests.System
 	[TestFixture]
 	public class DelegateTest
 	{
-#if NET_2_0
 		
 		public class GenericClass<T> {
 			public void Method<K> (T t, K k) {}
@@ -25,6 +26,9 @@ namespace MonoTests.System
 
 
 		[Test] //See bug #372406
+#if MONOTOUCH
+		[Category ("NotWorking")] // #10539
+#endif
 		public void CreateDelegate1_Method_Private_Instance ()
 		{
 			C c = new C ();
@@ -46,7 +50,6 @@ namespace MonoTests.System
 			Assert.IsNotNull (method, "#1");
 			Assert.AreEqual (target, method, "#2");
 		}
-#endif
 
 		[Test] // CreateDelegate (Type, MethodInfo)
 		public void CreateDelegate1_Method_Static ()
@@ -61,29 +64,18 @@ namespace MonoTests.System
 		}
 
 		[Test] // CreateDelegate (Type, MethodInfo)
+#if MONOTOUCH
+		[Category ("NotWorking")] // #14163
+#endif
 		public void CreateDelegate1_Method_Instance ()
 		{
 			C c = new C ();
 			MethodInfo mi = typeof (C).GetMethod ("M");
-#if NET_2_0
 			Delegate dg = Delegate.CreateDelegate (typeof (D), mi);
 			Assert.AreSame (mi, dg.Method, "#1");
 			Assert.IsNull (dg.Target, "#2");
 			D d = (D) dg;
 			d (c);
-#else
-			try {
-				Delegate.CreateDelegate (typeof (D), mi);
-				Assert.Fail ("#1");
-			} catch (ArgumentException ex) {
-				// Method must be a static method
-				Assert.AreEqual (typeof (ArgumentException), ex.GetType (), "#2");
-				Assert.IsNull (ex.InnerException, "#3");
-				Assert.IsNotNull (ex.Message, "#4");
-				Assert.IsNotNull (ex.ParamName, "#5");
-				Assert.AreEqual ("method", ex.ParamName, "#6");
-			}
-#endif
 		}
 
 		[Test] // CreateDelegate (Type, MethodInfo)
@@ -576,7 +568,6 @@ namespace MonoTests.System
 			}
 		}
 
-#if NET_2_0
 		[Test] // CreateDelegate (Type, Object, String, Boolean, Boolean)
 		public void CreateDelegate9 ()
 		{
@@ -843,7 +834,6 @@ namespace MonoTests.System
 		}
 
 		[Test]
-		[Category ("TargetJvmNotWorking")]
 		public void CoContraVariance ()
 		{
 			CoContraVariantDelegate d = (CoContraVariantDelegate)
@@ -935,6 +925,9 @@ namespace MonoTests.System
 		}
 
 		[Test]
+#if MONOTOUCH
+		[Category ("NotWorking")] // #10539
+#endif
 		public void Virtual ()
 		{
 			// Delegate with abstract method, no target
@@ -963,6 +956,9 @@ namespace MonoTests.System
 		}
 
 		[Test]
+#if MONOTOUCH
+		[Category ("NotWorking")] // #14163
+#endif
 		public void NullTarget_Instance ()
 		{
 			Del1 d = (Del1)Delegate.CreateDelegate (typeof (Del1), null, typeof (DelegateTest).GetMethod ("method1"));
@@ -1025,6 +1021,9 @@ namespace MonoTests.System
 		}
 
 		[Test] // #617161
+#if MONOTOUCH
+		[Category ("NotWorking")] // #10539
+#endif
 		public void ClosedOverNullReferenceStaticMethod ()
 		{
 			var del = (Func<long?,long?>) Delegate.CreateDelegate (
@@ -1046,6 +1045,9 @@ namespace MonoTests.System
 		}
 
 		[Test] // #475962
+#if MONOTOUCH
+		[Category ("NotWorking")] // #10539
+#endif
 		public void ClosedOverNullReferenceInstanceMethod ()
 		{
 			var action = (Action) Delegate.CreateDelegate (
@@ -1098,19 +1100,66 @@ namespace MonoTests.System
 		}
 
 		[Test] // #664205
-		public void DynamicInvokeNullTarget ()
+		public void DynamicInvokeClosedStatic ()
 		{
-			var method = new DynamicMethod ("test", typeof (int), new [] { typeof (object) }, true);
-			var il = method.GetILGenerator ();
-			il.Emit (OpCodes.Ldc_I4, 42);
-			il.Emit (OpCodes.Ret);
+			var d1 = Delegate.CreateDelegate (typeof(Func<int>), null, typeof(DelegateTest).GetMethod ("DynamicInvokeClosedStaticDelegate_CB"));
+			Assert.AreEqual (1, d1.DynamicInvoke (), "#1");
 
-			var @delegate = method.CreateDelegate (typeof (Func<int>), null);
-
-			Assert.AreEqual (42, (int) @delegate.DynamicInvoke ());
+			var d2 = Delegate.CreateDelegate (typeof(Func<int>), "arg", typeof(DelegateTest).GetMethod ("DynamicInvokeClosedStaticDelegate_CB"));
+			Assert.AreEqual (2, d2.DynamicInvoke (), "#2");
 		}
 
-#endif
+		public static int DynamicInvokeClosedStaticDelegate_CB (string instance)
+		{
+			switch (instance) {
+			case null:
+				return 1;
+			case "arg":
+				return 2;
+			default:
+				Assert.Fail ();
+				return -1;
+			}
+		}
+
+		[Test]
+		public void DynamicInvokeOpenInstanceDelegate ()
+		{
+			var d1 = Delegate.CreateDelegate (typeof (Func<DelegateTest, int>), typeof(DelegateTest).GetMethod ("DynamicInvokeOpenInstanceDelegate_CB"));
+			Assert.AreEqual (5, d1.DynamicInvoke (new DelegateTest ()), "#1");
+
+			var d3 = (Func<DelegateTest, int>) d1;
+			Assert.AreEqual (5, d3 (null), "#2");
+		}
+
+		public int DynamicInvokeOpenInstanceDelegate_CB ()
+		{
+			return 5;
+		}
+
+		[Test]
+		public void DynamicInvoke_InvalidArguments ()
+		{
+			Delegate d = new Func<int, int> (TestMethod);
+
+			try {
+				d.DynamicInvoke (null);
+				Assert.Fail ("#1");
+			} catch (TargetParameterCountException) {
+			}
+
+			try {
+				d.DynamicInvoke (new object [0]);
+				Assert.Fail ("#2");
+			} catch (TargetParameterCountException) {
+			}
+		}
+
+		public static int TestMethod (int i)
+		{
+			throw new NotSupportedException ();
+		}
+
 		public static void CreateDelegateOfStaticMethodBoundToNull_Helper (object[] args) {}
 
 		[Test]
@@ -1209,7 +1258,7 @@ namespace MonoTests.System
 		{
 			string retarg (string s);
 		}
-
+#if !MONOTOUCH
 		[Test]
 		public void CreateDelegateWithLdFtnAndAbstractMethod ()
 		{
@@ -1245,7 +1294,7 @@ namespace MonoTests.System
 			int a = (int) t.GetMethod ("test").Invoke (obj, null);
 			Assert.AreEqual (3, a, "#1");
 		}
-
+#endif
 		public static int MethodWithIntParam (int x) {
 			return 10;
 		}
@@ -1309,15 +1358,54 @@ namespace MonoTests.System
 			} catch (ArgumentException) {}
 		}
 
-        private static Func<Int32, Int32, bool> Int32D = (x, y) => (x & y) == y;
-
 		[Test]
 		public void EnumBaseTypeConversion () {
+			Func<int, int, bool> dm = Int32D2;
 			var d =
-				Delegate.CreateDelegate(typeof (Func<StringComparison,
-												StringComparison, bool>), Int32D.Method) as
+				Delegate.CreateDelegate(typeof (Func<StringComparison, StringComparison, bool>), dm.Method) as
 				Func<StringComparison, StringComparison, bool>; 
 			Assert.IsTrue (d (0, 0));
+		}
+
+#if !MONOTOUCH
+		public static void DynInvokeWithClosedFirstArg (object a, object b)
+		{
+		}
+
+		[Test]
+		public void DynamicInvokeClosedOverNullDelegate () {
+			var dm = new DynamicMethod ("test", typeof (Delegate), null);
+			var il = dm.GetILGenerator ();
+			il.Emit (OpCodes.Ldnull);
+			il.Emit (OpCodes.Ldftn, GetType ().GetMethod ("DynInvokeWithClosedFirstArg"));
+			il.Emit (OpCodes.Newobj, typeof (Action<object>).GetConstructors ()[0]);
+			il.Emit (OpCodes.Ret);
+
+			var f = (Func <object>) dm.CreateDelegate (typeof (Func <object>));
+			Action<object> ac = (Action<object>)f();
+			ac.DynamicInvoke (new object[] { "oi" });
+			ac.DynamicInvoke (new object[] { null });
+		}
+
+		[Test]
+		public void DynamicInvokeFirstArgBoundDelegate () {
+			var dm = new DynamicMethod ("test", typeof (Delegate), null);
+			var il = dm.GetILGenerator ();
+			il.Emit (OpCodes.Ldstr, "test");
+			il.Emit (OpCodes.Ldftn, GetType ().GetMethod ("DynInvokeWithClosedFirstArg"));
+			il.Emit (OpCodes.Newobj, typeof (Action<object>).GetConstructors ()[0]);
+			il.Emit (OpCodes.Ret);
+
+			var f = (Func <object>) dm.CreateDelegate (typeof (Func <object>));
+			Action<object> ac = (Action<object>)f();
+			ac.DynamicInvoke (new object[] { "oi" });
+			ac.DynamicInvoke (new object[] { null });
+		}
+#endif
+
+		static bool Int32D2 (int x, int y)
+		{
+			return (x & y) == y; 
 		}
 
 		public class B {

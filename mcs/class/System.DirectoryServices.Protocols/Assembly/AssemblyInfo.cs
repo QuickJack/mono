@@ -14,16 +14,6 @@ using System.Security;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
-// General Information about the System.DirectoryServices.Protocols assembly
-
-using System;
-using System.Reflection;
-using System.Resources;
-using System.Security;
-using System.Diagnostics;
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
-
 // General Information about the system assembly
 
 [assembly: AssemblyTitle ("System.DirectoryServices.Protocols.dll")]
@@ -41,11 +31,9 @@ using System.Runtime.InteropServices;
 
 [assembly: ComVisible (false)]
 
-#if !TARGET_JVM
 	[assembly: CLSCompliant (true)]
 	[assembly: AssemblyDelaySign (true)]
 	[assembly: AssemblyKeyFile ("../msfinal.pub")]
-#endif
 
 [assembly: AssemblyFileVersion (Consts.FxFileVersion)]
 [assembly: AllowPartiallyTrustedCallers]

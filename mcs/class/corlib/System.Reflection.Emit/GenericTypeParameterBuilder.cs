@@ -42,7 +42,8 @@ namespace System.Reflection.Emit
 {
 	[ComVisible (true)]
 	[StructLayout (LayoutKind.Sequential)]
-	public sealed class GenericTypeParameterBuilder : Type
+	public sealed class GenericTypeParameterBuilder : 
+		TypeInfo
 	{
 	#region Sync with reflection.h
 		private TypeBuilder tbuilder;
@@ -101,11 +102,7 @@ namespace System.Reflection.Emit
 
 		protected override TypeAttributes GetAttributeFlagsImpl ()
 		{
-#if NET_4_0
 			return TypeAttributes.Public;
-#else
-			throw not_supported ();
-#endif
 		}
 
 		protected override ConstructorInfo GetConstructorImpl (BindingFlags bindingAttr,

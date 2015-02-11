@@ -46,5 +46,11 @@ namespace System.ServiceModel
 			: this (Claim.CreateSpnClaim (spn))
 		{
 		}
+
+		[MonoTODO]
+		public static TimeSpan SpnLookupTime {
+			get { throw new NotImplementedException (); }
+			set { throw new NotImplementedException (); }
+		}
 	}
 }

@@ -18,6 +18,7 @@ using System.Runtime.Remoting.Proxies;
 using System.Runtime.Remoting.Messaging;
 using System.Collections;
 using NUnit.Framework;
+using System.Text;
 
 namespace MonoTests.System.Runtime.Serialization
 {
@@ -28,6 +29,7 @@ namespace MonoTests.System.Runtime.Serialization
 		string uri;
 
 		[Test]
+		[Category ("MobileNotWorking")]
 		public void TestSerialization ()
 		{
 			MethodTester mt = new MethodTester();
@@ -38,6 +40,41 @@ namespace MonoTests.System.Runtime.Serialization
 			ReadData();
 
 			RemotingServices.Disconnect (mt);
+		}
+
+#if !MONOTOUCH
+		[Test]
+		public void DelegateSerializationTest ()
+		{
+			var a = new DelegateSerialization ();
+			a.E += HandleE1;
+
+			var d2 = Delegate.CreateDelegate (typeof(Func<StringBuilder, int>), "val", typeof(SerializationTest).GetMethod ("HandleE2"));
+			a.E += (Func<StringBuilder, int>) d2;
+
+			using (var ms = new MemoryStream ()) {
+				var fmt = new BinaryFormatter ();
+				fmt.Serialize (ms, a);
+				ms.Flush ();
+
+				ms.Seek (0, SeekOrigin.Begin);
+				var a2 = (DelegateSerialization) fmt.Deserialize (ms);
+				a2.Test ();
+			}
+		}
+#endif
+
+		static int HandleE1 (StringBuilder arg)
+		{
+			arg.Append ("E1");
+			return 1;
+		}
+
+		public static int HandleE2 (object o, StringBuilder arg)
+		{
+			arg.Append ("E2|");
+			arg.Append (o);
+			return 2;
 		}
 
 		void WriteData ()
@@ -600,6 +637,8 @@ namespace MonoTests.System.Runtime.Serialization
 			Assert.AreEqual (_char, obj._char, context + "._char");
 			Assert.AreEqual (_dateTime, obj._dateTime, context + "._dateTime");
 			Assert.AreEqual (_decimal, obj._decimal, context + "._decimal");
+			Assert.AreEqual (_double, obj._double, context + "._double");
+			Assert.AreEqual (_short, obj._short, context = "._short");
 			Assert.AreEqual (_int, obj._int, context + "._int");
 			Assert.AreEqual (_long, obj._long, context + "._long");
 			Assert.AreEqual (_sbyte, obj._sbyte, context + "._sbyte");
@@ -765,14 +804,14 @@ namespace MonoTests.System.Runtime.Serialization
 		void SerializeCall (IMessage call)
 		{
 			RemotingSurrogateSelector rss = new RemotingSurrogateSelector();
-			IRemotingFormatter fmt = new BinaryFormatter (rss, new StreamingContext(StreamingContextStates.Remoting));
+			var fmt = new BinaryFormatter (rss, new StreamingContext(StreamingContextStates.Remoting));
 			fmt.Serialize (_stream, call, GetHeaders());
 		}
 
 		void SerializeResponse (IMessage resp)
 		{
 			RemotingSurrogateSelector rss = new RemotingSurrogateSelector();
-			IRemotingFormatter fmt = new BinaryFormatter (rss, new StreamingContext(StreamingContextStates.Remoting));
+			var fmt = new BinaryFormatter (rss, new StreamingContext(StreamingContextStates.Remoting));
 			fmt.Serialize (_stream, resp, GetHeaders());
 		}
 
@@ -813,5 +852,17 @@ namespace MonoTests.System.Runtime.Serialization
 		public int x;
 	}
 
+	[Serializable]
+	class DelegateSerialization
+	{
+		public event Func<StringBuilder, int> E;
+
+		public void Test ()
+		{
+			var sb = new StringBuilder ();
+			Assert.AreEqual (2, E (sb), "#1");
+			Assert.AreEqual ("E1E2|val", sb.ToString (), "#2");
+		}
+	}
 
 }

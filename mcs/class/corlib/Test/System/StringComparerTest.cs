@@ -26,7 +26,6 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if NET_2_0
 
 using System;
 using System.Globalization;
@@ -43,17 +42,10 @@ namespace MonoTests.System
 	{
 		private CultureInfo old_culture;
 
-#if TARGET_JVM // BinaryFormatter is Java based under TARGET_JVM.
-		private BinaryFormatter CreateBinaryFormatter()
-		{
-			return (BinaryFormatter)vmw.@internal.remoting.BinaryFormatterUtils.CreateBinaryFormatter (false);
-		}
-#else
 		private BinaryFormatter CreateBinaryFormatter()
 		{
 			return new BinaryFormatter();
 		}
-#endif // TARGET_JVM
 
 		[SetUp]
 		public void SetUp ()
@@ -328,4 +320,3 @@ namespace MonoTests.System
 	}
 }
 
-#endif

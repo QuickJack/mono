@@ -28,7 +28,6 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if NET_2_0
 
 using System.Collections;
 using System.Collections.Specialized;
@@ -193,7 +192,7 @@ namespace System.Web.Security
 				if (returnValue == 0)
 					return true;
 				if (returnValue == 1)
-					return false; //role does not exists
+					return false; //role does not exist
 				else if (returnValue == 2 && throwOnPopulatedRole)
 					throw new ProviderException (rolename + " is not empty");
 				else
@@ -436,5 +435,4 @@ namespace System.Web.Security
 		}
 	}
 }
-#endif
 

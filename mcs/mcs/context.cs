@@ -14,6 +14,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Security.Cryptography;
+using System.Diagnostics;
 
 namespace Mono.CSharp
 {
@@ -54,7 +55,7 @@ namespace Mono.CSharp
 
 		string GetSignatureForError ();
 
-		ExtensionMethodCandidates LookupExtensionMethod (TypeSpec extensionType, string name, int arity);
+		ExtensionMethodCandidates LookupExtensionMethod (string name, int arity);
 		FullNamedExpression LookupNamespaceOrType (string name, int arity, LookupMode mode, Location loc);
 		FullNamedExpression LookupNamespaceAlias (string name);
 	}
@@ -69,11 +70,12 @@ namespace Mono.CSharp
 	//
 	public class BlockContext : ResolveContext
 	{
-		FlowBranching current_flow_branching;
-
 		readonly TypeSpec return_type;
 
-		public int FlowOffset;
+		//
+		// Tracks the last offset used by VariableInfo
+		//
+		public int AssignmentInfoOffset;
 
 		public BlockContext (IMemberContext mc, ExplicitBlock block, TypeSpec returnType)
 			: base (mc)
@@ -96,6 +98,9 @@ namespace Mono.CSharp
 			if (rc.HasSet (ResolveContext.Options.CheckedScope))
 				flags |= ResolveContext.Options.CheckedScope;
 
+			if (!rc.ConstantCheckState)
+				flags &= ~Options.ConstantCheckState;
+
 			if (rc.IsInProbingMode)
 				flags |= ResolveContext.Options.ProbingMode;
 
@@ -109,124 +114,17 @@ namespace Mono.CSharp
 				flags |= ResolveContext.Options.BaseInitializer;
 		}
 
-		public override FlowBranching CurrentBranching {
-			get { return current_flow_branching; }
-		}
+		public ExceptionStatement CurrentTryBlock { get; set; }
+
+		public LoopStatement EnclosingLoop { get; set; }
+
+		public LoopStatement EnclosingLoopOrSwitch { get; set; }
+
+		public Switch Switch { get; set; }
 
 		public TypeSpec ReturnType {
 			get { return return_type; }
 		}
-
-		public bool IsUnreachable {
-			get {
-				return HasSet (Options.UnreachableScope);
-			}
-			set {
-				flags = value ? flags | Options.UnreachableScope : flags & ~Options.UnreachableScope;
-			}
-		}
-
-		public bool UnreachableReported {
-			get {
-				return HasSet (Options.UnreachableReported);
-			}
-			set {
-				flags = value ? flags | Options.UnreachableReported : flags & ~Options.UnreachableScope;
-			}
-		}
-
-		// <summary>
-		//   Starts a new code branching.  This inherits the state of all local
-		//   variables and parameters from the current branching.
-		// </summary>
-		public FlowBranching StartFlowBranching (FlowBranching.BranchingType type, Location loc)
-		{
-			current_flow_branching = FlowBranching.CreateBranching (CurrentBranching, type, null, loc);
-			return current_flow_branching;
-		}
-
-		// <summary>
-		//   Starts a new code branching for block `block'.
-		// </summary>
-		public FlowBranching StartFlowBranching (Block block)
-		{
-			Set (Options.DoFlowAnalysis);
-
-			current_flow_branching = FlowBranching.CreateBranching (
-				CurrentBranching, FlowBranching.BranchingType.Block, block, block.StartLocation);
-			return current_flow_branching;
-		}
-
-		public FlowBranchingTryCatch StartFlowBranching (TryCatch stmt)
-		{
-			FlowBranchingTryCatch branching = new FlowBranchingTryCatch (CurrentBranching, stmt);
-			current_flow_branching = branching;
-			return branching;
-		}
-
-		public FlowBranchingTryFinally StartFlowBranching (TryFinallyBlock stmt)
-		{
-			FlowBranchingTryFinally branching = new FlowBranchingTryFinally (CurrentBranching, stmt);
-			current_flow_branching = branching;
-			return branching;
-		}
-
-		public FlowBranchingLabeled StartFlowBranching (LabeledStatement stmt)
-		{
-			FlowBranchingLabeled branching = new FlowBranchingLabeled (CurrentBranching, stmt);
-			current_flow_branching = branching;
-			return branching;
-		}
-
-		public FlowBranchingIterator StartFlowBranching (Iterator iterator, FlowBranching parent)
-		{
-			FlowBranchingIterator branching = new FlowBranchingIterator (parent, iterator);
-			current_flow_branching = branching;
-			return branching;
-		}
-
-		public FlowBranchingAsync StartFlowBranching (AsyncInitializer asyncBody, FlowBranching parent)
-		{
-			var branching = new FlowBranchingAsync (parent, asyncBody);
-			current_flow_branching = branching;
-			return branching;
-		}
-
-		public FlowBranchingToplevel StartFlowBranching (ParametersBlock stmt, FlowBranching parent)
-		{
-			FlowBranchingToplevel branching = new FlowBranchingToplevel (parent, stmt);
-			current_flow_branching = branching;
-			return branching;
-		}
-
-		// <summary>
-		//   Ends a code branching.  Merges the state of locals and parameters
-		//   from all the children of the ending branching.
-		// </summary>
-		public bool EndFlowBranching ()
-		{
-			FlowBranching old = current_flow_branching;
-			current_flow_branching = current_flow_branching.Parent;
-
-			FlowBranching.UsageVector vector = current_flow_branching.MergeChild (old);
-			return vector.IsUnreachable;
-		}
-
-		// <summary>
-		//   Kills the current code branching.  This throws away any changed state
-		//   information and should only be used in case of an error.
-		// </summary>
-		// FIXME: this is evil
-		public void KillFlowBranching ()
-		{
-			current_flow_branching = current_flow_branching.Parent;
-		}
-
-#if !STATIC
-		public void NeedReturnLabel ()
-		{
-		}
-#endif
 	}
 
 	//
@@ -287,20 +185,11 @@ namespace Mono.CSharp
 
 			LockScope = 1 << 13,
 
-			UnreachableScope = 1 << 14,
+			TryScope = 1 << 14,
 
-			UnreachableReported = 1 << 15,
+			TryWithCatchScope = 1 << 15,
 
-			/// <summary>
-			///   Whether control flow analysis is enabled
-			/// </summary>
-			DoFlowAnalysis = 1 << 20,
-
-			/// <summary>
-			///   Whether control flow analysis is disabled on structs
-			///   (only meaningful when DoFlowAnalysis is set)
-			/// </summary>
-			OmitStructFlowAnalysis = 1 << 21,
+			ConditionalAccessReceiver = 1 << 16,
 
 			///
 			/// Indicates the current context is in probing mode, no errors are reported. 
@@ -325,7 +214,7 @@ namespace Mono.CSharp
 		// it's public so that we can use a struct at the callsite
 		public struct FlagsHandle : IDisposable
 		{
-			ResolveContext ec;
+			readonly ResolveContext ec;
 			readonly Options invmask, oldval;
 
 			public FlagsHandle (ResolveContext ec, Options flagsToSet)
@@ -369,11 +258,6 @@ namespace Mono.CSharp
 
 		public readonly IMemberContext MemberContext;
 
-		/// <summary>
-		///   If this is non-null, points to the current switch statement
-		/// </summary>
-		public Switch Switch;
-
 		public ResolveContext (IMemberContext mc)
 		{
 			if (mc == null)
@@ -413,10 +297,6 @@ namespace Mono.CSharp
 			}
 		}
 
-		public virtual FlowBranching CurrentBranching {
-			get { return null; }
-		}
-
 		//
 		// The current iterator
 		//
@@ -438,10 +318,6 @@ namespace Mono.CSharp
 
 		public bool ConstantCheckState {
 			get { return (flags & Options.ConstantCheckState) != 0; }
-		}
-
-		public bool DoFlowAnalysis {
-			get { return (flags & Options.DoFlowAnalysis) != 0; }
 		}
 
 		public bool IsInProbingMode {
@@ -477,7 +353,7 @@ namespace Mono.CSharp
 
 		public bool IsVariableCapturingRequired {
 			get {
-				return !IsInProbingMode && (CurrentBranching == null || !CurrentBranching.CurrentUsageVector.IsUnreachable);
+				return !IsInProbingMode;
 			}
 		}
 
@@ -485,10 +361,6 @@ namespace Mono.CSharp
 			get {
 				return MemberContext.Module;
 			}
-		}
-
-		public bool OmitStructFlowAnalysis {
-			get { return (flags & Options.OmitStructFlowAnalysis) != 0; }
 		}
 
 		public Report Report {
@@ -513,10 +385,12 @@ namespace Mono.CSharp
 
 			//
 			// Capture only if this or any of child blocks contain await
-			// or it's a parameter
+			// or it's a parameter or we need to access variable from 
+			// different parameter block
 			//
 			if (CurrentAnonymousMethod is AsyncInitializer)
-				return local.IsParameter || local.Block.Explicit.HasAwait || CurrentBlock.Explicit.HasAwait;
+				return local.IsParameter || local.Block.Explicit.HasAwait || CurrentBlock.Explicit.HasAwait ||
+					local.Block.ParametersBlock != CurrentBlock.ParametersBlock.Original;
 
 			return local.Block.ParametersBlock != CurrentBlock.ParametersBlock.Original;
 		}
@@ -550,9 +424,9 @@ namespace Mono.CSharp
 			return MemberContext.GetSignatureForError ();
 		}
 
-		public ExtensionMethodCandidates LookupExtensionMethod (TypeSpec extensionType, string name, int arity)
+		public ExtensionMethodCandidates LookupExtensionMethod (string name, int arity)
 		{
-			return MemberContext.LookupExtensionMethod (extensionType, name, arity);
+			return MemberContext.LookupExtensionMethod (name, arity);
 		}
 
 		public FullNamedExpression LookupNamespaceOrType (string name, int arity, LookupMode mode, Location loc)
@@ -567,6 +441,122 @@ namespace Mono.CSharp
 
 		#endregion
 	}
+
+	public class FlowAnalysisContext
+	{
+		readonly CompilerContext ctx;
+		DefiniteAssignmentBitSet conditional_access;
+
+		public FlowAnalysisContext (CompilerContext ctx, ParametersBlock parametersBlock, int definiteAssignmentLength)
+		{
+			this.ctx = ctx;
+			this.ParametersBlock = parametersBlock;
+
+			DefiniteAssignment = definiteAssignmentLength == 0 ?
+				DefiniteAssignmentBitSet.Empty :
+				new DefiniteAssignmentBitSet (definiteAssignmentLength);
+		}
+
+		public DefiniteAssignmentBitSet DefiniteAssignment { get; set; }
+
+		public DefiniteAssignmentBitSet DefiniteAssignmentOnTrue { get; set; }
+
+		public DefiniteAssignmentBitSet DefiniteAssignmentOnFalse { get; set; }
+
+		Dictionary<Statement, List<DefiniteAssignmentBitSet>> LabelStack { get; set; }
+
+		public ParametersBlock ParametersBlock { get; set; }
+
+		public Report Report {
+			get {
+				return ctx.Report;
+			}
+		}
+
+		public DefiniteAssignmentBitSet SwitchInitialDefinitiveAssignment { get; set; }
+
+		public TryFinally TryFinally { get; set; }
+
+		public bool UnreachableReported { get; set; }
+
+		public bool AddReachedLabel (Statement label)
+		{
+			List<DefiniteAssignmentBitSet> das;
+			if (LabelStack == null) {
+				LabelStack = new Dictionary<Statement, List<DefiniteAssignmentBitSet>> ();
+				das = null;
+			} else {
+				LabelStack.TryGetValue (label, out das);
+			}
+
+			if (das == null) {
+				das = new List<DefiniteAssignmentBitSet> ();
+				das.Add (new DefiniteAssignmentBitSet (DefiniteAssignment));
+				LabelStack.Add (label, das);
+				return false;
+			}
+
+			foreach (var existing in das) {
+				if (DefiniteAssignmentBitSet.AreEqual (existing, DefiniteAssignment))
+					return true;
+			}
+
+			if (DefiniteAssignment == DefiniteAssignmentBitSet.Empty)
+				das.Add (DefiniteAssignment);
+			else
+				das.Add (new DefiniteAssignmentBitSet (DefiniteAssignment));
+
+			return false;
+		}
+
+		public DefiniteAssignmentBitSet BranchDefiniteAssignment ()
+		{
+			return BranchDefiniteAssignment (DefiniteAssignment);
+		}
+
+		public DefiniteAssignmentBitSet BranchDefiniteAssignment (DefiniteAssignmentBitSet da)
+		{
+			if (da != DefiniteAssignmentBitSet.Empty) {
+				DefiniteAssignment = new DefiniteAssignmentBitSet (da);
+			}
+
+			return da;
+		}
+
+		public void BranchConditionalAccessDefiniteAssignment ()
+		{
+			if (conditional_access == null)
+				conditional_access = BranchDefiniteAssignment ();
+		}
+
+		public void ConditionalAccessEnd ()
+		{
+			Debug.Assert (conditional_access != null);
+			DefiniteAssignment = conditional_access;
+			conditional_access = null;
+		}
+
+		public bool IsDefinitelyAssigned (VariableInfo variable)
+		{
+			return variable.IsAssigned (DefiniteAssignment);
+		}
+
+		public bool IsStructFieldDefinitelyAssigned (VariableInfo variable, string name)
+		{
+			return variable.IsStructFieldAssigned (DefiniteAssignment, name);
+		}
+
+		public void SetVariableAssigned (VariableInfo variable, bool generatedAssignment = false)
+		{
+			variable.SetAssigned (DefiniteAssignment, generatedAssignment);
+		}
+
+		public void SetStructFieldAssigned (VariableInfo variable, string name)
+		{
+			variable.SetStructFieldAssigned (DefiniteAssignment, name);
+		}
+	}
+
 
 	//
 	// This class is used during the Statement.Clone operation
@@ -681,8 +671,12 @@ namespace Mono.CSharp
 
 			string path;
 			if (!Path.IsPathRooted (name)) {
-				string root = Path.GetDirectoryName (comp_unit.SourceFile.FullPathName);
-				path = Path.Combine (root, name);
+				var loc = comp_unit.SourceFile;
+				string root = Path.GetDirectoryName (loc.FullPathName);
+				path = Path.GetFullPath (Path.Combine (root, name));
+				var dir = Path.GetDirectoryName (loc.Name);
+				if (!string.IsNullOrEmpty (dir))
+					name = Path.Combine (dir, name);
 			} else
 				path = name;
 
@@ -723,14 +717,14 @@ namespace Mono.CSharp
 
 			ConstructorScope = 1 << 3,
 
-			AsyncBody = 1 << 4
+			AsyncBody = 1 << 4,
 		}
 
 		// utility helper for CheckExpr, UnCheckExpr, Checked and Unchecked statements
 		// it's public so that we can use a struct at the callsite
 		public struct FlagsHandle : IDisposable
 		{
-			BuilderContext ec;
+			readonly BuilderContext ec;
 			readonly Options invmask, oldval;
 
 			public FlagsHandle (BuilderContext ec, Options flagsToSet)
@@ -782,7 +776,7 @@ namespace Mono.CSharp
 
 		public LocationsBag LocationsBag { get; set; }
 		public bool UseJayGlobalArrays { get; set; }
-		public Tokenizer.LocatedToken[] LocatedTokens { get; set; }
+		public LocatedToken[] LocatedTokens { get; set; }
 
 		public MD5 GetChecksumAlgorithm ()
 		{

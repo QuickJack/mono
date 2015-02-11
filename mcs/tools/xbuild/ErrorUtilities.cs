@@ -25,7 +25,6 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#if NET_2_0
 
 using System;
 
@@ -33,9 +32,9 @@ namespace Mono.XBuild.CommandLine {
 	public static class ErrorUtilities {
 
 		static string[] version = {
-			String.Format ("XBuild Engine Version {0}", Consts.MonoVersion),
+			String.Format ("XBuild Engine Version {0}", XBuildConsts.Version),
 			String.Format ("Mono, Version {0}", Consts.MonoVersion),
-			"Copyright (C) Marek Sieradzki 2005-2008, Novell 2008-2011.",
+			"Copyright (C) 2005-2013 Various Mono authors",
 		};
 
 		
@@ -116,4 +115,3 @@ namespace Mono.XBuild.CommandLine {
 	}
 }
 
-#endif

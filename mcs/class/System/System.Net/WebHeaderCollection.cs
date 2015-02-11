@@ -44,13 +44,9 @@ using System.Text;
     
 namespace System.Net 
 {
-#if MOONLIGHT
-	internal class WebHeaderCollection : NameValueCollection, ISerializable {
-#else
 	[Serializable]
 	[ComVisible(true)]
 	public class WebHeaderCollection : NameValueCollection, ISerializable {
-#endif
 		[Flags]
 		internal enum HeaderInfo
 		{
@@ -124,6 +120,14 @@ namespace System.Net
 		public WebHeaderCollection ()
 		{
 		}
+
+
+        internal WebHeaderCollection(WebHeaderCollectionType type)
+        {
+//            m_Type = type;
+//            if (type == WebHeaderCollectionType.HttpWebResponse)
+//                m_CommonHeaders = new string[s_CommonHeaderNames.Length - 1];  // Minus one for the sentinel.
+        }		
 		
 		protected WebHeaderCollection (SerializationInfo serializationInfo, 
 					       StreamingContext streamingContext)
@@ -344,13 +348,11 @@ namespace System.Net
 
 			return sb.Append("\r\n").ToString();
 		}
-#if !TARGET_JVM
 		void ISerializable.GetObjectData (SerializationInfo serializationInfo,
 						  StreamingContext streamingContext)
 		{
 			GetObjectData (serializationInfo, streamingContext);
 		}
-#endif
 		public override void GetObjectData (SerializationInfo serializationInfo, StreamingContext streamingContext)
 		{
 			int count = base.Count;

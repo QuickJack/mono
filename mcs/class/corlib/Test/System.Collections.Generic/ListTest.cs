@@ -30,8 +30,6 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if NET_2_0
-
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -197,7 +195,7 @@ namespace MonoTests.System.Collections.Generic {
 			list.Insert(0, new object());
 		}
 
-		[Test, ExpectedException(typeof (ArgumentException))]
+		[Test, ExpectedException(typeof (ArgumentNullException))]
 		public void IList_InsertInvalidType2 ()
 		{
 			IList list = _list1 as IList;
@@ -211,7 +209,7 @@ namespace MonoTests.System.Collections.Generic {
 			list.Add(new object());
 		}
 
-		[Test, ExpectedException(typeof (ArgumentException))]
+		[Test, ExpectedException(typeof (ArgumentNullException))]
 		public void IList_AddInvalidType2()
 		{
 			IList list = _list1 as IList;
@@ -286,6 +284,10 @@ namespace MonoTests.System.Collections.Generic {
 			Assert.AreEqual (l1.Count, l1.Capacity);
 			for (int i = 0; i < l1.Count; i++)
 				Assert.AreEqual (_list1 [i], l1 [i]);
+
+			var input = new [] { "a", "b", "c" };
+			var l2 = new List<string>(input);
+			Assert.AreEqual (3, l2.Capacity);
 		}
 
 		[Test, ExpectedException (typeof (ArgumentNullException))]
@@ -340,10 +342,9 @@ namespace MonoTests.System.Collections.Generic {
 			Assert.AreEqual (- (l.Count + 1), l.BinarySearch (int.MaxValue));
 		}
 
-#if !NET_4_0 && !NET_2_1 // FIXME: the blob contains the 2.0 mscorlib version
+#if !NET_4_0 // FIXME: the blob contains the 2.0 mscorlib version
 
 		[Test]
-		[Category ("TargetJvmNotWorking")]
 		public void SerializeTest ()
 		{
 			List <int> list = new List <int> ();
@@ -351,11 +352,7 @@ namespace MonoTests.System.Collections.Generic {
 			list.Add (0);
 			list.Add (7);
 
-#if TARGET_JVM
-			BinaryFormatter bf = (BinaryFormatter)vmw.@internal.remoting.BinaryFormatterUtils.CreateBinaryFormatter (false);
-#else
 			BinaryFormatter bf = new BinaryFormatter ();
-#endif // TARGET_JVM
 			MemoryStream ms = new MemoryStream ();
 			bf.Serialize (ms, list);
 
@@ -369,18 +366,13 @@ namespace MonoTests.System.Collections.Generic {
 #endif
 
 		[Test]
-		[Category ("TargetJvmNotWorking")]
 		public void DeserializeTest ()
 		{
 			MemoryStream ms = new MemoryStream ();
 			ms.Write (_serializedList, 0, _serializedList.Length);
 			ms.Position = 0;
 
-#if TARGET_JVM
-			BinaryFormatter bf = (BinaryFormatter)vmw.@internal.remoting.BinaryFormatterUtils.CreateBinaryFormatter (false);
-#else
 			BinaryFormatter bf = new BinaryFormatter ();
-#endif // TARGET_JVM
 			List<int> list = (List<int>) bf.Deserialize (ms);
 			Assert.AreEqual (3, list.Count, "#1");
 			Assert.AreEqual (5, list [0], "#2");
@@ -555,12 +547,55 @@ namespace MonoTests.System.Collections.Generic {
 
 			i = _list1.FindIndex (FindMultipleOfTwelve);
 			Assert.AreEqual (-1, i);
+
+			var a = new List<int> () { 2, 2, 2, 3, 2 };
+			Assert.AreEqual (2, a.FindIndex (2, 2, l => true));
 		}
 
-		[Test, ExpectedException (typeof (ArgumentNullException))]
-		public void FindIndexNullTest ()
+		[Test]
+		public void FindIndex_Invalid ()
 		{
-			int i = _list1.FindIndex (null);
+			try {
+				_list1.FindIndex (null);
+				Assert.Fail ("#1");
+			} catch (ArgumentNullException) {
+			}
+
+			try {
+				_list1.FindIndex (-1, l => true);
+				Assert.Fail ("#2");
+			} catch (ArgumentOutOfRangeException) {
+			}
+
+			try {
+				_list1.FindIndex (-1, 0, l => true);
+				Assert.Fail ("#2b");
+			} catch (ArgumentOutOfRangeException) {
+			}
+
+			try {
+				_list1.FindIndex (0, -1, l => true);
+				Assert.Fail ("#3");
+			} catch (ArgumentOutOfRangeException) {
+			}
+
+			try {
+				_list1.FindIndex (100, l => true);
+				Assert.Fail ("#4");
+			} catch (ArgumentOutOfRangeException) {
+			}
+
+			try {
+				_list1.FindIndex (100, 0, l => true);
+				Assert.Fail ("#4b");
+			} catch (ArgumentOutOfRangeException) {
+			}
+
+			try {
+				_list1.FindIndex (7, 2, l => true);
+				Assert.Fail ("#5");
+			} catch (ArgumentOutOfRangeException) {
+			}
 		}
 
 		[Test]
@@ -579,8 +614,6 @@ namespace MonoTests.System.Collections.Generic {
 			int i = _list1.FindLast (null);
 		}
 
-		// FIXME currently generates Invalid IL Code error
-		/*
 		[Test]
 		public void ForEachTest ()
 		{
@@ -589,7 +622,17 @@ namespace MonoTests.System.Collections.Generic {
 
 			Assert.AreEqual (418, i);
 		}
-		*/
+
+		[Test]
+		public void ForEach_Modified ()
+		{
+			try {
+				_list1.ForEach (l => _list1.Add (0));
+				Assert.Fail ();
+			} catch (InvalidOperationException) {
+			}
+		}
+
 		[Test]
 		public void FindLastIndexTest ()
 		{
@@ -601,12 +644,56 @@ namespace MonoTests.System.Collections.Generic {
 
 			i = _list1.FindIndex (FindMultipleOfTwelve);
 			Assert.AreEqual (-1, i);
+
+			Assert.AreEqual (2, _list1.FindLastIndex (2, 3, l => true));
+			Assert.AreEqual (2, _list1.FindLastIndex (2, 2, l => true));
+			Assert.AreEqual (1, _list1.FindLastIndex (1, 2, l => true));
 		}
 
-		[Test, ExpectedException (typeof (ArgumentNullException))]
-		public void FindLastIndexNullTest ()
+		[Test]
+		public void FindLastIndex_Invalid ()
 		{
-			int i = _list1.FindLastIndex (null);
+			try {
+				_list1.FindLastIndex (null);
+				Assert.Fail ("#1");
+			} catch (ArgumentNullException) {
+			}
+
+			try {
+				_list1.FindLastIndex (-1, l => true);
+				Assert.Fail ("#2");
+			} catch (ArgumentOutOfRangeException) {
+			}
+
+			try {
+				_list1.FindLastIndex (-1, 0, l => true);
+				Assert.Fail ("#2b");
+			} catch (ArgumentOutOfRangeException) {
+			}
+
+			try {
+				_list1.FindLastIndex (0, -1, l => true);
+				Assert.Fail ("#3");
+			} catch (ArgumentOutOfRangeException) {
+			}
+
+			try {
+				_list1.FindLastIndex (100, l => true);
+				Assert.Fail ("#4");
+			} catch (ArgumentOutOfRangeException) {
+			}
+
+			try {
+				_list1.FindLastIndex (100, 0, l => true);
+				Assert.Fail ("#4b");
+			} catch (ArgumentOutOfRangeException) {
+			}
+
+			try {
+				_list1.FindLastIndex (2, 4, l => true);
+				Assert.Fail ("#5");
+			} catch (ArgumentOutOfRangeException) {
+			}
 		}
 
 		[Test]
@@ -1280,6 +1367,20 @@ namespace MonoTests.System.Collections.Generic {
 			Assert.IsTrue (Throws (delegate { var x = e4.Current; }));
 		}
 
+		[Test]
+		public void Enumerator_Reset ()
+		{
+			var l = new List<int> () {
+				4
+			};
+
+			IEnumerator<int> e = l.GetEnumerator ();
+			Assert.IsTrue (e.MoveNext (), "#1");
+			Assert.AreEqual (4, e.Current, "#2");
+			e.Reset ();
+			Assert.AreEqual (0, e.Current, "#3");
+		}
+
 		[Test] //bug #672907
 		public void ICollectionCopyToExceptions ()
 		{
@@ -1310,7 +1411,7 @@ namespace MonoTests.System.Collections.Generic {
 				x.CopyTo (Array.CreateInstance (typeof (int), new int [] { 10 }, new int[] { 1 }), 0);
 				Assert.Fail ("#7");
 			} catch (Exception e) {
-				Assert.IsTrue (e is ArgumentException, "#8");
+				Assert.IsTrue (e is ArgumentOutOfRangeException, "#8");
 			}
 
 			l.Add (10); l.Add (20);
@@ -1464,5 +1565,4 @@ namespace MonoTests.System.Collections.Generic {
 
 	}
 }
-#endif
 

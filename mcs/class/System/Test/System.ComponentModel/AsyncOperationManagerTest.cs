@@ -7,7 +7,6 @@
 // Copyright (C) 2007 Novell, Inc.
 //
 
-#if NET_2_0
 
 using System;
 using System.Threading;
@@ -27,7 +26,11 @@ namespace MonoTests.System.ComponentModel
 			SynchronizationContext sc1 = new SynchronizationContext ();
 			SynchronizationContext sc2 = new SynchronizationContext ();
 
+#if MOBILE
+			Assert.IsNotNull (SynchronizationContext.Current, "A1");
+#else
 			Assert.IsNull (SynchronizationContext.Current, "A1");
+#endif
 			Assert.IsNotNull (AsyncOperationManager.SynchronizationContext, "A2");
 			Assert.IsNotNull (SynchronizationContext.Current, "A3");
 			
@@ -58,4 +61,3 @@ namespace MonoTests.System.ComponentModel
 	}
 }
 
-#endif

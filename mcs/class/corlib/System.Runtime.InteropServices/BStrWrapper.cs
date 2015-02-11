@@ -19,6 +19,11 @@ namespace System.Runtime.InteropServices
 		{
 			_value = value;
 		}
+		
+		public BStrWrapper (object value)
+		{
+			_value = (string)value;
+		}
 
 		public string WrappedObject { get { return _value; } }
 	}

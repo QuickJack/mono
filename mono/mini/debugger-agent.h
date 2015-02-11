@@ -3,10 +3,6 @@
 
 #include "mini.h"
 
-/* IL offsets used to mark the sequence points belonging to method entry/exit events */
-#define METHOD_ENTRY_IL_OFFSET -1
-#define METHOD_EXIT_IL_OFFSET 0xffffff
-
 void
 mono_debugger_agent_parse_options (char *options) MONO_INTERNAL;
 
@@ -30,7 +26,7 @@ mono_debugger_agent_free_domain_info (MonoDomain *domain) MONO_INTERNAL;
 
 gboolean mono_debugger_agent_thread_interrupt (void *sigctx, MonoJitInfo *ji) MONO_INTERNAL;
 
-#ifdef PLATFORM_ANDROID
+#if defined(PLATFORM_ANDROID) || defined(TARGET_ANDROID)
 void
 mono_debugger_agent_unhandled_exception (MonoException *exc);
 #endif

@@ -55,11 +55,10 @@ namespace MonoTests.System.Web.Services.Description
 			Assert.AreEqual (String.Empty, sd.RetrievalUrl, "#2");
 		}
 
-#if NET_2_0
 		[Test]
 		public void Namespaces ()
 		{
-			FileStream fs = new FileStream ("Test/System.Web.Services.Description/test.wsdl", FileMode.Open);
+			FileStream fs = new FileStream ("Test/System.Web.Services.Description/test.wsdl", FileMode.Open, FileAccess.Read);
 			XmlTextReader xtr = new XmlTextReader (fs);
 
 			ServiceDescription sd = ServiceDescription.Read (xtr);
@@ -84,7 +83,7 @@ namespace MonoTests.System.Web.Services.Description
 		[Test]
 		public void ExtensibleAttributes ()
 		{
-		    FileStream fs = new FileStream("Test/System.Web.Services.Description/test.wsdl", FileMode.Open);
+		    FileStream fs = new FileStream ("Test/System.Web.Services.Description/test.wsdl", FileMode.Open, FileAccess.Read);
 		    XmlTextReader xtr = new XmlTextReader(fs);
 
 		    ServiceDescription sd = ServiceDescription.Read(xtr);
@@ -105,7 +104,7 @@ namespace MonoTests.System.Web.Services.Description
 		[Test]
 		public void Extensions ()
 		{
-		    FileStream fs = new FileStream("Test/System.Web.Services.Description/test.wsdl", FileMode.Open);
+			FileStream fs = new FileStream("Test/System.Web.Services.Description/test.wsdl", FileMode.Open, FileAccess.Read);
 		    XmlTextReader xtr = new XmlTextReader(fs);
 
 		    ServiceDescription sd = ServiceDescription.Read(xtr);
@@ -189,7 +188,6 @@ namespace MonoTests.System.Web.Services.Description
 			ServiceDescription sd = ServiceDescription.Read (XmlReader.Create (new StringReader ("<definitions xmlns='http://schemas.xmlsoap.org/wsdl/'><hoge/></definitions>")), true);
 			Assert.IsTrue (sd.ValidationWarnings.Count > 0);
 		}
-#endif
 
     }
 

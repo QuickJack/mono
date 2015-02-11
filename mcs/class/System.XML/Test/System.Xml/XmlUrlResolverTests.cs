@@ -59,9 +59,6 @@ namespace MonoTests.System.Xml
 		}
 
 		[Test]
-#if !NET_2_0
-		[Category ("NotDotNet")] // It should throw ArgumentNullException.
-#endif
 		[ExpectedException (typeof (ArgumentNullException))]
 		public void ResolveUriWithNullArgs ()
 		{
@@ -76,14 +73,12 @@ namespace MonoTests.System.Xml
 			resolver.GetEntity (uri, null, null);
 		}
 
-#if NET_2_0
 		[Test]
 		[ExpectedException (typeof (ArgumentException))]
 		public void GetEntityWithRelativeFileUri ()
 		{
 			resolver.GetEntity (new Uri ("file.txt", UriKind.Relative), null, typeof (Stream));
 		}
-#endif
 
 		[Test]
 		[ExpectedException (typeof (XmlException))]
@@ -104,19 +99,17 @@ namespace MonoTests.System.Xml
 
 #if NET_4_5
 		[Test]
-		[Category("Async")]
 		public void TestAsync ()
 		{
 			var loc = Assembly.GetExecutingAssembly ().Location;
 			Uri resolved = resolver.ResolveUri (null, loc);
 			Assert.AreEqual ("file", resolved.Scheme);
 			var task = resolver.GetEntityAsync (resolved, null, typeof (Stream));
-			Assert.That (task.Wait (3000));
-			Assert.IsInstanceOfType (typeof (Stream), task.Result);
+			Assert.IsTrue (task.Wait (3000));
+			Assert.IsTrue (task.Result is Stream);
 		}
 
 		[Test]
-		[Category("Async")]
 		public void TestAsyncError ()
 		{
 			var loc = Assembly.GetExecutingAssembly ().Location;
@@ -129,7 +122,7 @@ namespace MonoTests.System.Xml
 			} catch (Exception ex) {
 				if (ex is AggregateException)
 					ex = ((AggregateException) ex).InnerException;
-				Assert.IsInstanceOfType (typeof (XmlException), ex);
+				Assert.IsTrue (ex is XmlException);
 			}
 		}
 #endif

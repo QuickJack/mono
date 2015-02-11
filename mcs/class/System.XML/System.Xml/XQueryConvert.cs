@@ -27,7 +27,6 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
-#if NET_2_0
 
 using System;
 using System.Globalization;
@@ -342,17 +341,17 @@ namespace System.Xml
 
 		public static string GMonthToString (DateTime value)
 		{
-			return XmlConvert.ToString (new TimeSpan (0, value.Month, 0));
+			return XmlConvert.ToString (new TimeSpan (0, value.Month, 1));
 		}
 
 		public static string GYearMonthToString (DateTime value)
 		{
-			return XmlConvert.ToString (new TimeSpan (value.Year, value.Month, 0));
+			return XmlConvert.ToString (new TimeSpan (value.Year, value.Month, 1));
 		}
 
 		public static string GYearToString (DateTime value)
 		{
-			return XmlConvert.ToString (new TimeSpan (new DateTime (value.Year, 0, 0).Ticks));
+			return XmlConvert.ToString (new TimeSpan (new DateTime (value.Year, 1, 1).Ticks));
 		}
 
 		public static string HexBinaryToString (byte [] data)
@@ -372,6 +371,11 @@ namespace System.Xml
 		}
 
 		public static decimal IntegerToDecimal (long value)
+		{
+			return (decimal) value;
+		}
+
+		public static decimal IntegerToDecimal (ulong value)
 		{
 			return (decimal) value;
 		}
@@ -561,17 +565,17 @@ namespace System.Xml
 			return XmlConvert.ToDateTime (value);
 		}
 
-		public static long StringToUnsignedInt (string value)
+		public static UInt32 StringToUnsignedInt (string value)
 		{
 			return XmlConvert.ToUInt32 (value);
 		}
 
-		public static decimal StringToUnsignedLong (string value)
+		public static UInt64 StringToUnsignedLong (string value)
 		{
 			return XmlConvert.ToUInt64 (value);
 		}
 
-		public static int StringToUnsignedShort (string value)
+		public static UInt16 StringToUnsignedShort (string value)
 		{
 			return XmlConvert.ToUInt16 (value);
 		}
@@ -583,4 +587,3 @@ namespace System.Xml
 	}
 }
 
-#endif

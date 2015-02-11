@@ -35,6 +35,10 @@ using System.Threading.Tasks;
 using System.Collections.Generic;
 using NUnit.Framework;
 
+#if !MOBILE
+using NUnit.Framework.SyntaxHelpers;
+#endif
+
 namespace MonoTests.System.Threading.Tasks
 {
 	[TestFixture]
@@ -63,14 +67,86 @@ namespace MonoTests.System.Threading.Tasks
 			}
 		}
 
+		class NonInlineableScheduler : TaskScheduler
+		{
+			protected override IEnumerable<Task> GetScheduledTasks ()
+			{
+				throw new NotImplementedException ();
+			}
+
+			protected override void QueueTask (Task task)
+			{
+				if (!base.TryExecuteTask (task))
+					throw new ApplicationException ();
+			}
+
+			protected override bool TryExecuteTaskInline (Task task, bool taskWasPreviouslyQueued)
+			{
+				return false;
+			}
+		}
+
+		class ExceptionScheduler : TaskScheduler
+		{
+			protected override IEnumerable<Task> GetScheduledTasks ()
+			{
+				throw new ApplicationException ("1");
+			}
+
+			protected override void QueueTask (Task task)
+			{
+				throw new ApplicationException ("2");
+			}
+
+			protected override bool TryExecuteTaskInline (Task task, bool taskWasPreviouslyQueued)
+			{
+				throw new ApplicationException ("3");
+			}
+		}
+
+		int workerThreads;
+		int completionPortThreads;
 
 		Task[] tasks;
 		const int max = 6;
+		object cleanup_mutex = new object ();
+		List<Task> cleanup_list;
 		
 		[SetUp]
 		public void Setup()
 		{
-			tasks = new Task[max];			
+			ThreadPool.GetMinThreads (out workerThreads, out completionPortThreads);
+			ThreadPool.SetMinThreads (1, 1);
+
+			tasks = new Task[max];
+			cleanup_list = new List<Task> ();
+		}
+		
+		[TearDown]
+		public void Teardown()
+		{
+			ThreadPool.SetMinThreads (workerThreads, completionPortThreads);
+			Task[] l = null;
+			lock (cleanup_mutex) {
+				l = cleanup_list.ToArray ();
+			}
+			try {
+				Task.WaitAll (l);
+			} catch (Exception) {
+			}
+		}
+
+		void AddToCleanup (Task[] tasks) {
+			lock (cleanup_mutex) {
+				foreach (var t in tasks)
+					cleanup_list.Add (t);
+			}
+		}
+
+		void AddToCleanup (Task task) {
+			lock (cleanup_mutex) {
+				cleanup_list.Add (task);
+			}
 		}
 		
 		void InitWithDelegate(Action action)
@@ -78,6 +154,7 @@ namespace MonoTests.System.Threading.Tasks
 			for (int i = 0; i < max; i++) {
 				tasks[i] = Task.Factory.StartNew(action);
 			}
+			AddToCleanup (tasks);
 		}
 		
 		[Test]
@@ -160,11 +237,11 @@ namespace MonoTests.System.Threading.Tasks
 		{
 			var mre = new ManualResetEventSlim (false);
 			var tasks = new Task[] {
-				Task.Factory.StartNew (delegate { mre.Wait (1000); }),
+				Task.Factory.StartNew (delegate { mre.Wait (5000); }),
 				Task.Factory.StartNew (delegate { throw new ApplicationException (); })
 			};
 
-			Assert.AreEqual (1, Task.WaitAny (tasks, 1000), "#1");
+			Assert.AreEqual (1, Task.WaitAny (tasks, 3000), "#1");
 			Assert.IsFalse (tasks[0].IsCompleted, "#2");
 			Assert.IsTrue (tasks[1].IsFaulted, "#3");
 
@@ -234,8 +311,9 @@ namespace MonoTests.System.Threading.Tasks
 				for (int i = 0; i < tasks.Length; i++) {
 					tasks[i] = Task.Factory.StartNew (delegate { Thread.Sleep (0); });
 				}
+				AddToCleanup (tasks);
 
-				Assert.IsTrue (Task.WaitAll (tasks, 2000));
+				Assert.IsTrue (Task.WaitAll (tasks, 5000));
 			}
 		}
 
@@ -358,7 +436,7 @@ namespace MonoTests.System.Threading.Tasks
 				Task.WaitAll (tasks);
 				Assert.Fail ("#1");
 			} catch (AggregateException e) {
-				Assert.IsInstanceOfType (typeof (ApplicationException), e.InnerException, "#2");
+				Assert.That (e.InnerException, Is.TypeOf (typeof (ApplicationException)), "#2");
 				var inner = (TaskCanceledException) e.InnerExceptions[1];
 				Assert.AreEqual (tasks[1], inner.Task, "#3");
 			}
@@ -440,13 +518,26 @@ namespace MonoTests.System.Threading.Tasks
 			Assert.AreEqual (true, previouslyQueued);
 		}
 
-		[Test, ExpectedException (typeof (InvalidOperationException))]
+		[Test]
 		public void CreationWhileInitiallyCanceled ()
 		{
 			var token = new CancellationToken (true);
 			var task = new Task (() => { }, token);
-			Assert.AreEqual (TaskStatus.Canceled, task.Status);
-			task.Start ();
+
+			try {
+				task.Start ();
+				Assert.Fail ("#1");
+			} catch (InvalidOperationException) {
+			}
+
+			try {
+				task.Wait ();
+				Assert.Fail ("#2");
+			} catch (AggregateException e) {
+				Assert.That (e.InnerException, Is.TypeOf (typeof (TaskCanceledException)), "#3");
+			}
+
+			Assert.IsTrue (task.IsCanceled, "#4");
 		}
 
 		[Test]
@@ -456,25 +547,25 @@ namespace MonoTests.System.Threading.Tasks
 			try {
 				task.ContinueWith (null);
 				Assert.Fail ("#1");
-			} catch (ArgumentException) {
+			} catch (ArgumentNullException e) {
 			}
 
 			try {
 				task.ContinueWith (delegate { }, null);
 				Assert.Fail ("#2");
-			} catch (ArgumentException) {
+			} catch (ArgumentNullException e) {
 			}
 
 			try {
 				task.ContinueWith (delegate { }, TaskContinuationOptions.OnlyOnCanceled | TaskContinuationOptions.NotOnCanceled);
 				Assert.Fail ("#3");
-			} catch (ArgumentException) {
+			} catch (ArgumentOutOfRangeException) {
 			}
 
 			try {
 				task.ContinueWith (delegate { }, TaskContinuationOptions.OnlyOnRanToCompletion | TaskContinuationOptions.NotOnRanToCompletion);
 				Assert.Fail ("#4");
-			} catch (ArgumentException) {
+			} catch (ArgumentOutOfRangeException) {
 			}
 		}
 
@@ -575,18 +666,18 @@ namespace MonoTests.System.Threading.Tasks
 		public void ContinueWithChildren ()
 		{
 			ParallelTestHelper.Repeat (delegate {
-			    bool result = false;
+				bool result = false;
 
-			    var t = Task.Factory.StartNew (() => Task.Factory.StartNew (() => {}, TaskCreationOptions.AttachedToParent));
+				var t = Task.Factory.StartNew (() => Task.Factory.StartNew (() => {}, TaskCreationOptions.AttachedToParent));
 
 				var mre = new ManualResetEvent (false);
-			    t.ContinueWith (l => {
+				t.ContinueWith (l => {
 					result = true;
 					mre.Set ();
 				});
 
 				Assert.IsTrue (mre.WaitOne (1000), "#1");
-			    Assert.IsTrue (result, "#2");
+				Assert.IsTrue (result, "#2");
 			}, 2);
 		}
 
@@ -669,6 +760,30 @@ namespace MonoTests.System.Threading.Tasks
 			}, 10);
 		}
 
+		Task parent_wfc;
+
+		[Test]
+		public void WaitingForChildrenToComplete ()
+		{
+			Task nested = null;
+			var mre = new ManualResetEvent (false);
+
+			parent_wfc = Task.Factory.StartNew (() => {
+				nested = Task.Factory.StartNew (() => {
+					Assert.IsTrue (mre.WaitOne (4000), "parent_wfc needs to be set first");
+					Assert.IsFalse (parent_wfc.Wait (10), "#1a");
+					Assert.AreEqual (TaskStatus.WaitingForChildrenToComplete, parent_wfc.Status, "#1b");
+				}, TaskCreationOptions.AttachedToParent).ContinueWith (l => {
+					Assert.IsTrue (parent_wfc.Wait (2000), "#2a");
+					Assert.AreEqual (TaskStatus.RanToCompletion, parent_wfc.Status, "#2b");					
+				}, TaskContinuationOptions.ExecuteSynchronously);
+			});
+
+			mre.Set ();
+			Assert.IsTrue (parent_wfc.Wait (2000), "#3");
+			Assert.IsTrue (nested.Wait (2000), "#4");
+		}
+
 		[Test]
 		public void WaitChildWithContinuationAttachedTest ()
 		{
@@ -714,8 +829,8 @@ namespace MonoTests.System.Threading.Tasks
 					}, TaskCreationOptions.AttachedToParent);
 				}, TaskCreationOptions.AttachedToParent);
 			});
-			t.Wait ();
-			Assert.IsTrue (result);
+			Assert.IsTrue (t.Wait (4000), "#1");
+			Assert.IsTrue (result, "#2");
 		}
 
 		[Test]
@@ -723,19 +838,64 @@ namespace MonoTests.System.Threading.Tasks
 		{
 			ParallelTestHelper.Repeat (delegate {
 				var evt = new ManualResetEventSlim ();
-				var t = Task.Factory.StartNew (() => evt.Wait (5000));
+				var monitor = new object ();
+				int finished = 0;
+				var t = Task.Factory.StartNew (delegate {
+						var r = evt.Wait (5000);
+						lock (monitor) {
+							finished ++;
+							Monitor.Pulse (monitor);
+						}
+						return r ? 1 : 10; //1 -> ok, 10 -> evt wait failed
+					});
 				var cntd = new CountdownEvent (2);
 				var cntd2 = new CountdownEvent (2);
 
-				bool r1 = false, r2 = false;
-				ThreadPool.QueueUserWorkItem (delegate { cntd.Signal (); r1 = t.Wait (1000) && t.Result; cntd2.Signal (); });
-				ThreadPool.QueueUserWorkItem (delegate { cntd.Signal (); r2 = t.Wait (1000) && t.Result; cntd2.Signal (); });
+				int r1 = 0, r2 = 0;
+				ThreadPool.QueueUserWorkItem (delegate {
+						cntd.Signal ();
+						if (!t.Wait (1000))
+							r1 = 20; // 20 -> task wait failed
+						else if (t.Result != 1)
+							r1 = 30 + t.Result; // 30 -> task result is bad
+						else
+							r1 = 2; //2 -> ok
+						cntd2.Signal ();
+						lock (monitor) {
+							finished ++;
+							Monitor.Pulse (monitor);
+						}
+					});
+				ThreadPool.QueueUserWorkItem (delegate {
+						cntd.Signal ();
+						if (!t.Wait (1000))
+							r2 = 40; // 40 -> task wait failed
+						else if (t.Result != 1)
+							r2 = 50 + t.Result; // 50 -> task result is bad
+						else
+							r2 = 3; //3 -> ok
 
+						cntd2.Signal ();
+						lock (monitor) {
+							finished ++;
+							Monitor.Pulse (monitor);
+						}
+					});
 				Assert.IsTrue (cntd.Wait (2000), "#1");
 				evt.Set ();
 				Assert.IsTrue (cntd2.Wait (2000), "#2");
-				Assert.IsTrue (r1, "r1");
-				Assert.IsTrue (r2, "r2");
+				Assert.AreEqual (2, r1, "r1");
+				Assert.AreEqual (3, r2, "r2");
+
+				// Wait for everything to finish to avoid overloading the tpool
+				lock (monitor) {
+					while (true) {
+						if (finished == 3)
+							break;
+						else
+							Monitor.Wait (monitor);
+					}
+				}
 			}, 10);
 		}
 
@@ -791,6 +951,23 @@ namespace MonoTests.System.Threading.Tasks
 		}
 
 		[Test]
+		public void RunSynchronously_SchedulerException ()
+		{
+			var scheduler = new MockScheduler ();
+			scheduler.TryExecuteTaskInlineHandler += (task, b) => {
+				throw new ApplicationException ();
+			};
+
+			Task t = new Task (() => { });
+			try {
+				t.RunSynchronously (scheduler);
+				Assert.Fail ();
+			} catch (Exception e) {
+				Assert.AreEqual (t.Exception.InnerException, e);
+			}
+		}
+
+		[Test]
 		public void RunSynchronouslyWithAttachedChildren ()
 		{
 			var result = false;
@@ -802,6 +979,18 @@ namespace MonoTests.System.Threading.Tasks
 		}
 
 		[Test]
+		public void RunSynchronouslyOnContinuation ()
+		{
+			Task t = new Task<int> (() => 1);
+			t = t.ContinueWith (l => { });
+			try {
+				t.RunSynchronously ();
+				Assert.Fail ("#1");
+			} catch (InvalidOperationException) {
+			}
+		}
+
+		[Test]
 		public void UnobservedExceptionOnFinalizerThreadTest ()
 		{
 			bool wasCalled = false;
@@ -810,7 +999,11 @@ namespace MonoTests.System.Threading.Tasks
 				args.SetObserved ();
 			};
 			var inner = new ApplicationException ();
-			Task.Factory.StartNew (() => { throw inner; });
+			Thread t = new Thread (delegate () {
+					Task.Factory.StartNew (() => { throw inner; });
+				});
+			t.Start ();
+			t.Join ();
 			Thread.Sleep (1000);
 			GC.Collect ();
 			Thread.Sleep (1000);
@@ -831,7 +1024,7 @@ namespace MonoTests.System.Threading.Tasks
 		[Test]
 		public void Start_NullArgument ()
 		{
-			var t = Task.Factory.StartNew (delegate () { });
+			var t = new Task (() => { });
 			try {
 				t.Start (null);
 				Assert.Fail ();
@@ -996,14 +1189,62 @@ namespace MonoTests.System.Threading.Tasks
 			var t = new Task (() => {
 				new Task (() => { r1 = true; }, TaskCreationOptions.AttachedToParent).RunSynchronously ();
 				Task.Factory.StartNew (() => { Thread.Sleep (100); r2 = true; }, TaskCreationOptions.AttachedToParent);
-		    });
+			});
 			t.RunSynchronously ();
 
 			Assert.IsTrue (r1);
 			Assert.IsTrue (r2);
 		}
 
+		[Test]
+		public void AsyncWaitHandleSet ()
+		{
+			var task = new TaskFactory ().StartNew (() => { });
+			var ar = (IAsyncResult)task;
+			Assert.IsFalse (ar.CompletedSynchronously, "#1");
+			Assert.IsTrue (ar.AsyncWaitHandle.WaitOne (5000), "#2");
+		}
+
+		[Test]
+		public void StartOnBrokenScheduler ()
+		{
+			var t = new Task (delegate { });
+
+			try {
+				t.Start (new ExceptionScheduler ());
+				Assert.Fail ("#1");
+			} catch (TaskSchedulerException e) {
+				Assert.AreEqual (TaskStatus.Faulted, t.Status, "#2");
+				Assert.AreSame (e, t.Exception.InnerException, "#3");
+				Assert.IsTrue (e.InnerException is ApplicationException, "#4");
+			}
+		}
+
 #if NET_4_5
+		[Test]
+		public void ContinuationOnBrokenScheduler ()
+		{
+			var s = new ExceptionScheduler ();
+			Task t = new Task(delegate {});
+
+			var t2 = t.ContinueWith (delegate {
+			}, TaskContinuationOptions.ExecuteSynchronously, s);
+
+			var t3 = t.ContinueWith (delegate {
+			}, TaskContinuationOptions.ExecuteSynchronously, s);
+
+			t.Start ();
+
+			try {
+				Assert.IsTrue (t3.Wait (2000), "#0");
+				Assert.Fail ("#1");
+			} catch (AggregateException e) {
+			}
+
+			Assert.AreEqual (TaskStatus.Faulted, t2.Status, "#2");
+			Assert.AreEqual (TaskStatus.Faulted, t3.Status, "#3");
+		}
+
 		[Test]
 		public void Delay_Invalid ()
 		{
@@ -1059,6 +1300,15 @@ namespace MonoTests.System.Threading.Tasks
 		}
 
 		[Test]
+		public void Delay_TimeManagement ()
+		{
+			var delay1 = Task.Delay(50);
+			var delay2 = Task.Delay(25);
+			Assert.IsTrue (Task.WhenAny(new[] { delay1, delay2 }).Wait (1000));
+			Assert.AreEqual (TaskStatus.RanToCompletion, delay2.Status);
+		}
+
+		[Test]
 		public void WaitAny_WithNull ()
 		{
 			var tasks = new [] {
@@ -1071,6 +1321,16 @@ namespace MonoTests.System.Threading.Tasks
 				Assert.Fail ();
 			} catch (ArgumentException) {
 			}
+		}
+
+		[Test]
+		public void WhenAll_Empty ()
+		{
+			var tasks = new Task[0];
+
+			Task t = Task.WhenAll(tasks);
+
+			Assert.IsTrue(t.Wait(1000), "#1");
 		}
 
 		[Test]
@@ -1144,7 +1404,7 @@ namespace MonoTests.System.Threading.Tasks
 				Assert.IsTrue (t.Wait (1000), "#2");
 				Assert.Fail ("#2a");
 			} catch (AggregateException e) {
-				Assert.IsInstanceOfType (typeof (TaskCanceledException), e.InnerException, "#3");
+				Assert.That (e.InnerException, Is.TypeOf (typeof (TaskCanceledException)), "#3");
 			}
 		}
 
@@ -1175,8 +1435,8 @@ namespace MonoTests.System.Threading.Tasks
 				Assert.IsTrue (t.Wait (1000), "#2");
 				Assert.Fail ("#2a");
 			} catch (AggregateException e) {
-				Assert.IsInstanceOfType (typeof (ApplicationException), e.InnerException, "#3");
-				Assert.IsInstanceOfType (typeof (InvalidTimeZoneException), e.InnerExceptions[1], "#4");
+				Assert.That (e.InnerException, Is.TypeOf (typeof (ApplicationException)), "#3");
+				Assert.That (e.InnerExceptions[1], Is.TypeOf (typeof (InvalidTimeZoneException)), "#4");
 			}
 		}
 
@@ -1196,6 +1456,18 @@ namespace MonoTests.System.Threading.Tasks
 			t2.Start ();
 
 			Assert.IsTrue (t.Wait (1000), "#2");
+		}
+
+		[Test]
+		public void WhenAllResult_Empty ()
+		{
+			var tasks = new Task<int>[0];
+
+			Task<int[]> t = Task.WhenAll(tasks);
+
+			Assert.IsTrue(t.Wait(1000), "#1");
+			Assert.IsNotNull(t.Result, "#2");
+			Assert.AreEqual(t.Result.Length, 0, "#3");
 		}
 
 		[Test]
@@ -1239,7 +1511,7 @@ namespace MonoTests.System.Threading.Tasks
 				Assert.IsTrue (t.Wait (1000), "#2");
 				Assert.Fail ("#2a");
 			} catch (AggregateException e) {
-				Assert.IsInstanceOfType (typeof (TaskCanceledException), e.InnerException, "#3");
+				Assert.That (e.InnerException, Is.TypeOf (typeof (TaskCanceledException)), "#3");
 			}
 
 			try {
@@ -1388,7 +1660,7 @@ namespace MonoTests.System.Threading.Tasks
 			Assert.IsTrue (t.Wait (1000), "#2");
 			Assert.IsNull (t.Exception, "#3");
 
-			Assert.IsInstanceOfType (typeof (ApplicationException), t.Result.Exception.InnerException, "#4");
+			Assert.That (t.Result.Exception.InnerException, Is.TypeOf (typeof (ApplicationException)), "#4");
 		}
 
 		[Test]
@@ -1513,7 +1785,7 @@ namespace MonoTests.System.Threading.Tasks
 			Assert.IsTrue (t.Wait (1000), "#2");
 			Assert.IsNull (t.Exception, "#3");
 
-			Assert.IsInstanceOfType (typeof (ApplicationException), t.Result.Exception.InnerException, "#4");
+			Assert.That (t.Result.Exception.InnerException, Is.TypeOf (typeof (ApplicationException)), "#4");
 		}
 
 		[Test]
@@ -1591,6 +1863,16 @@ namespace MonoTests.System.Threading.Tasks
 		}
 
 		[Test]
+		public void ContinueWith_CustomScheduleRejected ()
+		{
+			var scheduler = new NonInlineableScheduler ();
+			var t = Task.Factory.StartNew (delegate { }).
+				ContinueWith (r => {}, CancellationToken.None, TaskContinuationOptions.ExecuteSynchronously, scheduler);
+			
+			Assert.IsTrue (t.Wait (5000));
+		}
+
+		[Test]
 		public void FromResult ()
 		{
 			var t = Task.FromResult<object> (null);
@@ -1607,7 +1889,7 @@ namespace MonoTests.System.Threading.Tasks
 			bool? is_bg = null;
 			var t = new Task (() => { is_tp = Thread.CurrentThread.IsThreadPoolThread; is_bg = Thread.CurrentThread.IsBackground; });
 			t.Start ();
-			Assert.IsTrue (t.Wait (100));
+			t.Wait ();
 			Assert.IsTrue ((bool)is_tp, "#1");
 			Assert.IsTrue ((bool)is_bg, "#2");
 
@@ -1615,8 +1897,7 @@ namespace MonoTests.System.Threading.Tasks
 			is_bg = null;
 			t = new Task (() => { is_tp = Thread.CurrentThread.IsThreadPoolThread; is_bg = Thread.CurrentThread.IsBackground; }, TaskCreationOptions.LongRunning);
 			t.Start ();
-
-			Assert.IsTrue (t.Wait (100));
+			t.Wait ();
 			Assert.IsFalse ((bool) is_tp, "#11");
 			Assert.IsTrue ((bool) is_bg, "#12");
 		}
@@ -1682,11 +1963,13 @@ namespace MonoTests.System.Threading.Tasks
 		public void DenyChildAttachTest ()
 		{
 			var mre = new ManualResetEventSlim ();
+			Task nested = null;
 			Task parent = Task.Factory.StartNew (() => {
-				Task.Factory.StartNew (() => mre.Wait (2000), TaskCreationOptions.AttachedToParent);
+				nested = Task.Factory.StartNew (() => mre.Wait (2000), TaskCreationOptions.AttachedToParent);
 			}, TaskCreationOptions.DenyChildAttach);
-			Assert.IsTrue (parent.Wait (500), "#1");
+			Assert.IsTrue (parent.Wait (1000), "#1");
 			mre.Set ();
+			Assert.IsTrue (nested.Wait (2000), "#2");
 		}
 
 		class SynchronousScheduler : TaskScheduler
@@ -1739,9 +2022,99 @@ namespace MonoTests.System.Threading.Tasks
 				Assert.IsTrue (cont.Wait (1000), "#2");
 				Assert.Fail ();
 			} catch (AggregateException ex) {
-				Assert.IsInstanceOfType (typeof (TaskCanceledException), ex.InnerException);
+				Assert.That (ex.InnerException, Is.TypeOf (typeof (TaskCanceledException)), "#3");
 			}
 		}
+
+		[Test]
+		public void ChildTaskWithUnscheduledContinuationAttachedToParent ()
+		{
+			Task inner = null;
+			var child = Task.Factory.StartNew (() => {
+				inner  = Task.Run (() => {
+					throw new ApplicationException ();
+				}).ContinueWith (task => { }, TaskContinuationOptions.AttachedToParent | TaskContinuationOptions.NotOnFaulted | TaskContinuationOptions.ExecuteSynchronously);
+			});
+
+			int counter = 0;
+			var t = child.ContinueWith (t2 => ++counter, TaskContinuationOptions.ExecuteSynchronously);
+			Assert.IsTrue (t.Wait (5000), "#1");
+			Assert.AreEqual (1, counter, "#2");
+			Assert.AreEqual (TaskStatus.RanToCompletion, child.Status, "#3");
+			Assert.AreEqual (TaskStatus.Canceled, inner.Status, "#4");
+		}
+
+		[Test]
+		[Category("NotWorking")]
+		public void TaskContinuationChainLeak()
+		{
+			// Start cranking out tasks, starting each new task upon completion of and from inside the prior task.
+			//
+			var tester = new TaskContinuationChainLeakTester ();
+			tester.Run ();
+			tester.TasksPilledUp.WaitOne ();
+
+			// Head task should be out of scope by now.  Manually run the GC and expect that it gets collected.
+			// 
+			GC.Collect ();
+			GC.WaitForPendingFinalizers ();
+
+			try {
+				// It's important that we do the asserting while the task recursion is still going, since that is the 
+				// crux of the problem scenario.
+				//
+				tester.Verify ();
+			} finally {
+				tester.Stop ();
+			}
+		}
+
+		class TaskContinuationChainLeakTester
+		{
+			volatile bool m_bStop;
+			int counter;
+			ManualResetEvent mre = new ManualResetEvent (false);
+			WeakReference<Task> headTaskWeakRef;
+
+			public ManualResetEvent TasksPilledUp {
+				get {
+					return mre;
+				}
+			}
+
+			public void Run ()
+			{
+				headTaskWeakRef = new WeakReference<Task> (StartNewTask ());
+			}
+
+			public Task StartNewTask ()
+			{
+				if (m_bStop)
+					return null;
+
+				if (++counter == 50)
+					mre.Set ();
+
+				return Task.Factory.StartNew (DummyWorker).ContinueWith (task => StartNewTask ());
+			}
+
+			public void Stop ()
+			{
+				m_bStop = true;
+			}
+
+			public void Verify ()
+			{
+				Task task;
+				Assert.IsFalse (headTaskWeakRef.TryGetTarget (out task));
+			}
+
+			void DummyWorker ()
+			{
+				Thread.Sleep (0);
+			}
+		}
+		
 #endif
 	}
 }

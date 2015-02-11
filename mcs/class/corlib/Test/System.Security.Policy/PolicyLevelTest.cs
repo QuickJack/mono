@@ -38,6 +38,9 @@ using System.Text;
 namespace MonoTests.System.Security.Policy {
 
 	[TestFixture]
+#if MOBILE
+	[Ignore ("Not supported")]
+#endif
 	public class PolicyLevelTest {
 
 		static string minimal = null;
@@ -121,9 +124,6 @@ namespace MonoTests.System.Security.Policy {
 		}
 
 		[Test]
-#if ! NET_2_0
-		[Category ("NotDotNet")] // System.ExecutionEngineException on MS runtime (1.1)
-#endif
 		public void AddNamedPermissionSet () 
 		{
 			PolicyLevel pl = Load (minimal, PolicyLevelType.Machine);
@@ -145,9 +145,6 @@ namespace MonoTests.System.Security.Policy {
 
 		[Test]
 		[ExpectedException (typeof (ArgumentException))]
-#if ! NET_2_0
-		[Category ("NotDotNet")] // System.ExecutionEngineException on MS runtime (1.1)
-#endif
 		public void AddNamedPermissionSet_Duplicate () 
 		{
 			PolicyLevel pl = Load (minimal, PolicyLevelType.Machine);
@@ -159,9 +156,6 @@ namespace MonoTests.System.Security.Policy {
 		}
 
 		[Test]
-#if ! NET_2_0
-		[Category ("NotDotNet")] // System.ExecutionEngineException on MS runtime (1.1)
-#endif
 		public void ChangeNamedPermissionSet () 
 		{
 			PolicyLevel pl = Load (minimal, PolicyLevelType.Machine);
@@ -316,9 +310,6 @@ namespace MonoTests.System.Security.Policy {
 		}
 
 		[Test]
-#if ! NET_2_0
-		[Category ("NotDotNet")] // System.ExecutionEngineException on MS runtime (1.1)
-#endif
 		public void GetNamedPermissionSet () 
 		{
 			PolicyLevel pl = Load (minimal, PolicyLevelType.Machine);
@@ -446,9 +437,6 @@ namespace MonoTests.System.Security.Policy {
 		}
 
 		[Test]
-#if ! NET_2_0
-		[Category ("NotDotNet")] // System.ExecutionEngineException on MS runtime (1.1)
-#endif
 		public void RemoveNamedPermissionSet () 
 		{
 			PolicyLevel pl = Load (minimal, PolicyLevelType.Machine);
@@ -478,9 +466,6 @@ namespace MonoTests.System.Security.Policy {
 		}
 
 		[Test]
-#if ! NET_2_0
-		[Category ("NotDotNet")] // System.ExecutionEngineException on MS runtime (1.1)
-#endif
 		public void RemoveNamedPermissionSet_String () 
 		{
 			PolicyLevel pl = Load (minimal, PolicyLevelType.Machine);

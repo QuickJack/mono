@@ -12,12 +12,10 @@
 // - dynamic assemblies
 //
 
-#if NET_2_0
 
 using System;
 using System.Threading;
 using System.Reflection;
-using System.Reflection.Emit;
 using System.IO;
 using System.Collections;
 
@@ -182,4 +180,3 @@ public class ModuleHandleTest
 }
 }
 
-#endif

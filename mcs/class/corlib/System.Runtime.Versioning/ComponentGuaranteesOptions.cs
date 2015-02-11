@@ -26,7 +26,6 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if NET_4_0 || MOONLIGHT
 
 namespace System.Runtime.Versioning
 {
@@ -40,4 +39,3 @@ namespace System.Runtime.Versioning
 	}
 }
 
-#endif

@@ -298,7 +298,13 @@ namespace System.Web
 
 		public virtual int ReadEntityBody (byte [] buffer, int offset, int size)
 		{
-			return 0;
+			byte[] temp = new byte [size];
+			int n = ReadEntityBody (temp, size);
+
+			if(n > 0)
+				Array.Copy (temp, 0, buffer, offset, n);
+
+			return n;
 		}
 
 		public virtual void SendCalculatedContentLength (long contentLength)
@@ -311,7 +317,6 @@ namespace System.Web
 			// apparently does nothing in MS.NET
 		}
 
-#if !TARGET_JVM
 		public virtual void SendResponseFromMemory (IntPtr data, int length)
 		{
 			if (data != IntPtr.Zero) {
@@ -320,7 +325,6 @@ namespace System.Web
 				SendResponseFromMemory (copy, length);
 			}
 		}
-#endif
 
 		public virtual void SetEndOfSendNotification (HttpWorkerRequest.EndOfSendNotification callback, object extraData)
 		{

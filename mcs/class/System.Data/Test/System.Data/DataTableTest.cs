@@ -43,6 +43,7 @@ using System.IO;
 using System.Runtime.Serialization.Formatters.Binary;
 using System.Threading;
 using System.Xml;
+using System.Text;
 
 using MonoTests.System.Data.Utils;
 
@@ -2911,9 +2912,6 @@ namespace MonoTests.System.Data
 		#region Read/Write XML Tests
 
 		[Test]
-#if TARGET_JVM
-		[Category ("NotWorking")]
-#endif
 		public void ReadXmlSchema ()
 		{
 			DataTable Table = new DataTable ();
@@ -3091,8 +3089,8 @@ namespace MonoTests.System.Data
 		[Test]
 		public void ReadWriteXmlSchema_ByFileName ()
 		{
-			string sTempFileName1 = "tmpDataSet_ReadWriteXml_43899-1.xml";
-			string sTempFileName2 = "tmpDataSet_ReadWriteXml_43899-2.xml";
+			string sTempFileName1 = Path.Combine (Path.GetTempPath (), "tmpDataSet_ReadWriteXml_43899-1.xml");
+			string sTempFileName2 = Path.Combine (Path.GetTempPath (), "tmpDataSet_ReadWriteXml_43899-2.xml");
 
 			DataSet ds1 = new DataSet ();
 			ds1.Tables.Add (DataProvider.CreateParentDataTable ());
@@ -3806,9 +3804,6 @@ namespace MonoTests.System.Data
 		}
 
 		[Test]
-#if TARGET_JVM
-		[Category ("NotWorking")]
-#endif
 		public void WriteXmlSchema_Hierarchy ()
 		{
 			DataSet ds = new DataSet ();
@@ -3841,9 +3836,6 @@ namespace MonoTests.System.Data
 		[Test]
 		[Ignore ("MS behavior is far from consistent to be regarded as a reference implementation.")]
 		// See the same-named tests in DataSetTest.cs
-#if TARGET_JVM
-		[Category ("NotWorking")]
-#endif
 		// WriteXmlSchema doesn't have overload wityh 2 parameters in System.Data
 		// and is commented-out TWICE below
 		public void ReadWriteXmlSchema()
@@ -3957,9 +3949,6 @@ namespace MonoTests.System.Data
 		[Test]
 		[Ignore ("MS behavior is far from consistent to be regarded as a reference implementation.")]
 		// See the same-named tests in DataSetTest.cs
-#if TARGET_JVM
-		[Category ("NotWorking")]
-#endif
 		public void ReadWriteXmlSchema_IgnoreSchema ()
 		{
 			DataSet ds = new DataSet ();
@@ -4129,6 +4118,58 @@ namespace MonoTests.System.Data
 			}
 		}
 
+		[Test]
+		public void ReadXmlSchemeWithoutScheme ()
+		{
+			const string xml = @"<CustomElement />";
+			using (var s = new StringReader (xml)) {
+				DataTable dt = new DataTable ();
+				dt.ReadXmlSchema (s);
+				Assert.AreEqual ("", dt.TableName);
+			}
+		}
+
+		[Test]
+		public void ReadXmlSchemeWithScheme ()
+		{
+			const string xml = @"<CustomElement>
+				  <xs:schema id='NewDataSet' xmlns='' xmlns:xs='http://www.w3.org/2001/XMLSchema' xmlns:msdata='urn:schemas-microsoft-com:xml-msdata'>
+					<xs:element name='NewDataSet' msdata:IsDataSet='true' msdata:MainDataTable='row' msdata:Locale=''>
+					  <xs:complexType>
+						<xs:choice minOccurs='0' maxOccurs='unbounded'>
+						  <xs:element name='row' msdata:Locale=''>
+							<xs:complexType>
+							  <xs:sequence>
+								<xs:element name='Text' type='xs:string' minOccurs='0' />
+							  </xs:sequence>
+							</xs:complexType>
+						  </xs:element>
+						</xs:choice>
+					  </xs:complexType>
+					</xs:element>
+				  </xs:schema>
+				</CustomElement>";
+			using (var s = new StringReader (xml)) {
+				DataTable dt = new DataTable ();
+				dt.ReadXmlSchema (s);
+				Assert.AreEqual ("row", dt.TableName);
+			}
+		}
+
+		[Test]
+		[ExpectedException (typeof (ArgumentException))]
+		public void ReadXmlSchemeWithBadScheme ()
+		{
+			const string xml = @"<CustomElement>
+				  <xs:schema id='NewDataSet' xmlns='' xmlns:xs='http://www.w3.org/2001/BAD' xmlns:msdata='urn:schemas-microsoft-com:xml-msdata'>
+				  </xs:schema>
+				</CustomElement>";
+			using (var s = new StringReader (xml)) {
+				DataTable dt = new DataTable ();
+				dt.ReadXmlSchema (s);
+			}
+		}
+
 		#endregion // Read/Write XML Tests
 
 	}
@@ -4153,7 +4194,7 @@ namespace MonoTests.System.Data
 			Assert.AreEqual (5, n, "n");
 		}
 
-#if !TARGET_JVM
+#if !MONOTOUCH
 		[Test]
 		public void NFIFromBug55978 ()
 		{

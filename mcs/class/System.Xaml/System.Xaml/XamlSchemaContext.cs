@@ -57,10 +57,8 @@ namespace System.Xaml
 		{
 			if (referenceAssemblies != null)
 				reference_assemblies = new List<Assembly> (referenceAssemblies);
-#if !NET_2_1
 			else
 				AppDomain.CurrentDomain.AssemblyLoad += OnAssemblyLoaded;
-#endif
 
 			if (settings == null)
 				return;
@@ -69,13 +67,11 @@ namespace System.Xaml
 			SupportMarkupExtensionsWithDuplicateArity = settings.SupportMarkupExtensionsWithDuplicateArity;
 		}
 
-#if !NET_2_1
 		~XamlSchemaContext ()
 		{
 			if (reference_assemblies == null)
 				AppDomain.CurrentDomain.AssemblyLoad -= OnAssemblyLoaded;
 		}
-#endif
 
 		IList<Assembly> reference_assemblies;
 
@@ -94,11 +90,7 @@ namespace System.Xaml
 		}
 
 		IEnumerable<Assembly> AssembliesInScope {
-#if MOONLIGHT
-			get { return reference_assemblies; }
-#else
 			get { return reference_assemblies ?? AppDomain.CurrentDomain.GetAssemblies (); }
-#endif
 		}
 
 		public bool SupportMarkupExtensionsWithDuplicateArity { get; private set; }
@@ -244,11 +236,7 @@ namespace System.Xaml
 
 		protected internal virtual Assembly OnAssemblyResolve (string assemblyName)
 		{
-#if MOONLIGHT
-			return Assembly.Load (assemblyName);
-#else
 			return Assembly.LoadWithPartialName (assemblyName);
-#endif
 		}
 
 		public virtual bool TryGetCompatibleXamlNamespace (string xamlNamespace, out string compatibleNamespace)
@@ -263,7 +251,6 @@ namespace System.Xaml
 			return compat_nss.TryGetValue (xamlNamespace, out compatibleNamespace);
 		}
 
-#if !NET_2_1
 		void OnAssemblyLoaded (object o, AssemblyLoadEventArgs e)
 		{
 			if (reference_assemblies != null)
@@ -278,8 +265,7 @@ namespace System.Xaml
 			if (all_xaml_types != null)
 				FillAllXamlTypes (e.LoadedAssembly);
 		}
-#endif
-		
+
 		// cache updater methods
 		void FillXamlNamespaces (Assembly ass)
 		{

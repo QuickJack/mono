@@ -6,37 +6,25 @@ class P {
 
 	static public int count = 0;
 	~P () {
-		T.finalized = true;
-		Thread.Sleep (1000);
-		//Console.WriteLine ("finalizer done");
+		// Console.WriteLine ("finalizer done");
 		count++;
 	}
 }
 
 class T {
-
-	static public bool finalized = false;
-
-	static void makeP () {
-		P p = new P ();
-		p = null;
-	}
-
-	static void callMakeP () {
-		makeP ();
-	}
-
 	static int Main () {
-		callMakeP ();
+		for (int i = 0; i < 1000; ++i) {
+			var t = new Thread (() => {
+					P p = new P ();
+				});
+			t.Start ();
+			t.Join ();
 
-		GC.Collect ();
-		while (!finalized) {
-			Thread.Sleep (100);
+			GC.Collect ();
+			GC.WaitForPendingFinalizers ();
+			if (P.count != i + 1)
+				return 1;
 		}
-		GC.WaitForPendingFinalizers ();
-
-		if (P.count == 0)
-			return 1;
 		return 0;
 	}
 }

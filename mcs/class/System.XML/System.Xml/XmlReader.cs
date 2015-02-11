@@ -35,30 +35,20 @@ using System.Collections;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
-#if !MOONLIGHT
 using System.Xml.Schema; // only required for NET_2_0 (SchemaInfo)
 using System.Xml.Serialization; // only required for NET_2_0 (SchemaInfo)
 using Mono.Xml.Schema; // only required for NET_2_0
-#endif
 using Mono.Xml; // only required for NET_2_0
-#if NET_4_5
 using System.Threading;
 using System.Threading.Tasks;
-#endif
 
 namespace System.Xml
 {
-#if NET_2_0
 	public abstract class XmlReader : IDisposable
-#else
-	public abstract class XmlReader
-#endif
 	{
 		private StringBuilder readStringBuffer;
 		private XmlReaderBinarySupport binary;
-#if NET_2_0
 		private XmlReaderSettings settings;
-#endif
 
 		#region Constructor
 
@@ -87,7 +77,6 @@ namespace System.Xml
 			}
 		}
 
-#if NET_2_0
 		// To enable it internally in sys.xml, just insert these
 		// two lines into Read():
 		//
@@ -103,15 +92,6 @@ namespace System.Xml
 		public virtual bool CanReadValueChunk {
 			get { return false; }
 		}
-#else
-		internal virtual bool CanReadBinaryContent {
-			get { return false; }
-		}
-
-		internal virtual bool CanReadValueChunk {
-			get { return false; }
-		}
-#endif
 
 		public virtual bool CanResolveEntity
 		{
@@ -127,7 +107,6 @@ namespace System.Xml
 			get { return AttributeCount > 0; }
 		}
 
-#if NET_4_0
 		public virtual bool HasValue {
 			get {
 				switch (NodeType) {
@@ -144,13 +123,9 @@ namespace System.Xml
 				return false;
 			}
 		}
-#else
-		public abstract bool HasValue { get; }
-#endif
 
 		public abstract bool IsEmptyElement { get; }
 
-#if NET_2_0
 		public virtual bool IsDefault {
 			get { return false; }
 		}
@@ -166,19 +141,9 @@ namespace System.Xml
 		public virtual string this [string name, string namespaceURI] {
 			get { return GetAttribute (name, namespaceURI); }
 		}
-#else
-		public abstract bool IsDefault { get; }
-
-		public abstract string this [int i] { get; }
-
-		public abstract string this [string name] { get; }
-
-		public abstract string this [string localName, string namespaceName] { get; }
-#endif
 
 		public abstract string LocalName { get; }
 
-#if NET_2_0
 		public virtual string Name {
 			get {
 				return Prefix.Length > 0 ?
@@ -186,9 +151,6 @@ namespace System.Xml
 					LocalName;
 			}
 		}
-#else
-		public abstract string Name { get; }
-#endif
 
 		public abstract string NamespaceURI { get; }
 
@@ -198,31 +160,22 @@ namespace System.Xml
 
 		public abstract string Prefix { get; }
 
-#if NET_2_0
 		public virtual char QuoteChar {
 			get { return '\"'; }
 		}
-#else
-		public abstract char QuoteChar { get; }
-#endif
 
 		public abstract ReadState ReadState { get; }
 
-#if NET_2_0
-#if !MOONLIGHT
 		public virtual IXmlSchemaInfo SchemaInfo {
 			get { return null; }
 		}
-#endif
 
 		public virtual XmlReaderSettings Settings {
 			get { return settings; }
 		}
-#endif
 
 		public abstract string Value { get; }
 
-#if NET_2_0
 		public virtual string XmlLang {
 			get { return String.Empty; }
 		}
@@ -230,27 +183,17 @@ namespace System.Xml
 		public virtual XmlSpace XmlSpace {
 			get { return XmlSpace.None; }
 		}
-#else
-		public abstract string XmlLang { get; }
-
-		public abstract XmlSpace XmlSpace { get; }
-#endif
 
 		#endregion
 
 		#region Methods
 
-#if NET_4_5
 		public virtual void Close ()
 		{
 			if (asyncRunning)
 				throw new InvalidOperationException ("An asynchronous operation is already in progress.");
 		}
-#else
-		public abstract void Close ();
-#endif
 
-#if NET_2_0
 		private static XmlNameTable PopulateNameTable (
 			XmlReaderSettings settings)
 		{
@@ -323,9 +266,7 @@ namespace System.Xml
 				copy = new XmlReaderSettings ();
 			else
 				copy = src.Clone ();
-#if NET_4_5
 			copy.SetReadOnly ();
-#endif
 			return copy;
 		}
 
@@ -336,11 +277,9 @@ namespace System.Xml
 				copy = new XmlReaderSettings ();
 			else
 				copy = src.Clone ();
-#if NET_4_5
 			if (reader.Settings != null)
 				copy.Async = reader.Settings.Async;
 			copy.SetReadOnly ();
-#endif
 			return copy;
 		}
 
@@ -465,9 +404,6 @@ namespace System.Xml
 
 		private static XmlReader CreateValidatingXmlReader (XmlReader reader, XmlReaderSettings settings)
 		{
-#if MOONLIGHT
-			return reader;
-#else
 			XmlValidatingReader xvr = null;
 			switch (settings.ValidationType) {
 			// Auto and XDR are obsoleted in 2.0 and therefore ignored.
@@ -493,24 +429,18 @@ namespace System.Xml
 			//	throw new NotImplementedException ();
 
 			return xvr != null ? xvr : reader;
-#endif
 		}
 
-#if NET_4_0 || MOBILE
 		public void Dispose ()
-#else
-		void IDisposable.Dispose() 
-#endif
 		{
-			Dispose (false);
+			Dispose (true);
 		}
 
 		protected virtual void Dispose (bool disposing)
 		{
-			if (ReadState != ReadState.Closed)
+			if (disposing && ReadState != ReadState.Closed)
 				Close ();
 		}
-#endif
 
 		public abstract string GetAttribute (int i);
 
@@ -551,7 +481,6 @@ namespace System.Xml
 
 		public abstract string LookupNamespace (string prefix);
 
-#if NET_2_0
 		public virtual void MoveToAttribute (int i)
 		{
 			if (i >= AttributeCount)
@@ -560,9 +489,6 @@ namespace System.Xml
 			for (int a = 0; a < i; a++)
 				MoveToNextAttribute ();
 		}
-#else
-		public abstract void MoveToAttribute (int i);
-#endif
 
 		public abstract bool MoveToAttribute (string name);
 
@@ -856,7 +782,6 @@ namespace System.Xml
 			return ret;
 		}
 
-#if NET_2_0
 		public virtual Type ValueType {
 			get { return typeof (string); }
 		}
@@ -1011,12 +936,14 @@ namespace System.Xml
 			return ReadContentAs (ValueType, null);
 		}
 
-#if NET_4_5
 		public virtual DateTimeOffset ReadContentAsDateTimeOffset ()
 		{
-			return XmlConvert.ToDateTimeOffset (ReadContentString ());
+			try {
+				return XmlConvert.ToDateTimeOffset (ReadContentString ());
+			} catch (Exception e) {
+				throw XmlError ("Typed value is invalid.", e);
+			}
 		}
-#endif
 
 		public virtual object ReadElementContentAs (Type returnType, IXmlNamespaceResolver namespaceResolver)
 		{
@@ -1030,6 +957,11 @@ namespace System.Xml
 
 		public virtual object ReadElementContentAs (Type returnType, IXmlNamespaceResolver namespaceResolver, string localName, string namespaceURI)
 		{
+			if (localName == null)
+				throw new ArgumentNullException ("localName");
+			if (namespaceURI == null)
+				throw new ArgumentNullException ("namespaceURI");
+
 			bool isEmpty = IsEmptyElement;
 			ReadStartElement (localName, namespaceURI);
 			if (isEmpty)
@@ -1074,16 +1006,28 @@ namespace System.Xml
 				switch (Type.GetTypeCode (type)) {
 				case TypeCode.Boolean:
 					return XQueryConvert.StringToBoolean (text);
+				case TypeCode.Byte:
+					return XmlConvert.ToByte (text);
+				case TypeCode.SByte:
+					return XmlConvert.ToSByte (text);
+				case TypeCode.Int16:
+					return XmlConvert.ToInt16 (text);
+				case TypeCode.UInt16:
+					return XQueryConvert.StringToUnsignedShort (text);
+				case TypeCode.Int32:
+					return XQueryConvert.StringToInt (text);
+				case TypeCode.UInt32:
+					return XQueryConvert.StringToUnsignedInt (text);
+				case TypeCode.Int64:
+					return XQueryConvert.StringToInteger (text);
+				case TypeCode.UInt64:
+					return XQueryConvert.StringToUnsignedLong (text);
 				case TypeCode.DateTime:
 					return XQueryConvert.StringToDateTime (text);
 				case TypeCode.Decimal:
 					return XQueryConvert.StringToDecimal (text);
 				case TypeCode.Double:
 					return XQueryConvert.StringToDouble (text);
-				case TypeCode.Int32:
-					return XQueryConvert.StringToInt (text);
-				case TypeCode.Int64:
-					return XQueryConvert.StringToInteger (text);
 				case TypeCode.Single:
 					return XQueryConvert.StringToFloat (text);
 				case TypeCode.String:
@@ -1092,7 +1036,7 @@ namespace System.Xml
 			} catch (Exception ex) {
 				throw XmlError (String.Format ("Current text value '{0}' is not acceptable for specified type '{1}'. {2}", text, type, ex != null ? ex.Message : String.Empty), ex);
 			}
-			throw new ArgumentException (String.Format ("Specified type '{0}' is not supported.", type));
+			throw new XmlException (String.Format ("Specified type '{0}' is not supported.", type));
 		}
 
 		public virtual bool ReadElementContentAsBoolean ()
@@ -1358,7 +1302,6 @@ namespace System.Xml
 				binary = new XmlReaderBinarySupport (this);
 		}
 		
-#endif
 
 		public virtual int ReadValueChunk (char [] buffer, int index, int count)
 		{
@@ -1393,15 +1336,12 @@ namespace System.Xml
 		{
 			return new XmlException (this as IXmlLineInfo, BaseURI, message);
 		}
-#if NET_2_0
 		private XmlException XmlError (string message, Exception innerException)
 		{
 			return new XmlException (this as IXmlLineInfo, BaseURI, message);
 		}
-#endif
 		#endregion
 
-#if NET_4_5
 		#region .NET 4.5 Async Methods
 
 		bool asyncRunning;
@@ -1622,6 +1562,5 @@ namespace System.Xml
 		}
 
 		#endregion
-#endif
 	}
 }

@@ -5,6 +5,7 @@
 //	Atsushi Enomoto  <atsushi@ximian.com>
 //
 // Copyright (C) 2007 Novell, Inc (http://www.novell.com)
+// Copyright 2014 Xamarin Inc. (http://www.xamarin.com)
 //
 // Permission is hereby granted, free of charge, to any person obtaining
 // a copy of this software and associated documentation files (the
@@ -26,6 +27,7 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Runtime.Serialization.Json;
@@ -630,6 +632,21 @@ namespace MonoTests.System.Runtime.Serialization.Json
 		}
 
 		[Test]
+		public void ReadValidNumberGerman ()
+		{
+			CultureInfo originalCulture = Thread.CurrentThread.CurrentCulture;
+			try {
+				Thread.CurrentThread.CurrentCulture = new CultureInfo ("de-DE");
+				var s = GetInput ("123.45"); // German is ',' for decimals
+				var r = new DataContractJsonSerializer (typeof (double));
+				var d = (double) r.ReadObject (s);
+				Assert.AreEqual (123.45, d, "InvariantCulture");
+			} finally {
+				Thread.CurrentThread.CurrentCulture = originalCulture;
+			}
+		}
+
+		[Test]
 		[ExpectedException (typeof (XmlException))]
 		public void ReadInvalidNumber2 ()
 		{
@@ -838,6 +855,29 @@ namespace MonoTests.System.Runtime.Serialization.Json
 			XmlReader r = JsonReaderWriterFactory.CreateJsonReader (ms, new XmlDictionaryReaderQuotas ());
 			r.ReadStartElement ();
 			r.Read ();
+		}
+
+		[Test]
+		public void ReadNumberAsObject ()
+		{
+			const double testValue = 42.42D;
+			var serializer = new DataContractJsonSerializer (typeof (object));
+			var serializedStream = GetInput (testValue.ToString (CultureInfo.InvariantCulture));
+			var deserializedValue = serializer.ReadObject (serializedStream);
+			Assert.AreEqual (typeof (decimal), deserializedValue.GetType ());
+			Assert.AreEqual (testValue, (decimal) deserializedValue);
+		}
+
+		[Test]
+		public void IEnumerableTest ()
+		{
+			string json = "[\"A\", \"B\"]";
+			using (var stream = new MemoryStream(Encoding.UTF8.GetBytes(json))) {
+				DataContractJsonSerializer jsonSerializer = new
+					DataContractJsonSerializer(typeof(IEnumerable<string>));
+				var result = jsonSerializer.ReadObject(stream);
+				Assert.AreEqual (typeof (List<string>), result.GetType ());
+			}
 		}
 	}
 }

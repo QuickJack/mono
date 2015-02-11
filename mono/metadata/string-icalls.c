@@ -11,7 +11,6 @@
 #include <config.h>
 #include <stdlib.h>
 #include <stdio.h>
-#include <signal.h>
 #include <string.h>
 #include "mono/utils/mono-membar.h"
 #include <mono/metadata/string-icalls.h>
@@ -65,5 +64,12 @@ ves_icall_System_String_GetLOSLimit (void)
 {
 	int limit = mono_gc_get_los_limit ();
 
-	return (limit - 2 - sizeof (MonoString)) / 2;
+	return (limit - 2 - G_STRUCT_OFFSET (MonoString, chars)) / 2;
 }
+
+void
+ves_icall_System_String_InternalSetLength (MonoString *str, gint32 new_length)
+{
+	mono_gc_set_string_length (str, new_length);
+}
+

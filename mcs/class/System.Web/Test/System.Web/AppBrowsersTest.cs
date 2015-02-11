@@ -25,7 +25,6 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
-#if NET_2_0
 using System;
 using System.Web;
 using System.Web.UI;
@@ -40,7 +39,7 @@ using System.Threading;
 namespace MonoTests.System.Web
 {
 	[TestFixture]
-	[Ignore ("Pending fix for bug 351878")]
+	[Ignore ("adapters.browser depends on System.Web_test_net_2_0.dll")]
 	public class AppBrowsersTest
 	{
 		[TestFixtureSetUp]
@@ -226,4 +225,3 @@ namespace MonoTests.System.Web
 
 
 }
-#endif

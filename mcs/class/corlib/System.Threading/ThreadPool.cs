@@ -30,13 +30,33 @@
 //
 
 using System.Collections;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Runtime.Remoting.Messaging;
 using System.Runtime.InteropServices;
+using System.Security;
 using System.Security.Permissions;
 
 namespace System.Threading {
+
+	// Extracted from ../../../../external/referencesource/mscorlib/system/threading/threadpool.cs
+	//
+	// Interface to something that can be queued to the TP.  This is implemented by 
+	// QueueUserWorkItemCallback, Task, and potentially other internal types.
+	// For example, SemaphoreSlim represents callbacks using its own type that
+	// implements IThreadPoolWorkItem.
+	//
+	// If we decide to expose some of the workstealing
+	// stuff, this is NOT the thing we want to expose to the public.
+	//
+	internal interface IThreadPoolWorkItem
+	{
+		[SecurityCritical]
+		void ExecuteWorkItem();
+		[SecurityCritical]
+		void MarkAborted(ThreadAbortException tae);
+	}
 
 	public static class ThreadPool {
 		[Obsolete("This method is obsolete, use BindHandle(SafeHandle) instead")]
@@ -53,10 +73,9 @@ namespace System.Threading {
 			return true;
 		}
 
-#if !NET_2_1		
 		[MethodImplAttribute(MethodImplOptions.InternalCall)]
 		public static extern void GetAvailableThreads (out int workerThreads, out int completionPortThreads);
-#endif
+
 		[MethodImplAttribute(MethodImplOptions.InternalCall)]
 		public static extern void GetMaxThreads (out int workerThreads, out int completionPortThreads);
 			
@@ -82,17 +101,11 @@ namespace System.Threading {
 			if (callBack == null)
 				throw new ArgumentNullException ("callBack");
 
-#if MOONLIGHT
-			callBack = MoonlightHandler (callBack);
-#endif
 			if (callBack.IsTransparentProxy ()) {
 				IAsyncResult ar = callBack.BeginInvoke (state, null, null);
 				if (ar == null)
 					return false;
 			} else {
-				if (!callBack.HasSingleTarget)
-					throw new Exception ("The delegate must have only one target");
-
 				AsyncResult ares = new AsyncResult (callBack, state, true);
 				pool_queue (ares);
 			}
@@ -101,6 +114,12 @@ namespace System.Threading {
 
 		[MethodImplAttribute(MethodImplOptions.InternalCall)]
 		static extern void pool_queue (AsyncResult ares);
+
+		// TODO: It should be interface interface only to avoid extra allocation
+		internal static void QueueWorkItem (WaitCallback callBack, object state)
+		{
+			pool_queue (new AsyncResult (callBack, state, false));
+		}
 
 		public static RegisteredWaitHandle RegisterWaitForSingleObject (WaitHandle waitObject,
 										WaitOrTimerCallback callBack,
@@ -118,6 +137,12 @@ namespace System.Threading {
 										long millisecondsTimeOutInterval,
 										bool executeOnlyOnce)
 		{
+			if (waitObject == null)
+				throw new ArgumentNullException ("waitObject");
+
+			if (callBack == null)
+				throw new ArgumentNullException ("callBack");
+			
 			if (millisecondsTimeOutInterval < -1)
 				throw new ArgumentOutOfRangeException ("timeout", "timeout < -1");
 
@@ -165,11 +190,11 @@ namespace System.Threading {
 		[SecurityPermission (SecurityAction.Demand, ControlEvidence=true, ControlPolicy=true)]
 		public static bool UnsafeQueueUserWorkItem (WaitCallback callBack, object state)
 		{
+			if (callBack == null)
+				throw new ArgumentNullException ("callBack");
+
 			// no stack propagation here (that's why it's unsafe and requires extra security permissions)
 			if (!callBack.IsTransparentProxy ()) {
-				if (!callBack.HasSingleTarget)
-					throw new Exception ("The delegate must have only one target");
-
 				AsyncResult ares = new AsyncResult (callBack, state, false);
 				pool_queue (ares);
 				return true;
@@ -226,18 +251,26 @@ namespace System.Threading {
 
 #endif
 
-#if MOONLIGHT
-		static WaitCallback MoonlightHandler (WaitCallback callback)
+#region ReferenceSources
+		// Extracted from ../../../../external/referencesource/mscorlib/system/threading/threadpool.cs
+		internal static void UnsafeQueueCustomWorkItem(IThreadPoolWorkItem workItem, bool forceGlobal)
 		{
-			return delegate (object o) {
-				try {
-					callback (o);
-				} 
-				catch (Exception ex) {
-					Thread.MoonlightUnhandledException (ex);
-				} 
-			};
+			QueueWorkItem ((obj) => ((IThreadPoolWorkItem)obj).ExecuteWorkItem (), workItem);
 		}
-#endif
+
+		internal static IEnumerable<IThreadPoolWorkItem> GetQueuedWorkItems()
+		{
+			yield break;
+		}
+		
+		internal static bool TryPopCustomWorkItem(IThreadPoolWorkItem workItem)
+		{
+			return false;
+		}
+		
+		internal static void NotifyWorkItemProgress()
+		{
+		}
+#endregion
 	}
 }

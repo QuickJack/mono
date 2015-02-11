@@ -15,7 +15,15 @@
 /* image-writer.c doesn't happen                       */
 #define kNaClLengthOfCallImm kNaClAlignmentAMD64
 
-int is_nacl_call_reg_sequence(guint8* code);
+int is_nacl_call_reg_sequence (guint8* code);
+void amd64_nacl_clear_legacy_prefix_tag ();
+void amd64_nacl_tag_legacy_prefix (guint8* code);
+void amd64_nacl_tag_rex (guint8* code);
+guint8* amd64_nacl_get_legacy_prefix_tag ();
+guint8* amd64_nacl_get_rex_tag ();
+void amd64_nacl_instruction_pre ();
+void amd64_nacl_instruction_post (guint8 **start, guint8 **end);
+void amd64_nacl_membase_handler (guint8** code, gint8 basereg, gint32 offset, gint8 dreg);
 #endif
 
 #ifdef HOST_WIN32
@@ -25,7 +33,7 @@ int is_nacl_call_reg_sequence(guint8* code);
 #include <signal.h>
 #endif
 
-
+#if !defined(_MSC_VER)
 /* sigcontext surrogate */
 struct sigcontext {
 	guint64 eax;
@@ -38,8 +46,9 @@ struct sigcontext {
 	guint64 edi;
 	guint64 eip;
 };
+#endif
 
-typedef void (* MonoW32ExceptionHandler) (int _dummy, EXCEPTION_RECORD *info, void *context);
+typedef void (* MonoW32ExceptionHandler) (int _dummy, EXCEPTION_POINTERS *info, void *context);
 void win32_seh_init(void);
 void win32_seh_cleanup(void);
 void win32_seh_set_handler(int type, MonoW32ExceptionHandler handler);
@@ -113,14 +122,23 @@ struct sigcontext {
 
 #define MONO_ARCH_FP_RETURN_REG AMD64_XMM0
 
-/* xmm15 is reserved for use by some opcodes */
+#ifdef TARGET_WIN32
+/* xmm5 is used as a scratch register */
+#define MONO_ARCH_CALLEE_FREGS 0x1f
+/* xmm6:xmm15 */
+#define MONO_ARCH_CALLEE_SAVED_FREGS (0xffff - 0x3f)
+#define MONO_ARCH_FP_SCRATCH_REG AMD64_XMM5
+#else
+/* xmm15 is used as a scratch register */
 #define MONO_ARCH_CALLEE_FREGS 0x7fff
 #define MONO_ARCH_CALLEE_SAVED_FREGS 0
+#define MONO_ARCH_FP_SCRATCH_REG AMD64_XMM15
+#endif
 
 #define MONO_MAX_XREGS MONO_MAX_FREGS
 
-#define MONO_ARCH_CALLEE_XREGS 0x7fff
-#define MONO_ARCH_CALLEE_SAVED_XREGS 0
+#define MONO_ARCH_CALLEE_XREGS MONO_ARCH_CALLEE_FREGS
+#define MONO_ARCH_CALLEE_SAVED_XREGS MONO_ARCH_CALLEE_SAVED_FREGS
 
 
 #define MONO_ARCH_CALLEE_REGS AMD64_CALLEE_REGS
@@ -143,24 +161,19 @@ struct sigcontext {
  * reproduceable results for benchmarks */
 #define MONO_ARCH_CODE_ALIGNMENT 32
 
-#define MONO_ARCH_RETREG1 X86_EAX
-#define MONO_ARCH_RETREG2 X86_EDX
-
 /*This is the max size of the locals area of a given frame. I think 1MB is a safe default for now*/
 #define MONO_ARCH_MAX_FRAME_SIZE 0x100000
 
 struct MonoLMF {
 	/* 
-	 * If the lowest bit is set to 1, then this LMF has the rip field set. Otherwise,
+	 * If the lowest bit is set, then this LMF has the rip field set. Otherwise,
 	 * the rip field is not set, and the rsp field points to the stack location where
 	 * the caller ip is saved.
-	 * If the second lowest bit is set to 1, then this is a MonoLMFExt structure, and
+	 * If the second lowest bit is set, then this is a MonoLMFExt structure, and
 	 * the other fields are not valid.
+	 * If the third lowest bit is set, then this is a MonoLMFTramp structure.
 	 */
 	gpointer    previous_lmf;
-	gpointer    lmf_addr;
-	/* This is only set in trampoline LMF frames */
-	MonoMethod *method;
 #if defined(__default_codegen__) || defined(HOST_WIN32)
 	guint64     rip;
 #elif defined(__native_client_codegen__)
@@ -168,25 +181,24 @@ struct MonoLMF {
 	/* this allows the structure to match for 32-bit compilers.    */
 	guint64     rip __attribute__ ((aligned(8)));
 #endif
-	guint64     rbx;
 	guint64     rbp;
 	guint64     rsp;
-	guint64     r12;
-	guint64     r13;
-	guint64     r14;
-	guint64     r15;
-#ifdef HOST_WIN32
-	guint64     rdi;
-	guint64     rsi;
-#endif
 };
+
+/* LMF structure used by the JIT trampolines */
+typedef struct {
+	struct MonoLMF lmf;
+	guint64 *regs;
+	gpointer lmf_addr;
+} MonoLMFTramp;
 
 typedef struct MonoCompileArch {
 	gint32 localloc_offset;
 	gint32 reg_save_area_offset;
 	gint32 stack_alloc_size;
 	gint32 sp_fp_offset;
-	gboolean omit_fp, omit_fp_computed, no_pushes;
+	guint32 saved_iregs;
+	gboolean omit_fp, omit_fp_computed;
 	gpointer cinfo;
 	gint32 async_point_count;
 	gpointer vret_addr_loc;
@@ -197,6 +209,28 @@ typedef struct MonoCompileArch {
 	gpointer ss_trigger_page_var;
 	gpointer lmf_var;
 } MonoCompileArch;
+
+
+
+#ifdef HOST_WIN32
+#define PARAM_REGS 4
+#else
+#define PARAM_REGS 6
+#endif
+
+/* Structure used by the sequence points in AOTed code */
+typedef struct {
+	gpointer ss_trigger_page;
+	gpointer bp_trigger_page;
+	gpointer bp_addrs [MONO_ZERO_LEN_ARRAY];
+} SeqPointInfo;
+
+typedef struct {
+	mgreg_t regs [PARAM_REGS];
+	mgreg_t res;
+	guint8 *ret;
+} DynCallArgs;
+
 
 #define MONO_CONTEXT_SET_LLVM_EXC_REG(ctx, exc) do { (ctx)->rax = (gsize)exc; } while (0)
 
@@ -236,7 +270,7 @@ typedef struct MonoCompileArch {
  */
 #define MONO_ARCH_VARARG_ICALLS 1
 
-#if !defined( HOST_WIN32 ) && !defined(__native_client__) && !defined(__native_client_codegen__)
+#if (!defined( HOST_WIN32 ) && !defined(__native_client__) && !defined(__native_client_codegen__)) && defined (HAVE_SIGACTION)
 
 #define MONO_ARCH_USE_SIGACTION 1
 
@@ -248,74 +282,20 @@ typedef struct MonoCompileArch {
 
 #endif /* !HOST_WIN32 && !__native_client__ */
 
-#if defined (__APPLE__)
-
-#define MONO_ARCH_NOMAP32BIT
-
-#elif defined (__NetBSD__)
-
-#define REG_RAX 14
-#define REG_RCX 3
-#define REG_RDX 2
-#define REG_RBX 13
-#define REG_RSP 24
-#define REG_RBP 12
-#define REG_RSI 1
-#define REG_RDI 0
-#define REG_R8 4
-#define REG_R9 5
-#define REG_R10 6
-#define REG_R11 7
-#define REG_R12 8
-#define REG_R13 9
-#define REG_R14 10
-#define REG_R15 11
-#define REG_RIP 21
-
-#define MONO_ARCH_NOMAP32BIT
-
-#elif defined (__OpenBSD__)
-
-#define MONO_ARCH_NOMAP32BIT
-
-#elif defined (__DragonFly__)
-
-#define MONO_ARCH_NOMAP32BIT
-
-#elif defined (__FreeBSD__)
-
-#define REG_RAX 7
-#define REG_RCX 4
-#define REG_RDX 3
-#define REG_RBX 8
-#define REG_RSP 23
-#define REG_RBP 9
-#define REG_RSI 2
-#define REG_RDI 1
-#define REG_R8  5
-#define REG_R9  6
-#define REG_R10 10
-#define REG_R11 11
-#define REG_R12 12
-#define REG_R13 13
-#define REG_R14 14
-#define REG_R15 15
-#define REG_RIP 20
-
-/* 
- * FreeBSD does not have MAP_32BIT, so code allocated by the code manager might not have a
- * 32 bit address.
- */
-#define MONO_ARCH_NOMAP32BIT
-
-#endif /* __FreeBSD__ */
+#if !defined(__linux__)
+#define MONO_ARCH_NOMAP32BIT 1
+#endif
 
 #ifdef HOST_WIN32
 #define MONO_AMD64_ARG_REG1 AMD64_RCX
 #define MONO_AMD64_ARG_REG2 AMD64_RDX
+#define MONO_AMD64_ARG_REG3 AMD64_R8
+#define MONO_AMD64_ARG_REG4 AMD64_R9
 #else
 #define MONO_AMD64_ARG_REG1 AMD64_RDI
 #define MONO_AMD64_ARG_REG2 AMD64_RSI
+#define MONO_AMD64_ARG_REG3 AMD64_RDX
+#define MONO_AMD64_ARG_REG4 AMD64_RCX
 #endif
 
 #define MONO_ARCH_NO_EMULATE_LONG_SHIFT_OPS
@@ -325,17 +305,10 @@ typedef struct MonoCompileArch {
 #define MONO_ARCH_EMULATE_FREM 1
 #define MONO_ARCH_HAVE_IS_INT_OVERFLOW 1
 
-#define MONO_ARCH_ENABLE_REGALLOC_IN_EH_BLOCKS 1
-#if !defined(__APPLE__)
 #define MONO_ARCH_ENABLE_MONO_LMF_VAR 1
-#endif
 #define MONO_ARCH_HAVE_INVALIDATE_METHOD 1
 #define MONO_ARCH_HAVE_CREATE_DELEGATE_TRAMPOLINE 1
-#define MONO_ARCH_HAVE_ATOMIC_ADD 1
-#define MONO_ARCH_HAVE_ATOMIC_EXCHANGE 1
-#define MONO_ARCH_HAVE_ATOMIC_CAS 1
 #define MONO_ARCH_HAVE_FULL_AOT_TRAMPOLINES 1
-#define MONO_ARCH_HAVE_IMT 1
 #define MONO_ARCH_HAVE_TLS_GET (mono_amd64_have_tls_get ())
 #define MONO_ARCH_IMT_REG AMD64_R10
 #define MONO_ARCH_IMT_SCRATCH_REG AMD64_R11
@@ -352,27 +325,17 @@ typedef struct MonoCompileArch {
 #define MONO_ARCH_ENABLE_GLOBAL_RA 1
 #define MONO_ARCH_HAVE_GENERALIZED_IMT_THUNK 1
 #define MONO_ARCH_HAVE_LIVERANGE_OPS 1
-#define MONO_ARCH_HAVE_XP_UNWIND 1
 #define MONO_ARCH_HAVE_SIGCTX_TO_MONOCTX 1
-#if !defined(HOST_WIN32)
 #define MONO_ARCH_MONITOR_OBJECT_REG MONO_AMD64_ARG_REG1
-#endif
+#define MONO_ARCH_MONITOR_LOCK_TAKEN_REG MONO_AMD64_ARG_REG2
 #define MONO_ARCH_HAVE_GET_TRAMPOLINES 1
 
 #define MONO_ARCH_AOT_SUPPORTED 1
-#if !defined( HOST_WIN32 ) && !defined( __native_client__ )
+#if !defined( __native_client__ )
 #define MONO_ARCH_SOFT_DEBUG_SUPPORTED 1
 #endif
 
-#if !defined(HOST_WIN32) || defined(__sun)
-#define MONO_ARCH_ENABLE_MONITOR_IL_FASTPATH 1
-#endif
-
 #define MONO_ARCH_SUPPORT_TASKLETS 1
-
-#ifndef HOST_WIN32
-#define MONO_AMD64_NO_PUSHES 1
-#endif
 
 #define MONO_ARCH_GSHARED_SUPPORTED 1
 #define MONO_ARCH_DYN_CALL_SUPPORTED 1
@@ -380,7 +343,6 @@ typedef struct MonoCompileArch {
 
 #define MONO_ARCH_HAVE_LLVM_IMT_TRAMPOLINE 1
 #define MONO_ARCH_LLVM_SUPPORTED 1
-#define MONO_ARCH_THIS_AS_FIRST_ARG 1
 #define MONO_ARCH_HAVE_HANDLER_BLOCK_GUARD 1
 #define MONO_ARCH_HAVE_CARD_TABLE_WBARRIER 1
 #define MONO_ARCH_HAVE_SETUP_RESUME_FROM_SIGNAL_HANDLER_CTX 1
@@ -388,11 +350,13 @@ typedef struct MonoCompileArch {
 #define MONO_ARCH_HAVE_CONTEXT_SET_INT_REG 1
 #define MONO_ARCH_HAVE_SETUP_ASYNC_CALLBACK 1
 #define MONO_ARCH_HAVE_CREATE_LLVM_NATIVE_THUNK 1
+#define MONO_ARCH_HAVE_OP_TAIL_CALL 1
+#define MONO_ARCH_HAVE_TRANSLATE_TLS_OFFSET 1
+#define MONO_ARCH_HAVE_DUMMY_INIT 1
 
-gboolean
-mono_amd64_tail_call_supported (MonoMethodSignature *caller_sig, MonoMethodSignature *callee_sig) MONO_INTERNAL;
-
-#define MONO_ARCH_USE_OP_TAIL_CALL(caller_sig, callee_sig) mono_amd64_tail_call_supported (caller_sig, callee_sig)
+#if defined(TARGET_OSX) || defined(__linux__)
+#define MONO_ARCH_HAVE_TLS_GET_REG 1
+#endif
 
 /* Used for optimization, not complete */
 #define MONO_ARCH_IS_OP_MEMBASE(opcode) ((opcode) == OP_X86_PUSH_MEMBASE)
@@ -433,6 +397,9 @@ mono_amd64_have_tls_get (void) MONO_INTERNAL;
 
 GSList*
 mono_amd64_get_exception_trampolines (gboolean aot) MONO_INTERNAL;
+
+int
+mono_amd64_get_tls_gs_offset (void) MONO_LLVM_INTERNAL;
 
 typedef struct {
 	guint8 *address;

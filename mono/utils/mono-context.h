@@ -30,7 +30,9 @@
 /*HACK, move this to an eventual mono-signal.c*/
 #if defined( __linux__) || defined(__sun) || defined(__APPLE__) || defined(__NetBSD__) || \
        defined(__FreeBSD__) || defined(__OpenBSD__)
-#define MONO_SIGNAL_USE_SIGACTION
+#ifdef HAVE_SIGACTION
+#define MONO_SIGNAL_USE_SIGACTION 1
+#endif
 #endif
 
 #if defined(__native_client__)
@@ -105,6 +107,25 @@ typedef struct {
 #define MONO_CONTEXT_GET_SP(ctx) ((gpointer)((ctx)->esp))
 
 /*We set EAX to zero since we are clobering it anyway*/
+#ifdef _MSC_VER
+#define MONO_CONTEXT_GET_CURRENT(ctx) do { \
+	void *_ptr = &(ctx);												\
+	__asm {																\
+	 __asm mov eax, _ptr												\
+	 __asm mov [eax+0x00], eax											\
+	 __asm mov [eax+0x04], ebx											\
+	 __asm mov [eax+0x08], ecx											\
+	 __asm mov [eax+0x0c], edx											\
+	 __asm mov [eax+0x10], ebp											\
+	 __asm mov [eax+0x14], esp											\
+	 __asm mov [eax+0x18], esi											\
+	 __asm mov [eax+0x1c], edi											\
+	 __asm call __mono_context_get_ip									\
+	 __asm __mono_context_get_ip:										\
+	 __asm pop dword ptr [eax+0x20]										\
+		 }																\
+	} while (0)
+#else
 #define MONO_CONTEXT_GET_CURRENT(ctx) \
 	__asm__ __volatile__(   \
 	"movl $0x0, 0x00(%0)\n" \
@@ -120,17 +141,18 @@ typedef struct {
 	:	\
 	: "a" (&(ctx))  \
 	: "memory")
-
-#if !defined(HOST_WIN32)
-#define MONO_ARCH_HAS_MONO_CONTEXT 1
 #endif
+
+#define MONO_ARCH_HAS_MONO_CONTEXT 1
 
 #elif (defined(__x86_64__) && !defined(MONO_CROSS_COMPILE)) || (defined(TARGET_AMD64)) /* defined(__i386__) */
 
 
 #if !defined( HOST_WIN32 ) && !defined(__native_client__) && !defined(__native_client_codegen__)
 
+#ifdef HAVE_SIGACTION
 #define MONO_SIGNAL_USE_SIGACTION 1
+#endif
 
 #endif
 
@@ -162,7 +184,12 @@ typedef struct {
 #define MONO_CONTEXT_GET_BP(ctx) ((gpointer)((ctx)->rbp))
 #define MONO_CONTEXT_GET_SP(ctx) ((gpointer)((ctx)->rsp))
 
-#if defined(__native_client__)
+#if defined (HOST_WIN32) && !defined(__GNUC__)
+/* msvc doesn't support inline assembly, so have to use a separate .asm file */
+extern void mono_context_get_current (void *);
+#define MONO_CONTEXT_GET_CURRENT(ctx) do { mono_context_get_current((void*)&(ctx)); } while (0)
+
+#elif defined(__native_client__)
 #define MONO_CONTEXT_GET_CURRENT(ctx)	\
 	__asm__ __volatile__(	\
 		"movq $0x0,  %%nacl:0x00(%%r15, %0, 1)\n"	\
@@ -205,18 +232,19 @@ typedef struct {
 		"movq %%r13, 0x68(%0)\n"	\
 		"movq %%r14, 0x70(%0)\n"	\
 		"movq %%r15, 0x78(%0)\n"	\
-		"leaq (%%rip), %%rdx\n"	\
+		/* "leaq (%%rip), %%rdx\n" is not understood by icc */	\
+		".byte 0x48, 0x8d, 0x15, 0x00, 0x00, 0x00, 0x00\n" \
 		"movq %%rdx, 0x80(%0)\n"	\
 		: 	\
 		: "a" (&(ctx))	\
 		: "rdx", "memory")
 #endif
 
-#if !defined(HOST_WIN32)
 #define MONO_ARCH_HAS_MONO_CONTEXT 1
-#endif
 
 #elif (defined(__arm__) && !defined(MONO_CROSS_COMPILE)) || (defined(TARGET_ARM)) /* defined(__x86_64__) */
+
+#include <mono/arch/arm/arm-codegen.h>
 
 typedef struct {
 	mgreg_t pc;
@@ -238,15 +266,17 @@ typedef struct {
 	__asm__ __volatile__(			\
 		"push {r0}\n"				\
 		"push {r1}\n"				\
-		"mov r1, r0\n"				\
 		"mov r0, %0\n"				\
+		"ldr r1, [sp, #4]\n"			\
 		"str r1, [r0]!\n"			\
-		"pop {r1}\n"				\
+		"ldr r1, [sp, #0]\n"			\
 		"str r1, [r0]!\n"			\
 		"stmia r0!, {r2-r12}\n"		\
 		"str sp, [r0]!\n"			\
 		"str lr, [r0]!\n"			\
-		"str pc, [r0]!\n"			\
+		"mov r1, pc\n"				\
+		"str r1, [r0]!\n"			\
+		"pop {r1}\n"				\
 		"pop {r0}\n"				\
 		:							\
 		: "r" (&ctx.regs)			\
@@ -255,6 +285,59 @@ typedef struct {
 	ctx.pc = ctx.regs [15];			\
 } while (0)
 
+#define MONO_ARCH_HAS_MONO_CONTEXT 1
+
+#elif (defined(__aarch64__) && !defined(MONO_CROSS_COMPILE)) || (defined(TARGET_ARM64))
+
+#include <mono/arch/arm64/arm64-codegen.h>
+
+typedef struct {
+	mgreg_t regs [32];
+	double fregs [32];
+	mgreg_t pc;
+} MonoContext;
+
+#define MONO_CONTEXT_SET_IP(ctx,ip) do { (ctx)->pc = (mgreg_t)ip; } while (0)
+#define MONO_CONTEXT_SET_BP(ctx,bp) do { (ctx)->regs [ARMREG_FP] = (mgreg_t)bp; } while (0);
+#define MONO_CONTEXT_SET_SP(ctx,bp) do { (ctx)->regs [ARMREG_SP] = (mgreg_t)bp; } while (0);
+
+#define MONO_CONTEXT_GET_IP(ctx) (gpointer)((ctx)->pc)
+#define MONO_CONTEXT_GET_BP(ctx) (gpointer)((ctx)->regs [ARMREG_FP])
+#define MONO_CONTEXT_GET_SP(ctx) (gpointer)((ctx)->regs [ARMREG_SP])
+
+#define MONO_CONTEXT_GET_CURRENT(ctx)	do { 	\
+	__asm__ __volatile__(			\
+		"mov x16, %0\n" \
+		"stp x0, x1, [x16], #16\n"	\
+		"stp x2, x3, [x16], #16\n"	\
+		"stp x4, x5, [x16], #16\n"	\
+		"stp x6, x7, [x16], #16\n"	\
+		"stp x8, x9, [x16], #16\n"	\
+		"stp x10, x11, [x16], #16\n"	\
+		"stp x12, x13, [x16], #16\n"	\
+		"stp x14, x15, [x16], #16\n"	\
+		"stp xzr, x17, [x16], #16\n"	\
+		"stp x18, x19, [x16], #16\n"	\
+		"stp x20, x21, [x16], #16\n"	\
+		"stp x22, x23, [x16], #16\n"	\
+		"stp x24, x25, [x16], #16\n"	\
+		"stp x26, x27, [x16], #16\n"	\
+		"stp x28, x29, [x16], #16\n"	\
+		"stp x30, xzr, [x16]\n"	\
+		"mov x30, sp\n"				\
+		"str x30, [x16, #8]\n"		\
+		:							\
+		: "r" (&ctx.regs)			\
+		: "x30", "memory"			\
+	);								\
+	__asm__ __volatile__( \
+		"adr %0, L0\n" \
+		"L0:\n"	\
+		: "=r" (ctx.pc)		\
+		:					\
+		: "memory"			 \
+	); \
+} while (0)
 
 #elif defined(__mono_ppc__) /* defined(__arm__) */
 
@@ -381,6 +464,8 @@ mono_ia64_context_get_fp (MonoContext *ctx)
 
 #elif ((defined(__mips__) && !defined(MONO_CROSS_COMPILE)) || (defined(TARGET_MIPS))) && SIZEOF_REGISTER == 4 /* defined(__ia64__) */
 
+#include <mono/arch/mips/mips-codegen.h>
+
 typedef struct {
 	mgreg_t	    sc_pc;
 	mgreg_t		sc_regs [32];
@@ -469,7 +554,18 @@ typedef struct ucontext MonoContext;
 
 #endif
 
+/*
+ * The naming is misleading, the SIGCTX argument should be the platform's context
+ * structure (ucontext_c on posix, CONTEXT on windows).
+ */
 void mono_sigctx_to_monoctx (void *sigctx, MonoContext *mctx) MONO_INTERNAL;
+
+/*
+ * This will not completely initialize SIGCTX since MonoContext contains less
+ * information that the system context. The caller should obtain a SIGCTX from
+ * the system, and use this function to override the parts of it which are
+ * also in MonoContext.
+ */
 void mono_monoctx_to_sigctx (MonoContext *mctx, void *sigctx) MONO_INTERNAL;
 
 #endif /* __MONO_MONO_CONTEXT_H__ */

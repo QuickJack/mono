@@ -33,8 +33,6 @@
 #define S390_THROWSTACK_ACCREGS		(S390_THROWSTACK_FLTREGS+(16*sizeof(gdouble)))
 #define S390_THROWSTACK_SIZE		(S390_THROWSTACK_ACCREGS+(16*sizeof(gint32)))
 
-#define S390_REG_SAVE_R13		(S390_REG_SAVE_OFFSET+(7*sizeof(gulong)))
-
 #define SZ_THROW	384
 
 #define setup_context(ctx)
@@ -213,7 +211,7 @@ mono_arch_get_call_filter (MonoTrampInfo **info, gboolean aot)
 	g_assert ((code - start) < SZ_THROW); 
 
 	if (info)
-		*info = mono_tramp_info_create (g_strdup_printf("call_filter"),
+		*info = mono_tramp_info_create ("call_filter",
 						start, code - start, ji,
 						unwind_ops);
 
@@ -237,11 +235,7 @@ throw_exception (MonoObject *exc, unsigned long ip, unsigned long sp,
 {
 	MonoContext ctx;
 	int iReg;
-	static void (*restore_context) (MonoContext *);
 
-	if (!restore_context)
-		restore_context = mono_get_restore_context();
-	
 	memset(&ctx, 0, sizeof(ctx));
 
 	setup_context(&ctx);
@@ -267,7 +261,7 @@ throw_exception (MonoObject *exc, unsigned long ip, unsigned long sp,
 	}
 //	mono_arch_handle_exception (&ctx, exc, FALSE);
 	mono_handle_exception (&ctx, exc);
-	restore_context(&ctx);
+	mono_restore_context(&ctx);
 
 	g_assert_not_reached ();
 }
@@ -364,9 +358,9 @@ mono_arch_get_throw_exception_generic (int size, MonoTrampInfo **info,
 	g_assert ((code - start) < size);
 
 	if (info)
-		*info = mono_tramp_info_create (g_strdup_printf(corlib ? "throw_corlib_exception" 
-								       : (rethrow ? "rethrow_exception" 
-								       : "throw_exception")), 
+		*info = mono_tramp_info_create (corlib ? "throw_corlib_exception" 
+                                                      : (rethrow ? "rethrow_exception" 
+                                                      : "throw_exception"), 
 						start, code - start, ji, unwind_ops);
 
 	return start;
@@ -476,32 +470,19 @@ mono_arch_find_jit_info (MonoDomain *domain, MonoJitTlsData *jit_tls,
 
 		frame->type = FRAME_TYPE_MANAGED;
 
-		if (ji->from_aot)
-			unwind_info = mono_aot_get_unwind_info(ji, &unwind_info_len);
-		else
-			unwind_info = mono_get_cached_unwind_info(ji->used_regs, &unwind_info_len);
-
-		if (*lmf && ((*lmf) != jit_tls->first_lmf) && 
-		    (MONO_CONTEXT_GET_SP (ctx) >= (gpointer)(*lmf)->ebp)) {
-			/* remove any unused lmf */
-			*lmf = (*lmf)->previous_lmf;
-		}
+		unwind_info = mono_jinfo_get_unwind_info (ji, &unwind_info_len);
 
 		address = (char *)ip - (char *)ji->code_start;
 
 		memcpy(&regs, &ctx->uc_mcontext.gregs, sizeof(regs));
 		mono_unwind_frame (unwind_info, unwind_info_len, ji->code_start,
-				(guint8 *) ji->code_start + ji->code_size,
-				ip, regs, 16, save_locations, 
-				MONO_MAX_IREGS, &cfa);
+						   (guint8 *) ji->code_start + ji->code_size,
+						   ip, NULL, regs, 16, save_locations,
+						   MONO_MAX_IREGS, &cfa);
 		memcpy (&new_ctx->uc_mcontext.gregs, &regs, sizeof(regs));
 		MONO_CONTEXT_SET_IP(new_ctx, regs[14] - 2);
 		MONO_CONTEXT_SET_BP(new_ctx, cfa);
 	
-		if (*lmf && (MONO_CONTEXT_GET_SP (ctx) >= (gpointer)(*lmf)->ebp)) {
-			/* remove any unused lmf */
-			*lmf = (*lmf)->previous_lmf;
-		}
 		return TRUE;
 	} else if (*lmf) {
 
@@ -545,39 +526,6 @@ gboolean
 mono_arch_handle_exception (void *uc, gpointer obj)
 {
 	return mono_handle_exception (uc, obj);
-}
-
-/*========================= End of Function ========================*/
-
-/*------------------------------------------------------------------*/
-/*                                                                  */
-/* Name		- mono_arch_sigctx_to_monoctx.                      */
-/*                                                                  */
-/* Function	- Called from the signal handler to convert signal  */
-/*                context to MonoContext.                           */
-/*                                                                  */
-/*------------------------------------------------------------------*/
-
-void
-mono_arch_sigctx_to_monoctx (void *ctx, MonoContext *mctx)
-{
-	mono_sigctx_to_monoctx(ctx, mctx);
-}
-
-/*========================= End of Function ========================*/
-
-/*------------------------------------------------------------------*/
-/*                                                                  */
-/* Name		- mono_arch_monoctx_to_sigctx.                      */
-/*                                                                  */
-/* Function	- Convert MonoContext structure to signal context.  */
-/*                                                                  */
-/*------------------------------------------------------------------*/
-
-void
-mono_arch_monoctx_to_sigctx (MonoContext *mctx, void *ctx)
-{
-	mono_monoctx_to_sigctx(mctx, ctx);
 }
 
 /*========================= End of Function ========================*/

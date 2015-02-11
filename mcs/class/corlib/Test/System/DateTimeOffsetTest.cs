@@ -163,7 +163,7 @@ namespace MonoTests.System {
 			Assert.AreEqual (dto.ToString ("r", new CultureInfo ("en-us")), dto.ToString ("R", new CultureInfo ("en-us")));
 			Assert.AreEqual ("2007-10-31T21:00:00", dto.ToString ("s", new CultureInfo ("en-us")));
 			Assert.AreEqual ("2007-11-01 05:00:00Z", dto.ToString ("u", new CultureInfo ("en-us")));
-			Assert.AreEqual ("October, 2007", dto.ToString ("Y", new CultureInfo ("en-us")));
+			Assert.AreEqual ("October 2007", dto.ToString ("Y", new CultureInfo ("en-us")));
 			Assert.AreEqual (dto.ToString ("y", new CultureInfo ("en-us")), dto.ToString ("Y", new CultureInfo ("en-us")));
 		}
 
@@ -176,7 +176,7 @@ namespace MonoTests.System {
 				Assert.AreEqual ("Thursday, Nov 01 2007 09:00:00 -07:00", dto.ToString (format, null as DateTimeFormatInfo), "ts1");
 			Assert.AreEqual ("Thursday, Nov 01 2007 09:00:00 -07:00", dto.ToString (format, CultureInfo.InvariantCulture), "ts2");
 			Assert.AreEqual ("jeudi, nov. 01 2007 09:00:00 -07:00", dto.ToString (format, new CultureInfo ("fr-FR")), "ts3");
-			Assert.AreEqual ("jueves, nov 01 2007 09:00:00 -07:00", dto.ToString (format, new CultureInfo ("es-ES")), "ts4");
+			Assert.AreEqual ("jueves, Nov. 01 2007 09:00:00 -07:00", dto.ToString (format, new CultureInfo ("es-ES")), "ts4");
 		}
 
 		[Test]
@@ -667,6 +667,60 @@ namespace MonoTests.System {
 			DateTimeOffset dto2 = dto.AddDays (-60); //Should cross the late Oct boundary in most part of the world
 			Assert.AreEqual (dto.Offset, dto2.Offset);
 			Assert.AreEqual (dt.AddDays (-60), dto2.DateTime);
+		}
+
+		[Test]
+		public void TestPartialDateTimeParsing ()
+		{
+			var now = DateTime.UtcNow;
+			const DateTimeStyles style = DateTimeStyles.AssumeUniversal;
+
+			//year
+			var date = DateTimeOffset.ParseExact ("2003", "yyyy", CultureInfo.InvariantCulture, style);
+			var expected = "01/01/2003 00:00:00 +00:00";
+			Assert.AreEqual (expected, date.ToString (CultureInfo.InvariantCulture));
+
+			//month
+			date = DateTimeOffset.ParseExact ("12", "MM", CultureInfo.InvariantCulture, style);
+			expected = string.Format ("12/01/{0} 00:00:00 +00:00", now.Year);
+			Assert.AreEqual (expected, date.ToString (CultureInfo.InvariantCulture));
+
+			//day
+			date = DateTimeOffset.ParseExact ("29", "dd", CultureInfo.InvariantCulture, style);
+			expected = string.Format ("01/29/{0} 00:00:00 +00:00", now.Year);
+			Assert.AreEqual (expected, date.ToString (CultureInfo.InvariantCulture));
+
+			//hours
+			date = DateTimeOffset.ParseExact ("06", "HH", CultureInfo.InvariantCulture, style);
+			expected = string.Format ("{0:D2}/{1:D2}/{2} 06:00:00 +00:00", now.Month, now.Day, now.Year);
+			Assert.AreEqual (expected, date.ToString (CultureInfo.InvariantCulture));
+
+			//minutes
+			date = DateTimeOffset.ParseExact ("45", "mm", CultureInfo.InvariantCulture, style);
+			expected = string.Format ("{0:D2}/{1:D2}/{2} 00:45:00 +00:00", now.Month, now.Day, now.Year);
+			Assert.AreEqual (expected, date.ToString (CultureInfo.InvariantCulture));
+
+			//seconds
+			date = DateTimeOffset.ParseExact ("45", "ss", CultureInfo.InvariantCulture, style);
+			expected = string.Format ("{0:D2}/{1:D2}/{2} 00:00:45 +00:00", now.Month, now.Day, now.Year);
+			Assert.AreEqual (expected, date.ToString (CultureInfo.InvariantCulture));
+		}
+
+		[Test]
+		public void TestDateOnlyWithTimeOffset ()
+		{
+			var fp = CultureInfo.InvariantCulture;
+			var date = DateTimeOffset.Parse("2013-11-07+11:00", fp, DateTimeStyles.AssumeUniversal);
+			var expected = string.Format ("{0:D2}/{1:D2}/{2} 00:00:00 +11:00", 11, 7, 2013);
+			Assert.AreEqual (expected, date.ToString (CultureInfo.InvariantCulture));
+		}
+
+		[Test]
+		public void GMTDateTime ()
+		{
+			var date = DateTimeOffset.Parse ("Wed, 10 Sep 2014 22:01:40 GMT", CultureInfo.InvariantCulture);
+			var expected = "09/10/2014 22:01:40 +00:00";
+			Assert.AreEqual (expected, date.ToString (CultureInfo.InvariantCulture));
 		}
 	}
 }

@@ -3,6 +3,7 @@ using System.IO;
 using System.Text;
 using System.Linq;
 using System.Xml;
+using System.Collections;
 using System.Collections.Generic;
 
 namespace Monodoc
@@ -19,6 +20,9 @@ namespace Monodoc
 		bool loaded;
 		Node parent;
 		List<Node> nodes;
+#if LEGACY_MODE
+		ArrayList legacyNodes;
+#endif
 		Dictionary<string, Node> childrenLookup;
 		bool elementSort;
 		/* Address has three types of value, 
@@ -27,6 +31,17 @@ namespace Monodoc
 		 *   _ <0 is a valid negated address to indicate lazy loading
 		 */
 		int address;
+
+#if LEGACY_MODE
+		[Obsolete ("Tree inheriting Node is being phased out. Use the `Tree.RootNode' property instead")]
+		public Node (string caption, string element)
+		{
+			this.parentTree = (Tree) this;
+			this.caption = caption;
+			this.element = element;
+			parent = null;
+		}
+#endif
 
 		public Node (Node parent, string caption, string element) : this (parent.Tree, caption, element)
 		{
@@ -95,7 +110,16 @@ namespace Monodoc
 				childrenLookup[child.element] = child;
 		}
 
-		public List<Node> Nodes {
+		[Obsolete ("Use ChildNodes")]
+		public ArrayList Nodes {
+			get {
+				if (legacyNodes == null)
+					legacyNodes = new ArrayList (ChildNodes as ICollection);
+				return legacyNodes;
+			}
+		}
+
+		public IList<Node> ChildNodes {
 			get {
 				EnsureLoaded ();
 				return nodes != null ? nodes : new List<Node> ();
@@ -138,6 +162,11 @@ namespace Monodoc
 			get {
 				return address;
 			}
+#if LEGACY_MODE
+			set {
+				address = value;
+			}
+#endif
 		}
 	
 		/// <summary>
@@ -328,6 +357,26 @@ namespace Monodoc
 			}
 
 			return string.Compare (cap1, cap2, StringComparison.Ordinal);
+		}
+	}
+
+	internal static class IListExtensions
+	{
+		// TODO: if the backing store ever change from List<T>, we need to tune these methods to have a fallback mechanism
+		public static int BinarySearch<T> (this IList<T> ilist, T item)
+		{
+			var list = ilist as List<T>;
+			if (list == null)
+				throw new NotSupportedException ();
+			return list.BinarySearch (item);
+		}
+
+		public static int BinarySearch<T> (this IList<T> ilist, T item, IComparer<T> comparer)
+		{
+			var list = ilist as List<T>;
+			if (list == null)
+				throw new NotSupportedException ();
+			return list.BinarySearch (item, comparer);
 		}
 	}
 }

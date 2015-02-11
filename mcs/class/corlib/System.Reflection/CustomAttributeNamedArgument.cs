@@ -38,22 +38,18 @@ namespace System.Reflection {
 		CustomAttributeTypedArgument typedArgument;
 		MemberInfo memberInfo;
 		
-#if NET_4_0
 		public
-#endif
 		CustomAttributeNamedArgument (MemberInfo memberInfo, object value)
 		{
 			this.memberInfo = memberInfo;
 			this.typedArgument = (CustomAttributeTypedArgument) value;
 		}
 		
-#if NET_4_0
 		public CustomAttributeNamedArgument (MemberInfo memberInfo, CustomAttributeTypedArgument typedArgument)
 		{
 			this.memberInfo = memberInfo;
 			this.typedArgument = typedArgument;
 		}
-#endif
 
 		public MemberInfo MemberInfo {
 			get {
@@ -65,6 +61,14 @@ namespace System.Reflection {
 			get {
 				return typedArgument;
 			}
+		}
+
+		public bool IsField {
+			get { return memberInfo.MemberType == MemberTypes.Field; }
+		}
+
+		public string MemberName {
+			get { return memberInfo.Name; }
 		}
 
 		public override string ToString ()

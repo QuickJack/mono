@@ -38,10 +38,7 @@ using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Security.Permissions;
 using System.Security.Cryptography.X509Certificates;
-
-#if !MOONLIGHT
 using Mono.Security.Authenticode;
-#endif
 
 namespace System.Security.Policy {
 
@@ -64,9 +61,7 @@ namespace System.Security.Policy {
 				Merge (evidence);	
 		}
 
-#if NET_4_0
 		[Obsolete]
-#endif
 		public Evidence (object[] hostEvidence, object[] assemblyEvidence)
 		{
 			if (null != hostEvidence)
@@ -79,9 +74,7 @@ namespace System.Security.Policy {
 		// Public Properties
 		//
 	
-#if NET_4_0
 		[Obsolete]
-#endif
 		public int Count {
 			get {
 				int count = 0;
@@ -133,17 +126,13 @@ namespace System.Security.Policy {
 		// Public Methods
 		//
 
-#if NET_4_0
 		[Obsolete]
-#endif
 		public void AddAssembly (object id) 
 		{
 			AssemblyEvidenceList.Add (id);
 		}
 
-#if NET_4_0
 		[Obsolete]
-#endif
 		public void AddHost (object id) 
 		{
 			if (_locked && SecurityManager.SecurityEnabled) {
@@ -161,9 +150,7 @@ namespace System.Security.Policy {
 				assemblyEvidenceList.Clear ();
 		}
 
-#if NET_4_0
 		[Obsolete]
-#endif
 		public void CopyTo (Array array, int index) 
 		{
 			int hc = 0;
@@ -176,51 +163,8 @@ namespace System.Security.Policy {
 				assemblyEvidenceList.CopyTo (array, index + hc);
 		}
 
-#if !NET_4_0
-		[ComVisible (false)]
-		public override bool Equals (object obj)
-		{
-			if (obj == null)
-				return false;
-			Evidence e = (obj as Evidence);
-			if (e == null)
-				return false;
 
-			if (HostEvidenceList.Count != e.HostEvidenceList.Count)
-				return false;
-			if (AssemblyEvidenceList.Count != e.AssemblyEvidenceList.Count)
-				return false;
-
-			for (int i = 0; i < hostEvidenceList.Count; i++) {
-				bool found = false;
-				for (int j = 0; j < e.hostEvidenceList.Count; i++) {
-					if (hostEvidenceList [i].Equals (e.hostEvidenceList [j])) {
-						found = true;
-						break;
-					}
-				}
-				if (!found)
-					return false;
-			}
-			for (int i = 0; i < assemblyEvidenceList.Count; i++) {
-				bool found = false;
-				for (int j = 0; j < e.assemblyEvidenceList.Count; i++) {
-					if (assemblyEvidenceList [i].Equals (e.assemblyEvidenceList [j])) {
-						found = true;
-						break;
-					}
-				}
-				if (!found)
-					return false;
-			}
-			
-			return true;
-		}
-#endif
-
-#if NET_4_0
 		[Obsolete]
-#endif
 		public IEnumerator GetEnumerator () 
 		{
 			IEnumerator he = null;
@@ -237,23 +181,6 @@ namespace System.Security.Policy {
 			return AssemblyEvidenceList.GetEnumerator ();
 		}
 
-#if !NET_4_0
-		[ComVisible (false)]
-		public override int GetHashCode ()
-		{
-			int _hashCode = 0;
-			if (hostEvidenceList != null) {
-				for (int i = 0; i < hostEvidenceList.Count; i++)
-					_hashCode ^= hostEvidenceList [i].GetHashCode ();
-			}
-			if (assemblyEvidenceList != null) {
-				for (int i = 0; i < assemblyEvidenceList.Count; i++)
-					_hashCode ^= assemblyEvidenceList [i].GetHashCode ();
-			}
-			
-			return _hashCode;
-		}
-#endif
 		public IEnumerator GetHostEnumerator () 
 		{
 			return HostEvidenceList.GetEnumerator ();

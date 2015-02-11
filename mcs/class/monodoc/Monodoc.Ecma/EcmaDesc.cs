@@ -86,14 +86,50 @@ namespace Monodoc.Ecma
 			set;
 		}
 
+		/* The GenericTypeArguments list may be null, in which case, this
+		 * is an easier/safer way to check the count.
+		 */
+		public int GenericTypeArgumentsCount {
+			get { return GenericTypeArguments != null ? GenericTypeArguments.Count : 0; }
+		}
+
+		/* This property tells if the above collections only correct value
+		 * is the number of item in it to represent generic arguments
+		 */
+		public bool GenericTypeArgumentsIsNumeric {
+			get {
+				return GenericTypeArguments != null && GenericTypeArguments.FirstOrDefault () == null;
+			}
+		}
+
 		public IList<EcmaDesc> GenericMemberArguments {
 			get;
 			set;
 		}
 
+		/* The GenericMemberArguments list may be null, in which case, this
+		 * is an easier/safer way to check the count.
+		 */
+		public int GenericMemberArgumentsCount {
+			get { return GenericMemberArguments != null ? GenericMemberArguments.Count : 0; }
+		}
+
+		public bool GenericMemberArgumentsIsNumeric {
+			get {
+				return GenericMemberArguments != null && GenericMemberArguments.FirstOrDefault () == null;
+			}
+		}
+
 		public IList<EcmaDesc> MemberArguments {
 			get;
 			set;
+		}
+
+		/* The GenericTypeArguments list may be null, in which case, this
+		 * is an easier/safer way to check the count.
+		 */
+		public int MemberArgumentsCount {
+			get { return MemberArguments != null ? MemberArguments.Count : 0; }
 		}
 
 		/* This indicates that we actually want an inner part of the ecmadesc
@@ -183,6 +219,7 @@ namespace Monodoc.Ecma
 			var sb = new StringBuilder ();
 			// Cref type
 			sb.Append (DescKind.ToString ()[0]);
+			sb.Append (":");
 			// Create the rest
 			ConstructCRef (sb);
 
@@ -199,8 +236,15 @@ namespace Monodoc.Ecma
 			sb.Append (TypeName);
 			if (GenericTypeArguments != null) {
 				sb.Append ('<');
-				foreach (var t in GenericTypeArguments)
+				int i=0;
+				foreach (var t in GenericTypeArguments) {
+					if (i > 0) {
+						sb.Append (",");
+					}
 					t.ConstructCRef (sb);
+
+					i++;
+				}
 				sb.Append ('>');
 			}
 			if (NestedType != null) {
@@ -217,8 +261,20 @@ namespace Monodoc.Ecma
 			if (DescKind == Kind.Type)
 				return;
 
-			if (MemberArguments != null) {
-				
+			sb.Append (".");
+			sb.Append (MemberName);
+
+			if (MemberArguments != null && MemberArgumentsCount > 0) {
+				sb.Append ("(");
+				int i=0;
+				foreach (var a in MemberArguments) {
+					if (i > 0) {
+						sb.Append(",");
+					}
+					a.ConstructCRef (sb);
+					i++;
+				}
+				sb.Append (")");
 			}
 		}
 
@@ -304,27 +360,11 @@ namespace Monodoc.Ecma
 		{
 			if (args == null || !args.Any ())
 				return string.Empty;
+			// If we only have the number of generic arguments, use ` notation
+			if (args.First () == null)
+				return "`" + args.Count ();
 
-			IEnumerable<string> argsList = null;
-
-			// HACK: If we don't have fully specified EcmaDesc for generic arguments
-			// we use the most common names for the argument length configuration
-			if (args.Any (a => a == null)) {
-				var argCount = args.Count ();
-				switch (argCount) {
-				case 1:
-					argsList = new string[] { "T" };
-					break;
-				case 2:
-					argsList = new string[] { "TKey", "TValue" };
-					break;
-				default:
-					argsList = Enumerable.Range (1, argCount).Select (i => "T" + i);
-					break;
-				}
-			} else {
-				argsList = args.Select (t => FormatNamespace (t) + t.ToCompleteTypeName ());
-			}
+			IEnumerable<string> argsList = args.Select (t => FormatNamespace (t) + t.ToCompleteTypeName ());
 
 			return "<" + string.Join (",", argsList) + ">";
 		}

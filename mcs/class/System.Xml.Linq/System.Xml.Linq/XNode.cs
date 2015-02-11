@@ -80,9 +80,10 @@ namespace System.Xml.Linq
 		public string ToString (SaveOptions options)
 		{
 			StringWriter sw = new StringWriter ();
-			XmlWriterSettings s = new XmlWriterSettings ();
-			s.ConformanceLevel = ConformanceLevel.Auto;
-			s.Indent = options != SaveOptions.DisableFormatting;
+			XmlWriterSettings s = new XmlWriterSettings () {
+				ConformanceLevel = ConformanceLevel.Auto,
+				Indent = options != SaveOptions.DisableFormatting,
+				OmitXmlDeclaration = true };
 			XmlWriter xw = XmlWriter.Create (sw, s);
 			WriteTo (xw);
 			xw.Close ();
@@ -242,7 +243,6 @@ namespace System.Xml.Linq
 			return new XNodeReader (this);
 		}
 
-#if NET_4_0
 		public XmlReader CreateReader (ReaderOptions readerOptions)
 		{
 			var r = new XNodeReader (this);
@@ -251,7 +251,6 @@ namespace System.Xml.Linq
 			
 			return r;
 		}
-#endif
 
 		public IEnumerable<XElement> ElementsAfterSelf ()
 		{

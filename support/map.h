@@ -35,6 +35,21 @@ enum Mono_Posix_AccessModes {
 int Mono_Posix_FromAccessModes (int x, int *r);
 int Mono_Posix_ToAccessModes (int x, int *r);
 
+enum Mono_Posix_AtFlags {
+	Mono_Posix_AtFlags_AT_EMPTY_PATH             = 0x00001000,
+	#define Mono_Posix_AtFlags_AT_EMPTY_PATH       Mono_Posix_AtFlags_AT_EMPTY_PATH
+	Mono_Posix_AtFlags_AT_NO_AUTOMOUNT           = 0x00000800,
+	#define Mono_Posix_AtFlags_AT_NO_AUTOMOUNT     Mono_Posix_AtFlags_AT_NO_AUTOMOUNT
+	Mono_Posix_AtFlags_AT_REMOVEDIR              = 0x00000200,
+	#define Mono_Posix_AtFlags_AT_REMOVEDIR        Mono_Posix_AtFlags_AT_REMOVEDIR
+	Mono_Posix_AtFlags_AT_SYMLINK_FOLLOW         = 0x00000400,
+	#define Mono_Posix_AtFlags_AT_SYMLINK_FOLLOW   Mono_Posix_AtFlags_AT_SYMLINK_FOLLOW
+	Mono_Posix_AtFlags_AT_SYMLINK_NOFOLLOW       = 0x00000100,
+	#define Mono_Posix_AtFlags_AT_SYMLINK_NOFOLLOW Mono_Posix_AtFlags_AT_SYMLINK_NOFOLLOW
+};
+int Mono_Posix_FromAtFlags (int x, int *r);
+int Mono_Posix_ToAtFlags (int x, int *r);
+
 enum Mono_Posix_ConfstrName {
 	Mono_Posix_ConfstrName__CS_GNU_LIBC_VERSION                      = 0x00000002,
 	#define Mono_Posix_ConfstrName__CS_GNU_LIBC_VERSION                Mono_Posix_ConfstrName__CS_GNU_LIBC_VERSION
@@ -204,16 +219,26 @@ enum Mono_Posix_Errno {
 	#define Mono_Posix_Errno_EAGAIN          Mono_Posix_Errno_EAGAIN
 	Mono_Posix_Errno_EALREADY              = 0x00000072,
 	#define Mono_Posix_Errno_EALREADY        Mono_Posix_Errno_EALREADY
+	Mono_Posix_Errno_EAUTH                 = 0x00000438,
+	#define Mono_Posix_Errno_EAUTH           Mono_Posix_Errno_EAUTH
+	Mono_Posix_Errno_EBADARCH              = 0x0000043e,
+	#define Mono_Posix_Errno_EBADARCH        Mono_Posix_Errno_EBADARCH
 	Mono_Posix_Errno_EBADE                 = 0x00000034,
 	#define Mono_Posix_Errno_EBADE           Mono_Posix_Errno_EBADE
+	Mono_Posix_Errno_EBADEXEC              = 0x0000043d,
+	#define Mono_Posix_Errno_EBADEXEC        Mono_Posix_Errno_EBADEXEC
 	Mono_Posix_Errno_EBADF                 = 0x00000009,
 	#define Mono_Posix_Errno_EBADF           Mono_Posix_Errno_EBADF
 	Mono_Posix_Errno_EBADFD                = 0x0000004d,
 	#define Mono_Posix_Errno_EBADFD          Mono_Posix_Errno_EBADFD
+	Mono_Posix_Errno_EBADMACHO             = 0x00000440,
+	#define Mono_Posix_Errno_EBADMACHO       Mono_Posix_Errno_EBADMACHO
 	Mono_Posix_Errno_EBADMSG               = 0x0000004a,
 	#define Mono_Posix_Errno_EBADMSG         Mono_Posix_Errno_EBADMSG
 	Mono_Posix_Errno_EBADR                 = 0x00000035,
 	#define Mono_Posix_Errno_EBADR           Mono_Posix_Errno_EBADR
+	Mono_Posix_Errno_EBADRPC               = 0x00000430,
+	#define Mono_Posix_Errno_EBADRPC         Mono_Posix_Errno_EBADRPC
 	Mono_Posix_Errno_EBADRQC               = 0x00000038,
 	#define Mono_Posix_Errno_EBADRQC         Mono_Posix_Errno_EBADRQC
 	Mono_Posix_Errno_EBADSLT               = 0x00000039,
@@ -222,6 +247,8 @@ enum Mono_Posix_Errno {
 	#define Mono_Posix_Errno_EBFONT          Mono_Posix_Errno_EBFONT
 	Mono_Posix_Errno_EBUSY                 = 0x00000010,
 	#define Mono_Posix_Errno_EBUSY           Mono_Posix_Errno_EBUSY
+	Mono_Posix_Errno_ECANCELED             = 0x0000007d,
+	#define Mono_Posix_Errno_ECANCELED       Mono_Posix_Errno_ECANCELED
 	Mono_Posix_Errno_ECHILD                = 0x0000000a,
 	#define Mono_Posix_Errno_ECHILD          Mono_Posix_Errno_ECHILD
 	Mono_Posix_Errno_ECHRNG                = 0x0000002c,
@@ -240,6 +267,8 @@ enum Mono_Posix_Errno {
 	#define Mono_Posix_Errno_EDEADLOCK       Mono_Posix_Errno_EDEADLOCK
 	Mono_Posix_Errno_EDESTADDRREQ          = 0x00000059,
 	#define Mono_Posix_Errno_EDESTADDRREQ    Mono_Posix_Errno_EDESTADDRREQ
+	Mono_Posix_Errno_EDEVERR               = 0x0000043b,
+	#define Mono_Posix_Errno_EDEVERR         Mono_Posix_Errno_EDEVERR
 	Mono_Posix_Errno_EDOM                  = 0x00000021,
 	#define Mono_Posix_Errno_EDOM            Mono_Posix_Errno_EDOM
 	Mono_Posix_Errno_EDOTDOT               = 0x00000049,
@@ -252,6 +281,8 @@ enum Mono_Posix_Errno {
 	#define Mono_Posix_Errno_EFAULT          Mono_Posix_Errno_EFAULT
 	Mono_Posix_Errno_EFBIG                 = 0x0000001b,
 	#define Mono_Posix_Errno_EFBIG           Mono_Posix_Errno_EFBIG
+	Mono_Posix_Errno_EFTYPE                = 0x00000437,
+	#define Mono_Posix_Errno_EFTYPE          Mono_Posix_Errno_EFTYPE
 	Mono_Posix_Errno_EHOSTDOWN             = 0x00000070,
 	#define Mono_Posix_Errno_EHOSTDOWN       Mono_Posix_Errno_EHOSTDOWN
 	Mono_Posix_Errno_EHOSTUNREACH          = 0x00000071,
@@ -274,6 +305,12 @@ enum Mono_Posix_Errno {
 	#define Mono_Posix_Errno_EISDIR          Mono_Posix_Errno_EISDIR
 	Mono_Posix_Errno_EISNAM                = 0x00000078,
 	#define Mono_Posix_Errno_EISNAM          Mono_Posix_Errno_EISNAM
+	Mono_Posix_Errno_EKEYEXPIRED           = 0x0000007f,
+	#define Mono_Posix_Errno_EKEYEXPIRED     Mono_Posix_Errno_EKEYEXPIRED
+	Mono_Posix_Errno_EKEYREJECTED          = 0x00000081,
+	#define Mono_Posix_Errno_EKEYREJECTED    Mono_Posix_Errno_EKEYREJECTED
+	Mono_Posix_Errno_EKEYREVOKED           = 0x00000080,
+	#define Mono_Posix_Errno_EKEYREVOKED     Mono_Posix_Errno_EKEYREVOKED
 	Mono_Posix_Errno_EL2HLT                = 0x00000033,
 	#define Mono_Posix_Errno_EL2HLT          Mono_Posix_Errno_EL2HLT
 	Mono_Posix_Errno_EL2NSYNC              = 0x0000002d,
@@ -310,6 +347,8 @@ enum Mono_Posix_Errno {
 	#define Mono_Posix_Errno_ENAMETOOLONG    Mono_Posix_Errno_ENAMETOOLONG
 	Mono_Posix_Errno_ENAVAIL               = 0x00000077,
 	#define Mono_Posix_Errno_ENAVAIL         Mono_Posix_Errno_ENAVAIL
+	Mono_Posix_Errno_ENEEDAUTH             = 0x00000439,
+	#define Mono_Posix_Errno_ENEEDAUTH       Mono_Posix_Errno_ENEEDAUTH
 	Mono_Posix_Errno_ENETDOWN              = 0x00000064,
 	#define Mono_Posix_Errno_ENETDOWN        Mono_Posix_Errno_ENETDOWN
 	Mono_Posix_Errno_ENETRESET             = 0x00000066,
@@ -320,6 +359,8 @@ enum Mono_Posix_Errno {
 	#define Mono_Posix_Errno_ENFILE          Mono_Posix_Errno_ENFILE
 	Mono_Posix_Errno_ENOANO                = 0x00000037,
 	#define Mono_Posix_Errno_ENOANO          Mono_Posix_Errno_ENOANO
+	Mono_Posix_Errno_ENOATTR               = 0x00000445,
+	#define Mono_Posix_Errno_ENOATTR         Mono_Posix_Errno_ENOATTR
 	Mono_Posix_Errno_ENOBUFS               = 0x00000069,
 	#define Mono_Posix_Errno_ENOBUFS         Mono_Posix_Errno_ENOBUFS
 	Mono_Posix_Errno_ENOCSI                = 0x00000032,
@@ -332,6 +373,8 @@ enum Mono_Posix_Errno {
 	#define Mono_Posix_Errno_ENOENT          Mono_Posix_Errno_ENOENT
 	Mono_Posix_Errno_ENOEXEC               = 0x00000008,
 	#define Mono_Posix_Errno_ENOEXEC         Mono_Posix_Errno_ENOEXEC
+	Mono_Posix_Errno_ENOKEY                = 0x0000007e,
+	#define Mono_Posix_Errno_ENOKEY          Mono_Posix_Errno_ENOKEY
 	Mono_Posix_Errno_ENOLCK                = 0x00000025,
 	#define Mono_Posix_Errno_ENOLCK          Mono_Posix_Errno_ENOLCK
 	Mono_Posix_Errno_ENOLINK               = 0x00000043,
@@ -346,6 +389,8 @@ enum Mono_Posix_Errno {
 	#define Mono_Posix_Errno_ENONET          Mono_Posix_Errno_ENONET
 	Mono_Posix_Errno_ENOPKG                = 0x00000041,
 	#define Mono_Posix_Errno_ENOPKG          Mono_Posix_Errno_ENOPKG
+	Mono_Posix_Errno_ENOPOLICY             = 0x0000044f,
+	#define Mono_Posix_Errno_ENOPOLICY       Mono_Posix_Errno_ENOPOLICY
 	Mono_Posix_Errno_ENOPROTOOPT           = 0x0000005c,
 	#define Mono_Posix_Errno_ENOPROTOOPT     Mono_Posix_Errno_ENOPROTOOPT
 	Mono_Posix_Errno_ENOSPC                = 0x0000001c,
@@ -366,6 +411,8 @@ enum Mono_Posix_Errno {
 	#define Mono_Posix_Errno_ENOTEMPTY       Mono_Posix_Errno_ENOTEMPTY
 	Mono_Posix_Errno_ENOTNAM               = 0x00000076,
 	#define Mono_Posix_Errno_ENOTNAM         Mono_Posix_Errno_ENOTNAM
+	Mono_Posix_Errno_ENOTRECOVERABLE       = 0x00000083,
+	#define Mono_Posix_Errno_ENOTRECOVERABLE Mono_Posix_Errno_ENOTRECOVERABLE
 	Mono_Posix_Errno_ENOTSOCK              = 0x00000058,
 	#define Mono_Posix_Errno_ENOTSOCK        Mono_Posix_Errno_ENOTSOCK
 	Mono_Posix_Errno_ENOTTY                = 0x00000019,
@@ -378,18 +425,30 @@ enum Mono_Posix_Errno {
 	#define Mono_Posix_Errno_EOPNOTSUPP      Mono_Posix_Errno_EOPNOTSUPP
 	Mono_Posix_Errno_EOVERFLOW             = 0x0000004b,
 	#define Mono_Posix_Errno_EOVERFLOW       Mono_Posix_Errno_EOVERFLOW
+	Mono_Posix_Errno_EOWNERDEAD            = 0x00000082,
+	#define Mono_Posix_Errno_EOWNERDEAD      Mono_Posix_Errno_EOWNERDEAD
 	Mono_Posix_Errno_EPERM                 = 0x00000001,
 	#define Mono_Posix_Errno_EPERM           Mono_Posix_Errno_EPERM
 	Mono_Posix_Errno_EPFNOSUPPORT          = 0x00000060,
 	#define Mono_Posix_Errno_EPFNOSUPPORT    Mono_Posix_Errno_EPFNOSUPPORT
 	Mono_Posix_Errno_EPIPE                 = 0x00000020,
 	#define Mono_Posix_Errno_EPIPE           Mono_Posix_Errno_EPIPE
+	Mono_Posix_Errno_EPROCLIM              = 0x0000042b,
+	#define Mono_Posix_Errno_EPROCLIM        Mono_Posix_Errno_EPROCLIM
+	Mono_Posix_Errno_EPROCUNAVAIL          = 0x00000434,
+	#define Mono_Posix_Errno_EPROCUNAVAIL    Mono_Posix_Errno_EPROCUNAVAIL
+	Mono_Posix_Errno_EPROGMISMATCH         = 0x00000433,
+	#define Mono_Posix_Errno_EPROGMISMATCH   Mono_Posix_Errno_EPROGMISMATCH
+	Mono_Posix_Errno_EPROGUNAVAIL          = 0x00000432,
+	#define Mono_Posix_Errno_EPROGUNAVAIL    Mono_Posix_Errno_EPROGUNAVAIL
 	Mono_Posix_Errno_EPROTO                = 0x00000047,
 	#define Mono_Posix_Errno_EPROTO          Mono_Posix_Errno_EPROTO
 	Mono_Posix_Errno_EPROTONOSUPPORT       = 0x0000005d,
 	#define Mono_Posix_Errno_EPROTONOSUPPORT Mono_Posix_Errno_EPROTONOSUPPORT
 	Mono_Posix_Errno_EPROTOTYPE            = 0x0000005b,
 	#define Mono_Posix_Errno_EPROTOTYPE      Mono_Posix_Errno_EPROTOTYPE
+	Mono_Posix_Errno_EPWROFF               = 0x0000043a,
+	#define Mono_Posix_Errno_EPWROFF         Mono_Posix_Errno_EPWROFF
 	Mono_Posix_Errno_ERANGE                = 0x00000022,
 	#define Mono_Posix_Errno_ERANGE          Mono_Posix_Errno_ERANGE
 	Mono_Posix_Errno_EREMCHG               = 0x0000004e,
@@ -402,6 +461,10 @@ enum Mono_Posix_Errno {
 	#define Mono_Posix_Errno_ERESTART        Mono_Posix_Errno_ERESTART
 	Mono_Posix_Errno_EROFS                 = 0x0000001e,
 	#define Mono_Posix_Errno_EROFS           Mono_Posix_Errno_EROFS
+	Mono_Posix_Errno_ERPCMISMATCH          = 0x00000431,
+	#define Mono_Posix_Errno_ERPCMISMATCH    Mono_Posix_Errno_ERPCMISMATCH
+	Mono_Posix_Errno_ESHLIBVERS            = 0x0000043f,
+	#define Mono_Posix_Errno_ESHLIBVERS      Mono_Posix_Errno_ESHLIBVERS
 	Mono_Posix_Errno_ESHUTDOWN             = 0x0000006c,
 	#define Mono_Posix_Errno_ESHUTDOWN       Mono_Posix_Errno_ESHUTDOWN
 	Mono_Posix_Errno_ESOCKTNOSUPPORT       = 0x0000005e,
@@ -455,6 +518,8 @@ enum Mono_Posix_FcntlCommand {
 	#define Mono_Posix_FcntlCommand_F_GETOWN   Mono_Posix_FcntlCommand_F_GETOWN
 	Mono_Posix_FcntlCommand_F_GETSIG         = 0x0000000b,
 	#define Mono_Posix_FcntlCommand_F_GETSIG   Mono_Posix_FcntlCommand_F_GETSIG
+	Mono_Posix_FcntlCommand_F_NOCACHE        = 0x00000030,
+	#define Mono_Posix_FcntlCommand_F_NOCACHE  Mono_Posix_FcntlCommand_F_NOCACHE
 	Mono_Posix_FcntlCommand_F_NOTIFY         = 0x00000402,
 	#define Mono_Posix_FcntlCommand_F_NOTIFY   Mono_Posix_FcntlCommand_F_NOTIFY
 	Mono_Posix_FcntlCommand_F_SETFD          = 0x00000002,
@@ -669,6 +734,8 @@ enum Mono_Posix_OpenFlags {
 	#define Mono_Posix_OpenFlags_O_APPEND    Mono_Posix_OpenFlags_O_APPEND
 	Mono_Posix_OpenFlags_O_ASYNC           = 0x00002000,
 	#define Mono_Posix_OpenFlags_O_ASYNC     Mono_Posix_OpenFlags_O_ASYNC
+	Mono_Posix_OpenFlags_O_CLOEXEC         = 0x00080000,
+	#define Mono_Posix_OpenFlags_O_CLOEXEC   Mono_Posix_OpenFlags_O_CLOEXEC
 	Mono_Posix_OpenFlags_O_CREAT           = 0x00000040,
 	#define Mono_Posix_OpenFlags_O_CREAT     Mono_Posix_OpenFlags_O_CREAT
 	Mono_Posix_OpenFlags_O_DIRECT          = 0x00004000,
@@ -685,6 +752,8 @@ enum Mono_Posix_OpenFlags {
 	#define Mono_Posix_OpenFlags_O_NOFOLLOW  Mono_Posix_OpenFlags_O_NOFOLLOW
 	Mono_Posix_OpenFlags_O_NONBLOCK        = 0x00000800,
 	#define Mono_Posix_OpenFlags_O_NONBLOCK  Mono_Posix_OpenFlags_O_NONBLOCK
+	Mono_Posix_OpenFlags_O_PATH            = 0x00200000,
+	#define Mono_Posix_OpenFlags_O_PATH      Mono_Posix_OpenFlags_O_PATH
 	Mono_Posix_OpenFlags_O_RDONLY          = 0x00000000,
 	#define Mono_Posix_OpenFlags_O_RDONLY    Mono_Posix_OpenFlags_O_RDONLY
 	Mono_Posix_OpenFlags_O_RDWR            = 0x00000002,
@@ -1411,6 +1480,7 @@ int Mono_Posix_ToXattrFlags (int x, int *r);
  */
 
 struct Mono_Posix_Flock;
+struct Mono_Posix_Iovec;
 struct Mono_Posix_Pollfd;
 struct Mono_Posix_Stat;
 struct Mono_Posix_Statvfs;
@@ -1430,8 +1500,8 @@ struct Mono_Unix_UnixSignal_SignalInfo;
  */
 
 struct flock;
+struct iovec;
 struct pollfd;
-struct stat;
 struct timespec;
 struct timeval;
 struct timezone;
@@ -1461,6 +1531,17 @@ int
 Mono_Posix_ToFlock (struct flock *from, struct Mono_Posix_Flock* to);
 
 
+struct Mono_Posix_Iovec {
+	void*   iov_base;
+	guint64 iov_len;
+};
+
+int
+Mono_Posix_FromIovec (struct Mono_Posix_Iovec* from, struct iovec *to);
+int
+Mono_Posix_ToIovec (struct iovec *from, struct Mono_Posix_Iovec* to);
+
+
 struct Mono_Posix_Pollfd {
 	int   fd;
 	short events;
@@ -1474,27 +1555,24 @@ Mono_Posix_ToPollfd (struct pollfd *from, struct Mono_Posix_Pollfd* to);
 
 
 struct Mono_Posix_Stat {
-	guint64      st_dev;      /* dev_t     */
-	guint64      st_ino;      /* ino_t     */
+	guint64      st_dev;         /* dev_t     */
+	guint64      st_ino;         /* ino_t     */
 	unsigned int st_mode;
 	unsigned int _padding_;
-	guint64      st_nlink;    /* nlink_t   */
-	unsigned int st_uid;      /* uid_t     */
-	unsigned int st_gid;      /* gid_t     */
-	guint64      st_rdev;     /* dev_t     */
-	gint64       st_size;     /* off_t     */
-	gint64       st_blksize;  /* blksize_t */
-	gint64       st_blocks;   /* blkcnt_t  */
-	gint64       st_atime_;   /* time_t    */
-	gint64       st_mtime_;   /* time_t    */
-	gint64       st_ctime_;   /* time_t    */
+	guint64      st_nlink;       /* nlink_t   */
+	unsigned int st_uid;         /* uid_t     */
+	unsigned int st_gid;         /* gid_t     */
+	guint64      st_rdev;        /* dev_t     */
+	gint64       st_size;        /* off_t     */
+	gint64       st_blksize;     /* blksize_t */
+	gint64       st_blocks;      /* blkcnt_t  */
+	gint64       st_atime_;      /* time_t    */
+	gint64       st_mtime_;      /* time_t    */
+	gint64       st_ctime_;      /* time_t    */
+	gint64       st_atime_nsec;
+	gint64       st_mtime_nsec;
+	gint64       st_ctime_nsec;
 };
-
-int
-Mono_Posix_FromStat (struct Mono_Posix_Stat* from, struct stat *to);
-int
-Mono_Posix_ToStat (struct stat *from, struct Mono_Posix_Stat* to);
-
 
 struct Mono_Posix_Statvfs {
 	guint64 f_bsize;
@@ -1626,6 +1704,7 @@ int map_Mono_Posix_FileMode (int mode);
 int map_Mono_Posix_OpenFlags (int flags);
 int map_Mono_Posix_WaitOptions (int wait_options);
 int Mono_Posix_FromRealTimeSignum (int offset, int* rval);
+int Mono_Posix_FromStat (struct Mono_Posix_Stat* source, void* destination);
 int Mono_Posix_FromStatvfs (struct Mono_Posix_Statvfs* source, void* destination);
 int Mono_Posix_SIGRTMAX (void);
 int Mono_Posix_SIGRTMIN (void);
@@ -1685,9 +1764,14 @@ gint64 Mono_Posix_Syscall_fpathconf (int filedes, int name, int defaultError);
 int Mono_Posix_Syscall_fremovexattr (int fd, const char* name);
 int Mono_Posix_Syscall_fsetxattr (int fd, const char* name, unsigned char* value, guint64 size, int flags);
 int Mono_Posix_Syscall_fstat (int filedes, struct Mono_Posix_Stat* buf);
+int Mono_Posix_Syscall_fstatat (int dirfd, const char* file_name, struct Mono_Posix_Stat* buf, int flags);
 int Mono_Posix_Syscall_fstatvfs (int fd, struct Mono_Posix_Statvfs* buf);
 int Mono_Posix_Syscall_ftruncate (int fd, gint64 length);
+int Mono_Posix_Syscall_futimens (int fd, struct Mono_Posix_Timespec* times);
 int Mono_Posix_Syscall_futimes (int fd, struct Mono_Posix_Timeval* tvp);
+int Mono_Posix_Syscall_get_at_fdcwd (void);
+gint64 Mono_Posix_Syscall_get_utime_now (void);
+gint64 Mono_Posix_Syscall_get_utime_omit (void);
 void* Mono_Posix_Syscall_getcwd (char* buf, guint64 size);
 int Mono_Posix_Syscall_getdomainname (char* name, guint64 len);
 int Mono_Posix_Syscall_getfsent (struct Mono_Posix_Syscall__Fstab* fs);
@@ -1721,6 +1805,7 @@ int Mono_Posix_Syscall_lstat (const char* file_name, struct Mono_Posix_Stat* buf
 int Mono_Posix_Syscall_lutimes (const char* filename, struct Mono_Posix_Timeval* tvp);
 int Mono_Posix_Syscall_mincore (void* start, guint64 length, unsigned char* vec);
 int Mono_Posix_Syscall_mknod (const char* pathname, unsigned int mode, guint64 dev);
+int Mono_Posix_Syscall_mknodat (int dirfd, const char* pathname, unsigned int mode, guint64 dev);
 int Mono_Posix_Syscall_mlock (void* start, guint64 len);
 void* Mono_Posix_Syscall_mmap (void* start, guint64 length, int prot, int flags, int fd, gint64 offset);
 int Mono_Posix_Syscall_mprotect (void* start, guint64 len, int prot);
@@ -1738,12 +1823,16 @@ int Mono_Posix_Syscall_posix_fadvise (int fd, gint64 offset, gint64 len, int adv
 int Mono_Posix_Syscall_posix_fallocate (int fd, gint64 offset, guint64 len);
 int Mono_Posix_Syscall_posix_madvise (void* addr, guint64 len, int advice);
 gint64 Mono_Posix_Syscall_pread (int fd, void* buf, guint64 count, gint64 offset);
+gint64 Mono_Posix_Syscall_preadv (int fd, struct Mono_Posix_Iovec* iov, int iovcnt, gint64 offset);
 int Mono_Posix_Syscall_psignal (int sig, const char* s);
 gint64 Mono_Posix_Syscall_pwrite (int fd, void* buf, guint64 count, gint64 offset);
+gint64 Mono_Posix_Syscall_pwritev (int fd, struct Mono_Posix_Iovec* iov, int iovcnt, gint64 offset);
 gint64 Mono_Posix_Syscall_read (int fd, void* buf, guint64 count);
 int Mono_Posix_Syscall_readdir (void* dir, struct Mono_Posix_Syscall__Dirent* dentry);
 int Mono_Posix_Syscall_readdir_r (void* dirp, struct Mono_Posix_Syscall__Dirent* entry, void** result);
-int Mono_Posix_Syscall_readlink (const char* path, char* buf, guint64 bufsiz);
+gint64 Mono_Posix_Syscall_readlink (const char* path, unsigned char* buf, guint64 bufsiz);
+gint64 Mono_Posix_Syscall_readlinkat (int dirfd, const char* pathname, unsigned char* buf, guint64 bufsiz);
+gint64 Mono_Posix_Syscall_readv (int fd, struct Mono_Posix_Iovec* iov, int iovcnt);
 int Mono_Posix_Syscall_remap_file_pages (void* start, guint64 size, int prot, gint64 pgoff, int flags);
 int Mono_Posix_Syscall_removexattr (const char* path, const char* name);
 int Mono_Posix_Syscall_rewinddir (void* dir);
@@ -1773,14 +1862,17 @@ int Mono_Posix_Syscall_truncate (const char* path, gint64 length);
 int Mono_Posix_Syscall_ttyname_r (int fd, char* buf, guint64 buflen);
 int Mono_Posix_Syscall_uname (struct Mono_Posix_Syscall__Utsname* buf);
 int Mono_Posix_Syscall_utime (const char* filename, struct Mono_Posix_Utimbuf* buf, int use_buf);
+int Mono_Posix_Syscall_utimensat (int dirfd, const char* pathname, struct Mono_Posix_Timespec* times, int flags);
 int Mono_Posix_Syscall_utimes (const char* filename, struct Mono_Posix_Timeval* tvp);
 int Mono_Posix_Syscall_WEXITSTATUS (int status);
 int Mono_Posix_Syscall_WIFEXITED (int status);
 int Mono_Posix_Syscall_WIFSIGNALED (int status);
 int Mono_Posix_Syscall_WIFSTOPPED (int status);
 gint64 Mono_Posix_Syscall_write (int fd, void* buf, guint64 count);
+gint64 Mono_Posix_Syscall_writev (int fd, struct Mono_Posix_Iovec* iov, int iovcnt);
 int Mono_Posix_Syscall_WSTOPSIG (int status);
 int Mono_Posix_Syscall_WTERMSIG (int status);
+int Mono_Posix_ToStat (void* source, struct Mono_Posix_Stat* destination);
 int Mono_Posix_ToStatvfs (void* source, struct Mono_Posix_Statvfs* destination);
 void* Mono_Unix_UnixSignal_install (int signum);
 int Mono_Unix_UnixSignal_uninstall (void* info);

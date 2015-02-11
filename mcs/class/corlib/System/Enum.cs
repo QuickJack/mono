@@ -5,13 +5,11 @@
 //   Miguel de Icaza (miguel@ximian.com)
 //   Nick Drochak (ndrochak@gol.com)
 //   Gonzalo Paniagua Javier (gonzalo@ximian.com)
+//   Marek Safar (marek.safar@gmail.com)
 //
 // (C) Ximian, Inc.  http://www.ximian.com
-//
-//
-
-//
 // Copyright (C) 2004 Novell, Inc (http://www.novell.com)
+// Copyright 2015 Xamarin, Inc (http://www.xamarin.com)
 //
 // Permission is hereby granted, free of charge, to any person obtaining
 // a copy of this software and associated documentation files (the
@@ -34,9 +32,11 @@
 //
 
 using System.Collections;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Reflection;
 
 namespace System
 {
@@ -45,10 +45,10 @@ namespace System
 		internal Type utype;
 		internal Array values;
 		internal string[] names;
-		internal Hashtable name_hash;
+		internal Dictionary<string, int> name_hash;
 		[ThreadStatic]
-		static Hashtable cache;
-		static Hashtable global_cache = new Hashtable ();
+		static Dictionary<Type, MonoEnumInfo> cache;
+		static readonly Dictionary<Type, MonoEnumInfo> global_cache = new Dictionary<Type, MonoEnumInfo> ();
 		static object global_cache_monitor = new object ();
 		
 		[MethodImplAttribute (MethodImplOptions.InternalCall)]
@@ -81,7 +81,7 @@ namespace System
 		}
 		
 		internal class ShortComparer : IComparer, System.Collections.Generic.IComparer<short>
-	  	{
+		{
 			public int Compare (object x, object y)
 			{
 				short ix = (short) x;
@@ -146,14 +146,6 @@ namespace System
 			}
 		}
 
-		static Hashtable Cache {
-			get {
-				if (cache == null) {
-					cache = new Hashtable ();
-				}
-				return cache;
-			}
-		}
 		private MonoEnumInfo (MonoEnumInfo other)
 		{
 			utype = other.utype;
@@ -164,28 +156,40 @@ namespace System
 		
 		internal static void GetInfo (Type enumType, out MonoEnumInfo info)
 		{
-			/* First check the thread-local cache without locking */
-			if (Cache.ContainsKey (enumType)) {
-				info = (MonoEnumInfo) cache [enumType];
-				return;
-			}
-			/* Threads could die, so keep a global cache too */
-			lock (global_cache_monitor) {
-				if (global_cache.ContainsKey (enumType)) {
-					object boxedInfo = global_cache [enumType];
-					cache [enumType] = boxedInfo;
-					info = (MonoEnumInfo)boxedInfo;
+			var user_type = !(enumType is MonoType);
+
+			if (user_type) {
+				GetUserEnumInfo (enumType, out info);
+			} else {
+				/* First check the thread-local cache without locking */
+				if (cache != null && cache.TryGetValue (enumType, out info)) {
 					return;
 				}
+
+				/* Threads could die, so keep a global cache too */
+				lock (global_cache_monitor) {
+					if (global_cache.TryGetValue (enumType, out info)) {
+						if (cache == null)
+							cache = new Dictionary<Type, MonoEnumInfo> ();
+
+						cache [enumType] = info;
+						return;
+					}
+				}
+
+				// TODO: return info with ulong values only to avoid all sorts of
+				// Array trick and slow paths
+				get_enum_info (enumType, out info);
 			}
 
-			get_enum_info (enumType, out info);
+			SortEnums (info.utype, info.values, info.names);
 
-			Type et = Enum.GetUnderlyingType (enumType);
-			SortEnums (et, info.values, info.names);
+			// User types can have unreliable/not-implemented GetHashCode
+			if (user_type)
+				return;
 			
 			if (info.names.Length > 50) {
-				info.name_hash = new Hashtable (info.names.Length);
+				info.name_hash = new Dictionary<string, int> (info.names.Length);
 				for (int i = 0; i <  info.names.Length; ++i)
 					info.name_hash [info.names [i]] = i;
 			}
@@ -194,10 +198,48 @@ namespace System
 				global_cache [enumType] = cached;
 			}
 		}
-		
-		internal static void SortEnums (Type et, Array values, Array names)
+
+		static void GetUserEnumInfo (Type type, out MonoEnumInfo mei)
 		{
-			IComparer ic = null;
+			mei = new MonoEnumInfo ();
+			mei.utype = typeof (UInt64);
+
+			var fields = type.GetFields (BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
+			mei.names = new string [fields.Length];
+			var values = new UInt64 [fields.Length];
+			mei.values = values;
+
+			for (int i = 0; i < fields.Length; ++i) {
+				mei.names [i] = fields [i].Name;
+				values [i] = ToUInt64 (fields [i].GetRawConstantValue ());
+			}
+		}
+
+		public static ulong ToUInt64 (object value)
+		{
+			switch (Convert.GetTypeCode (value)) {
+			case TypeCode.SByte:
+			case TypeCode.Int16:
+			case TypeCode.Int32:
+			case TypeCode.Int64:
+				return (UInt64) Convert.ToInt64 (value, CultureInfo.InvariantCulture);
+
+			case TypeCode.Byte:
+			case TypeCode.UInt16:
+			case TypeCode.UInt32:
+			case TypeCode.UInt64:
+			case TypeCode.Boolean:
+			case TypeCode.Char:
+				return Convert.ToUInt64 (value, CultureInfo.InvariantCulture);
+
+			default:
+				throw new ArgumentException ("Value is not the enum or a valid enum underlying type", "value");
+			}
+		}
+		
+		internal static void SortEnums (Type et, Array values, string[] names)
+		{
+			IComparer ic;
 			if (et == typeof (int))
 				ic = int_comparer;
 			else if (et == typeof (short))
@@ -206,10 +248,12 @@ namespace System
 				ic = sbyte_comparer;
 			else if (et == typeof (long))
 				ic = long_comparer;
-			
+			else
+				ic = null;
+				
 			Array.Sort (values, names, ic);
 		}
-	};
+	}
 
 	[Serializable]
 	[ComVisible (true)]
@@ -280,13 +324,9 @@ namespace System
 			return Convert.ToSingle (Value, provider);
 		}
 
-		object IConvertible.ToType (Type targetType, IFormatProvider provider)
+		object IConvertible.ToType (Type type, IFormatProvider provider)
 		{
-			if (targetType == null)
-				throw new ArgumentNullException ("targetType");
-			if (targetType == typeof (string))
-				return ToString (provider);
-			return Convert.ToType (Value, targetType, provider, false);
+			return Convert.DefaultToType ((IConvertible)this, type, provider);
 		}
 
 		ushort IConvertible.ToUInt16 (IFormatProvider provider)
@@ -348,9 +388,9 @@ namespace System
 		//
 		// It also tries to use the non-boxing version of the various Array.BinarySearch methods
 		//
-		static int FindPosition (Type enumType, object value, Array values)
+		static int FindPosition (Type underlyingEnumType, object value, Array values)
 		{
-			switch (Type.GetTypeCode (GetUnderlyingType (enumType))) {
+			switch (Type.GetTypeCode (underlyingEnumType)) {
 			case TypeCode.SByte:
 				sbyte [] sbyte_array = values as sbyte [];
 				return Array.BinarySearch (sbyte_array, (sbyte) value,  MonoEnumInfo.sbyte_comparer);
@@ -385,7 +425,7 @@ namespace System
 
 			default:
 				// This should never happen
-				return Array.BinarySearch (values, value);
+				throw new NotSupportedException ("Unknown underlying enum type");
 			}
 		}
 	
@@ -401,10 +441,14 @@ namespace System
 				throw new ArgumentException ("enumType is not an Enum type.", "enumType");
 
 			MonoEnumInfo info;
-			value = ToObject (enumType, value);
 			MonoEnumInfo.GetInfo (enumType, out info);
 
-			int i = FindPosition (enumType, value, info.values);
+			if (enumType is MonoType)
+				value = ToObject (enumType, value);
+			else
+				value = MonoEnumInfo.ToUInt64 (value);
+
+			int i = FindPosition (info.utype, value, info.values);
 			return (i >= 0) ? info.names [i] : null;
 		}
 
@@ -423,18 +467,31 @@ namespace System
 			MonoEnumInfo.GetInfo (enumType, out info);
 
 			Type vType = value.GetType ();
-			if (vType == typeof(String)) {
+			if (vType == typeof (String)) {
 				return ((IList)(info.names)).Contains (value);
-			} else if ((vType == info.utype) || (vType == enumType)) {
-				value = ToObject (enumType, value);
-				MonoEnumInfo.GetInfo (enumType, out info);
+			}
 
-				return FindPosition (enumType, value, info.values) >= 0;
-			} else {
+			if ((vType == info.utype || !(enumType is MonoType)) || (vType == enumType)) {
+				if (enumType is MonoType)
+					value = ToObject (enumType, value);
+				else
+					value = MonoEnumInfo.ToUInt64 (value);
+
+				MonoEnumInfo.GetInfo (enumType, out info);
+				return FindPosition (info.utype, value, info.values) >= 0;
+			}
+
+			if (IsValidEnumType (info.utype))
 				throw new ArgumentException("The value parameter is not the correct type. "
 					+ "It must be type String or the same type as the underlying type "
 					+ "of the Enum.");
-			}
+
+			throw new InvalidOperationException ("Unknown enum type.");
+		}
+
+		static bool IsValidEnumType (Type type)
+		{
+			return (type.IsPrimitive && type != typeof (double) && type != typeof (float));
 		}
 
 		[MethodImplAttribute (MethodImplOptions.InternalCall)]
@@ -459,14 +516,14 @@ namespace System
 			return Parse (enumType, value, false);
 		}
 
-		private static int FindName (Hashtable name_hash, string [] names, string name,  bool ignoreCase)
+		private static int FindName (IDictionary<string, int> name_hash, string [] names, string name,  bool ignoreCase)
 		{
 			if (!ignoreCase) {
 				/* For enums with many values, use a hash table */
 				if (name_hash != null) {
-					object val = name_hash [name];
-					if (val != null)
-						return (int)val;
+					int val;
+					if (name_hash.TryGetValue (name, out val))
+						return val;
 				} else {
 					for (int i = 0; i < names.Length; ++i) {
 						if (name == names [i])
@@ -621,7 +678,6 @@ namespace System
 			return true;
 		}
 
-#if NET_4_0 || MOONLIGHT || MOBILE
 		public static bool TryParse<TEnum> (string value, out TEnum result) where TEnum : struct
 		{
 			return TryParse (value, false, out result);
@@ -635,12 +691,15 @@ namespace System
 
 			result = default (TEnum);
 
-			if (value == null || value.Trim ().Length == 0)
+			if (value == null)
+				return false;
+
+			value = value.Trim ();
+			if (value.Length == 0)
 				return false;
 
 			return Parse (tenum_type, value, ignoreCase, out result);
 		}
-#endif
 
 		[MethodImplAttribute (MethodImplOptions.InternalCall)]
 		private extern int compare_value_to (object other);
@@ -669,7 +728,7 @@ namespace System
 
 		public override string ToString ()
 		{
-			return ToString ("G");
+			return Format (GetType (), Value, "G");
 		}
 
 		[Obsolete("Provider is ignored, just use ToString")]
@@ -769,24 +828,24 @@ namespace System
 		private static string FormatSpecifier_X (Type enumType, object value, bool upper)
 		{
 			switch (Type.GetTypeCode (enumType)) {
-				case TypeCode.SByte:
-					return ((sbyte)value).ToString (upper ? "X2" : "x2");
-				case TypeCode.Byte:
-					return ((byte)value).ToString (upper ? "X2" : "x2");
-				case TypeCode.Int16:
-					return ((short)value).ToString (upper ? "X4" : "x4");
-				case TypeCode.UInt16:
-					return ((ushort)value).ToString (upper ? "X4" : "x4");
-				case TypeCode.Int32:
-					return ((int)value).ToString (upper ? "X8" : "x8");
-				case TypeCode.UInt32:
-					return ((uint)value).ToString (upper ? "X8" : "x8");
-				case TypeCode.Int64:
-					return ((long)value).ToString (upper ? "X16" : "x16");
-				case TypeCode.UInt64:
-					return ((ulong)value).ToString (upper ? "X16" : "x16");
-				default:
-					throw new Exception ("Invalid type code for enumeration.");
+			case TypeCode.SByte:
+				return NumberFormatter.NumberToString (upper ? "X2" : "x2", ((sbyte)value), null);
+			case TypeCode.Byte:
+				return NumberFormatter.NumberToString (upper ? "X2" : "x2", ((byte)value), null);
+			case TypeCode.Int16:
+				return NumberFormatter.NumberToString (upper ? "X4" : "x4", ((short)value), null);
+			case TypeCode.UInt16:
+				return NumberFormatter.NumberToString (upper ? "X4" : "x4", ((ushort)value), null);
+			case TypeCode.Int32:
+				return NumberFormatter.NumberToString (upper ? "X8" : "x8", ((int)value), null);
+			case TypeCode.UInt32:
+				return NumberFormatter.NumberToString (upper ? "X8" : "x8", ((uint)value), null);
+			case TypeCode.Int64:
+				return NumberFormatter.NumberToString (upper ? "X16" : "x16", ((long)value), null);
+			case TypeCode.UInt64:
+				return NumberFormatter.NumberToString (upper ? "X16" : "x16", ((ulong)value), null);
+			default:
+				throw new Exception ("Invalid type code for enumeration.");
 			}
 		}
 
@@ -958,71 +1017,57 @@ namespace System
 			Type underlyingType = Enum.GetUnderlyingType (enumType);
 			if (vType.IsEnum) {
 				if (vType != enumType)
-					throw new ArgumentException (string.Format(CultureInfo.InvariantCulture,
+					throw new ArgumentException (string.Format(
 						"Object must be the same type as the enum. The type" +
 						" passed in was {0}; the enum type was {1}.",
 						vType.FullName, enumType.FullName));
 			} else if (vType != underlyingType) {
-				throw new ArgumentException (string.Format (CultureInfo.InvariantCulture,
+				throw new ArgumentException (string.Format (
 					"Enum underlying type and the object must be the same type" +
 					" or object. Type passed in was {0}; the enum underlying" +
 					" type was {1}.", vType.FullName, underlyingType.FullName));
 			}
 
-			if (format.Length != 1)
-				throw new FormatException ("Format String can be only \"G\",\"g\",\"X\"," + 
-					"\"x\",\"F\",\"f\",\"D\" or \"d\".");
+			if (format.Length == 1) {
+				switch (format [0]) {
+				case 'f':
+				case 'F':
+					return FormatFlags (enumType, value);
+				case 'g':
+				case 'G':
+					if (!enumType.IsDefined (typeof(FlagsAttribute), false))
+						return GetName (enumType, value) ?? value.ToString ();
+					
+					goto case 'f';
+				case 'X':
+					return FormatSpecifier_X (enumType, value, true);
+				case 'x':
+					return FormatSpecifier_X (enumType, value, false);
+				case 'D':
+				case 'd':
+					if (vType.IsEnum)
+						value = ((Enum) value).Value;
 
-			char formatChar = format [0];
-			string retVal;
-			if ((formatChar == 'G' || formatChar == 'g')) {
-				if (!enumType.IsDefined (typeof(FlagsAttribute), false)) {
-					retVal = GetName (enumType, value);
-					if (retVal == null)
-						retVal = value.ToString();
-
-					return retVal;
+					return value.ToString ();
 				}
+			}		
 
-				formatChar = 'f';
-			}
-			
-			if ((formatChar == 'f' || formatChar == 'F'))
-				return FormatFlags (enumType, value);
-
-			retVal = String.Empty;
-			switch (formatChar) {
-			case 'X':
-				retVal = FormatSpecifier_X (enumType, value, true);
-				break;
-			case 'x':
-				retVal = FormatSpecifier_X (enumType, value, false);
-				break;
-			case 'D':
-			case 'd':
-				if (underlyingType == typeof (ulong)) {
-					ulong ulongValue = Convert.ToUInt64 (value);
-					retVal = ulongValue.ToString ();
-				} else {
-					long longValue = Convert.ToInt64 (value);
-					retVal = longValue.ToString ();
-				}
-				break;
-			default:
-				throw new FormatException ("Format String can be only \"G\",\"g\",\"X\"," + 
+			throw new FormatException ("Format String can be only \"G\",\"g\",\"X\"," + 
 					"\"x\",\"F\",\"f\",\"D\" or \"d\".");
-			}
-			return retVal;
 		}
-#if NET_4_0 || MOONLIGHT || MOBILE
+
+		[MethodImplAttribute (MethodImplOptions.InternalCall)]
+		private static extern bool InternalHasFlag (Enum a, Enum b);
+
 		public bool HasFlag (Enum flag)
 		{
-			var val = get_value ();
-			ulong mvalue = GetValue (val, Type.GetTypeCode (val.GetType ()));
-			ulong fvalue = GetValue (flag, Type.GetTypeCode (flag.GetType ()));
+			if (flag == null)
+				throw new ArgumentNullException ("flag");
 
-			return ((mvalue & fvalue) == fvalue);
+			if (!this.GetType ().IsEquivalentTo (flag.GetType ()))
+				throw new ArgumentException (Environment.GetResourceString ("Argument_EnumTypeDoesNotMatch", flag.GetType (), this.GetType ()));
+
+			return InternalHasFlag (this, flag);
 		}
-#endif
 	}
 }

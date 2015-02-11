@@ -1,5 +1,5 @@
 //
-// Comparer
+// Comparer.cs
 //
 // Authors:
 //	Ben Maurer (bmaurer@ximian.com)
@@ -47,7 +47,6 @@ namespace System.Collections.Generic {
 			}
 		}
 
-#if NET_4_5
 		public static Comparer<T> Create (Comparison<T> comparison)
 		{
 			if (comparison == null)
@@ -55,11 +54,11 @@ namespace System.Collections.Generic {
 
 			return new ComparisonComparer<T> (comparison);
 		}
-#endif
 
 		int IComparer.Compare (object x, object y)
 		{
-			
+			if (x == y)
+				return 0;
 			if (x == null)
 				return y == null ? 0 : -1;
 			if (y == null)
@@ -79,15 +78,18 @@ namespace System.Collections.Generic {
 				// `null' is less than any other ref type
 				if (x == null)
 					return y == null ? 0 : -1;
-				else if (y == null)
+				if (y == null)
 					return 1;
 	
-				if (x is IComparable<T>)
-					return ((IComparable<T>) x).CompareTo (y);
-				else if (x is IComparable)
-					return ((IComparable) x).CompareTo (y);
-				else
-					throw new ArgumentException ("does not implement right interface");
+				var i = x as IComparable;
+				if (i != null)
+					return i.CompareTo (y);
+
+				i = y as IComparable;
+				if (i != null)
+					return -i.CompareTo (x);
+
+				throw new ArgumentException ("At least one argument has to implement IComparable interface");
 			}
 		}
 	}
@@ -106,7 +108,6 @@ namespace System.Collections.Generic {
 			return x.CompareTo (y);
 		}
 	}
-#if NET_4_5
 	[Serializable]
 	sealed class ComparisonComparer<T> : Comparer<T>
 	{
@@ -122,5 +123,4 @@ namespace System.Collections.Generic {
 			return comparison (x, y);
 		}
 	}
-#endif
 }

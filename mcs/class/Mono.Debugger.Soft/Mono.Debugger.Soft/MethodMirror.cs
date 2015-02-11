@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using System.Reflection;
 using C = Mono.Cecil;
@@ -240,23 +241,23 @@ namespace Mono.Debugger.Soft
 
 		public LocalVariable[] GetLocals () {
 			if (locals == null) {
-
 				LocalsInfo li = new LocalsInfo ();
 				try {
 					li = vm.conn.Method_GetLocalsInfo (id);
 				} catch (CommandException) {
-					throw new ArgumentException ("Method doesn't have a body.");
+					throw new AbsentInformationException ();
 				}
+
 				// Add the arguments as well
-				var pi = vm.conn.Method_GetParamInfo (id);
+				var pi = GetParameters ();
 
-				locals = new LocalVariable [pi.param_count + li.names.Length];
+				locals = new LocalVariable [pi.Length + li.names.Length];
 
-				for (int i = 0; i < pi.param_count; ++i)
-					locals [i] = new LocalVariable (vm, this, i, pi.param_types [i], pi.param_names [i], -1, -1, true);
+				for (int i = 0; i < pi.Length; ++i)
+					locals [i] = new LocalVariable (vm, this, i, pi[i].ParameterType.Id, pi[i].Name, -1, -1, true);
 
 				for (int i = 0; i < li.names.Length; ++i)
-					locals [i + pi.param_count] = new LocalVariable (vm, this, i, li.types [i], li.names [i], li.live_range_start [i], li.live_range_end [i], false);
+					locals [i + pi.Length] = new LocalVariable (vm, this, i, li.types [i], li.names [i], li.live_range_start [i], li.live_range_end [i], false);
 			}
 			return locals;
 		}
@@ -306,6 +307,30 @@ namespace Mono.Debugger.Soft
 			return type_args;
 		}
 
+		// Since protocol version 2.24
+		public MethodMirror MakeGenericMethod (TypeMirror[] args) {
+			if (args == null)
+				throw new ArgumentNullException ("args");
+			foreach (var a in args)
+				if (a == null)
+					throw new ArgumentNullException ("args");
+
+			if (!IsGenericMethodDefinition)
+				throw new InvalidOperationException ("not a generic method definition");
+
+			if (GetGenericArguments ().Length != args.Length)
+				throw new ArgumentException ("Incorrect length");
+
+			vm.CheckProtocolVersion (2, 24);
+			long id = -1;
+			try {
+				id = vm.conn.Method_MakeGenericMethod (Id, args.Select (t => t.Id).ToArray ());
+			} catch (CommandException) {
+				throw new InvalidOperationException ();
+			}
+			return vm.GetMethod (id);
+		}
+
 		public IList<int> ILOffsets {
 			get {
 				if (debug_info == null)
@@ -337,14 +362,14 @@ namespace Mono.Debugger.Soft
 					var line_numbers = LineNumbers;
 					IList<Location> res = new Location [ILOffsets.Count];
 					for (int i = 0; i < il_offsets.Count; ++i)
-						res [i] = new Location (vm, this, -1, il_offsets [i], debug_info.source_files [i].source_file, line_numbers [i], debug_info.column_numbers [i], debug_info.source_files [i].hash);
+						res [i] = new Location (vm, this, -1, il_offsets [i], debug_info.source_files [i].source_file, line_numbers [i], debug_info.column_numbers [i], debug_info.end_line_numbers [i], debug_info.end_column_numbers [i], debug_info.source_files [i].hash);
 					locations = res;
 				}
 				return locations;
 			}
 		}				
 
-		internal int il_offset_to_line_number (int il_offset, out string src_file, out byte[] src_hash, out int column_number) {
+		internal int il_offset_to_line_number (int il_offset, out string src_file, out byte[] src_hash, out int column_number, out int end_line_number, out int end_column_number) {
 			if (debug_info == null)
 				debug_info = vm.conn.Method_GetDebugInfo (id);
 
@@ -352,11 +377,15 @@ namespace Mono.Debugger.Soft
 			src_file = null;
 			src_hash = null;
 			column_number = 0;
+			end_line_number = -1;
+			end_column_number = -1;
 			for (int i = debug_info.il_offsets.Length - 1; i >= 0; --i) {
 				if (debug_info.il_offsets [i] <= il_offset) {
 					src_file = debug_info.source_files [i].source_file;
 					src_hash = debug_info.source_files [i].hash;
 					column_number = debug_info.column_numbers [i];
+					end_line_number = debug_info.end_line_numbers [i];
+					end_column_number = debug_info.end_column_numbers [i];
 					return debug_info.line_numbers [i];
 				}
 			}
@@ -381,6 +410,22 @@ namespace Mono.Debugger.Soft
 					meta = (C.MethodDefinition)DeclaringType.Assembly.Metadata.MainModule.LookupToken (MetadataToken);
 				return meta;
 			}
+		}
+
+		//
+		// Evaluate the method on the client using an IL interpreter.
+		// Only supports a subset of IL instructions. Doesn't change
+		// debuggee state.
+		// Returns the result of the evaluation, or null for methods
+		// which return void.
+		// Throws a NotSupportedException if the method body contains
+		// unsupported IL instructions, or if evaluating the method
+		// would change debuggee state.
+		//
+		public Value Evaluate (Value this_val, Value[] args) {
+			var interp = new ILInterpreter (this);
+
+			return interp.Evaluate (this_val, args);
 		}
 	}
 }

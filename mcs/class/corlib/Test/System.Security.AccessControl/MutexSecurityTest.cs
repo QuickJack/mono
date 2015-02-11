@@ -5,6 +5,8 @@
 //
 // Copyright (C) 2012 James Bellinger
 
+#if !MOBILE
+
 using System;
 using System.Collections.Generic;
 using System.Security.AccessControl;
@@ -21,7 +23,7 @@ namespace MonoTests.System.Security.AccessControl
 		public void FailsForNonexistantMutex ()
 		{
 			if (PlatformID.Win32NT != Environment.OSVersion.Platform) {
-				Assert.Ignore (); return;
+				Assert.Ignore ();
 			}
 
 			new MutexSecurity (@"Local\NonexistantMutex", AccessControlSections.Access);
@@ -31,7 +33,7 @@ namespace MonoTests.System.Security.AccessControl
 		public void SucceedsForExistingMutex ()
 		{
 			if (PlatformID.Win32NT != Environment.OSVersion.Platform) {
-				Assert.Ignore (); return;
+				Assert.Ignore ();
 			}
 
 			bool createdNew;
@@ -54,7 +56,7 @@ namespace MonoTests.System.Security.AccessControl
 		public void CanSetAndGetMutexSecurity ()
 		{
 			if (PlatformID.Win32NT != Environment.OSVersion.Platform) {
-				Assert.Ignore (); return;
+				Assert.Ignore ();
 			}
 
 			MutexAccessRule rule; SecurityIdentifier sid;
@@ -97,7 +99,7 @@ namespace MonoTests.System.Security.AccessControl
 		public void PermissionsActuallyWork ()
 		{
 			if (PlatformID.Win32NT != Environment.OSVersion.Platform) {
-				Assert.Ignore (); return;
+				Assert.Ignore ();
 			}
 
 			bool createdNew; MutexSecurity security;
@@ -138,4 +140,6 @@ namespace MonoTests.System.Security.AccessControl
 		}
 	}
 }
+
+#endif
 

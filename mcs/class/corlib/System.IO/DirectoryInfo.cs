@@ -6,10 +6,12 @@
 //   Jim Richardson, develop@wtfo-guru.com
 //   Dan Lewis, dihlewis@yahoo.co.uk
 //   Sebastien Pouliot  <sebastien@ximian.com>
+//   Marek Safar  <marek.safar@gmail.com>
 //
 // Copyright (C) 2002 Ximian, Inc.
 // Copyright (C) 2001 Moonlight Enterprises, All Rights Reserved
 // Copyright (C) 2004-2005 Novell, Inc (http://www.novell.com)
+// Copyright (C) 2014 Xamarin, Inc (http://www.xamarin.com)
 //
 // Permission is hereby granted, free of charge, to any person obtaining
 // a copy of this software and associated documentation files (the
@@ -37,9 +39,7 @@ using System.Runtime.InteropServices;
 using System.Runtime.Serialization;
 using System.Security;
 using System.Text;
-#if !MOONLIGHT
 using System.Security.AccessControl;
-#endif
 
 namespace System.IO {
 	
@@ -50,11 +50,6 @@ namespace System.IO {
 		private string current;
 		private string parent;
 	
-#if MOONLIGHT
-		internal DirectoryInfo ()
-		{
-		}
-#endif
 		public DirectoryInfo (string path) : this (path, false)
 		{
 		}
@@ -209,9 +204,7 @@ namespace System.IO {
 			return GetFileSystemInfos (searchPattern, SearchOption.TopDirectoryOnly);
 		}
 
-#if NET_4_0
 		public
-#endif
 		FileSystemInfo [] GetFileSystemInfos (string searchPattern, SearchOption searchOption)
 		{
 			if (searchPattern == null)
@@ -272,7 +265,6 @@ namespace System.IO {
 			return OriginalPath;
 		}
 
-#if !MOONLIGHT
 		public DirectoryInfo[] GetDirectories (string searchPattern, SearchOption searchOption)
 		{
 		    //NULL-check of searchPattern is done in Directory.GetDirectories
@@ -361,9 +353,7 @@ namespace System.IO {
 		{
 			Directory.SetAccessControl (FullPath, directorySecurity);
 		}
-#endif
 
-#if NET_4_0 || MOONLIGHT || MOBILE
 
 		public IEnumerable<DirectoryInfo> EnumerateDirectories ()
 		{
@@ -450,31 +440,24 @@ namespace System.IO {
 				throw MonoIO.GetException (Path.GetDirectoryName (path_with_pattern), (MonoIOError) error);
 
 			try {
-				if (((rattr & FileAttributes.ReparsePoint) == 0)){
-					if ((rattr & FileAttributes.Directory) != 0)
-						yield return new DirectoryInfo (s);
-					else
-						yield return new FileInfo (s);
-				}
-				
-				while ((s = MonoIO.FindNext (handle, out rattr, out error)) != null){
-					if ((rattr & FileAttributes.ReparsePoint) != 0)
-						continue;
-					if ((rattr & FileAttributes.Directory) != 0)
-						yield return new DirectoryInfo (s);
-					else
-						yield return new FileInfo (s);
-					
+				do {
+					if (((rattr & FileAttributes.ReparsePoint) == 0)){
+						if ((rattr & FileAttributes.Directory) != 0)
+							yield return new DirectoryInfo (s);
+						else
+							yield return new FileInfo (s);
+					}
+
 					if (((rattr & FileAttributes.Directory) != 0) && subdirs)
 						foreach (FileSystemInfo child in EnumerateFileSystemInfos (s, searchPattern, searchOption))
 							yield return child;
-				}
+
+				} while ((s = MonoIO.FindNext (handle, out rattr, out error)) != null);
 			} finally {
 				MonoIO.FindClose (handle);
 			}
 		}
 		
 		
-#endif
 	}
 }

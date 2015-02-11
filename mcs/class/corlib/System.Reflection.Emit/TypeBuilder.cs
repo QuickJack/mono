@@ -44,13 +44,14 @@ using System.Security;
 using System.Security.Permissions;
 using System.Diagnostics.SymbolStore;
 
+
 namespace System.Reflection.Emit
 {
 	[ComVisible (true)]
 	[ComDefaultInterface (typeof (_TypeBuilder))]
 	[ClassInterface (ClassInterfaceType.None)]
 	[StructLayout (LayoutKind.Sequential)]
-	public sealed class TypeBuilder : Type, _TypeBuilder
+	public sealed class TypeBuilder : TypeInfo, _TypeBuilder
 	{
 #pragma warning disable 169		
 		#region Sync with reflection.h
@@ -76,7 +77,7 @@ namespace System.Reflection.Emit
 		private IntPtr generic_container;
 		private GenericTypeParameterBuilder[] generic_params;
 		private RefEmitPermissionSet[] permissions;
-		private Type created;
+		private TypeInfo created;
 		#endregion
 #pragma warning restore 169		
 		
@@ -679,12 +680,10 @@ namespace System.Reflection.Emit
 			return DefineProperty (name, attributes, 0, returnType, null, null, parameterTypes, null, null);
 		}
 		
-#if NET_4_0
 		public PropertyBuilder DefineProperty (string name, PropertyAttributes attributes, CallingConventions callingConvention, Type returnType, Type[] parameterTypes)
 		{
 			return DefineProperty (name, attributes, callingConvention, returnType , null, null, parameterTypes, null, null);
 		}	
-#endif
 
 		public PropertyBuilder DefineProperty (string name, PropertyAttributes attributes, Type returnType, Type[] returnTypeRequiredCustomModifiers, Type[] returnTypeOptionalCustomModifiers, Type[] parameterTypes, Type[][] parameterTypeRequiredCustomModifiers, Type[][] parameterTypeOptionalCustomModifiers)
 		{
@@ -721,7 +720,7 @@ namespace System.Reflection.Emit
 		}
 
 		[MethodImplAttribute(MethodImplOptions.InternalCall)]
-		private extern Type create_runtime_class (TypeBuilder tb);
+		private extern TypeInfo create_runtime_class (TypeBuilder tb);
 
 		private bool is_nested_in (Type t)
 		{
@@ -747,8 +746,14 @@ namespace System.Reflection.Emit
 
 			return false;
 	    }
+
+		public Type CreateType ()
+		{
+			return CreateTypeInfo ();
+		}
 		
-		public Type CreateType()
+		public
+		TypeInfo CreateTypeInfo ()
 		{
 			/* handle nesting_type */
 			if (createTypeCalled)
@@ -796,6 +801,12 @@ namespace System.Reflection.Emit
 
 			if (parent == pmodule.assemblyb.corlib_enum_type && methods != null)
 				throw new TypeLoadException ("Could not load type '" + FullName + "' from assembly '" + Assembly + "' because it is an enum with methods.");
+			if (interfaces != null) {
+				foreach (var iface in interfaces) {
+					if (iface.IsNestedPrivate && iface.Assembly != Assembly)
+						throw new TypeLoadException ("Could not load type '" + FullName + "' from assembly '" + Assembly + "' because it is implements the inaccessible interface '" + iface.FullName + "'.");
+				}
+			}
 
 			if (methods != null) {
 				bool is_concrete = !IsAbstract;
@@ -1459,7 +1470,7 @@ namespace System.Reflection.Emit
 					throw new Exception ("Error in customattr");
 				}
 				
-				var ctor_type = customBuilder.Ctor is ConstructorBuilder ? ((ConstructorBuilder)customBuilder.Ctor).parameters[0] : customBuilder.Ctor.GetParameters()[0].ParameterType;
+				var ctor_type = customBuilder.Ctor is ConstructorBuilder ? ((ConstructorBuilder)customBuilder.Ctor).parameters[0] : customBuilder.Ctor.GetParametersInternal()[0].ParameterType;
 				int pos = 6;
 				if (ctor_type.FullName == "System.Int16")
 					pos = 4;
@@ -1926,6 +1937,15 @@ namespace System.Reflection.Emit
 			get {
 				return false;
 			}
+		}
+
+		public override bool IsConstructedGenericType {
+			get { return false; }
+		}
+
+		public override bool IsAssignableFrom (TypeInfo typeInfo)
+		{
+			return base.IsAssignableFrom (typeInfo);
 		}
 	}
 }

@@ -37,11 +37,7 @@ namespace System.Reflection {
 	[ComVisible (true)]
 	[Serializable]
 	public class TypeDelegator : 
-#if NET_4_5
 		TypeInfo, IReflectableType
-#else
-		Type
-#endif
 	{
 		protected Type typeImpl;
 	
@@ -258,6 +254,18 @@ namespace System.Reflection {
 			get {
 				return typeImpl.MetadataToken;
 			}
+		}
+
+		public override bool IsConstructedGenericType {
+			get { return typeImpl.IsConstructedGenericType; }
+		}
+
+		public override bool IsAssignableFrom (TypeInfo typeInfo)
+		{
+			if (typeInfo == null)
+				throw new ArgumentNullException ("typeInfo");
+
+			return IsAssignableFrom (typeInfo.AsType ());
 		}
 
 	}

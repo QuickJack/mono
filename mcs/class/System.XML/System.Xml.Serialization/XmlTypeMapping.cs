@@ -49,6 +49,7 @@ namespace System.Xml.Serialization
 		string documentation;
 		bool includeInSchema;
 		bool isNullable = true;
+		bool isAny;
 
 		ArrayList _derivedTypes = new ArrayList();
 
@@ -60,17 +61,6 @@ namespace System.Xml.Serialization
 			this.xmlTypeNamespace = xmlTypeNamespace;
 		}
 
-#if !NET_2_0
-		public string ElementName
-		{
-			get { return _elementName; }
-		}
-
-		public string Namespace
-		{
-			get { return _namespace; }
-		}
-#endif
 
 		public string TypeFullName
 		{
@@ -82,7 +72,6 @@ namespace System.Xml.Serialization
 			get { return type.TypeName; }
 		}
 
-#if NET_2_0
 		public string XsdTypeName
 		{
 			get { return XmlType; }
@@ -92,7 +81,6 @@ namespace System.Xml.Serialization
 		{
 			get { return XmlTypeNamespace; }
 		}
-#endif
 
 		internal TypeData TypeData
 		{
@@ -158,6 +146,12 @@ namespace System.Xml.Serialization
 			set { isNullable = value; }
 		}
 
+		internal bool IsAny
+		{
+			get { return isAny; }
+			set { isAny = value; }
+		}
+
 		internal XmlTypeMapping GetRealTypeMap (Type objectType)
 		{
 			if (TypeData.SchemaType == SchemaTypes.Enum)
@@ -196,18 +190,22 @@ namespace System.Xml.Serialization
 	internal class XmlSerializableMapping : XmlTypeMapping
 	{
 		XmlSchema _schema;
-#if NET_2_0 && !MOONLIGHT
 		XmlSchemaComplexType _schemaType;
 		XmlQualifiedName _schemaTypeName;
-#endif
 
 		internal XmlSerializableMapping(XmlRootAttribute root, string elementName, string ns, TypeData typeData, string xmlType, string xmlTypeNamespace)
 			: base(elementName, ns, typeData, xmlType, xmlTypeNamespace)
 		{
-#if NET_2_0 && !MOONLIGHT
 			XmlSchemaProviderAttribute schemaProvider = (XmlSchemaProviderAttribute) Attribute.GetCustomAttribute (typeData.Type, typeof (XmlSchemaProviderAttribute));
 
 			if (schemaProvider != null) {
+				_schemaTypeName = XmlQualifiedName.Empty;
+
+				if (schemaProvider.IsAny) {
+					IsAny = true;
+					return;
+				}
+
 				string method = schemaProvider.MethodName;
 				MethodInfo mi = typeData.Type.GetMethod (method, BindingFlags.Static | BindingFlags.Public | BindingFlags.FlattenHierarchy);
 				if (mi == null)
@@ -219,7 +217,6 @@ namespace System.Xml.Serialization
 					throw new InvalidOperationException (String.Format ("Method '{0}' indicated by XmlSchemaProviderAttribute must have its return type as XmlQualifiedName", method));
 				XmlSchemaSet xs = new XmlSchemaSet ();
 				object retVal = mi.Invoke (null, new object [] { xs });
-				_schemaTypeName = XmlQualifiedName.Empty;
 				if (retVal == null)
 					return;
 
@@ -250,25 +247,19 @@ namespace System.Xml.Serialization
 
 				return;
 			}
-#endif
-#if NET_2_0 && !MOONLIGHT
+
 			IXmlSerializable serializable = (IXmlSerializable)Activator.CreateInstance (typeData.Type, true);
 			try {
 				_schema = serializable.GetSchema();
 			} catch (Exception) {
 				// LAMESPEC: .NET has a bad exception catch and swallows it silently.
 			}
-#else
-			IXmlSerializable serializable = (IXmlSerializable)Activator.CreateInstance (typeData.Type);
-			_schema = serializable.GetSchema();
-#endif
-#if !MOONLIGHT
+
 			if (_schema != null) 
 			{
 				if (_schema.Id == null || _schema.Id.Length == 0) 
 					throw new InvalidOperationException("Schema Id is missing. The schema returned from " + typeData.Type.FullName + ".GetSchema() must have an Id.");
 			}
-#endif
 		}
 
 		internal XmlSchema Schema
@@ -276,7 +267,6 @@ namespace System.Xml.Serialization
 			get { return _schema; }
 		}
 
-#if NET_2_0 && !MOONLIGHT
 		internal XmlSchemaType SchemaType {
 			get { return _schemaType; }
 		}
@@ -284,7 +274,6 @@ namespace System.Xml.Serialization
 		internal XmlQualifiedName SchemaTypeName {
 			get { return _schemaTypeName; }
 		}
-#endif
 	}
  
 
@@ -402,13 +391,22 @@ namespace System.Xml.Serialization
 
 		public XmlTypeMapElementInfo GetElement(string name, string ns, int minimalOrder)
 		{
-			if (_elements == null) return null;
+			if (_elements == null)
+				return null;
 
-			foreach (XmlTypeMapElementInfo info in _elements.Values)
-				if (info.ElementName == name && info.Namespace == ns && info.ExplicitOrder >= minimalOrder)
-					return info;
+			XmlTypeMapElementInfo selected = null;
+			foreach (XmlTypeMapElementInfo info in _elements.Values) {
+				if (info.ElementName == name && info.Namespace == ns) {
+					if (info.ExplicitOrder < minimalOrder)
+						continue;
 
-			return null;
+					if (selected == null || selected.ExplicitOrder > info.ExplicitOrder) {
+						selected = info;
+					}
+				}
+			}
+
+			return selected;
 		}
 
 		public XmlTypeMapElementInfo GetElement(string name, string ns)
@@ -841,20 +839,12 @@ namespace System.Xml.Serialization
 
 			string xmlName = string.Empty;
 			if (IsFlags) {
-#if NET_2_0
 				xmlName = XmlCustomFormatter.FromEnum (value, XmlNames, Values, typeName);
-#else
-				xmlName = XmlCustomFormatter.FromEnum (value, XmlNames, Values);
-#endif
 			}
 
 			if (xmlName.Length == 0) {
-#if NET_2_0
 				throw new InvalidOperationException (string.Format(CultureInfo.CurrentCulture,
 					"'{0}' is not a valid value for {1}.", value, typeName));
-#else
-				return value.ToString (CultureInfo.InvariantCulture);
-#endif
 			}
 			return xmlName;
 		}

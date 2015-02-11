@@ -50,7 +50,8 @@ namespace System.Reflection
 	 * depends on them.
 	 */
 	[StructLayout (LayoutKind.Sequential)]
-	internal class MonoGenericClass : Type
+	sealed class MonoGenericClass :
+		TypeInfo
 	{
 		#region Keep in sync with object-internals.h
 #pragma warning disable 649
@@ -490,11 +491,15 @@ namespace System.Reflection
 
 		public override object [] GetCustomAttributes (bool inherit)
 		{
+			if (IsCreated)
+				return generic_type.GetCustomAttributes (inherit);
 			throw new NotSupportedException ();
 		}
 
 		public override object [] GetCustomAttributes (Type attributeType, bool inherit)
 		{
+			if (IsCreated)
+				return generic_type.GetCustomAttributes (attributeType, inherit);
 			throw new NotSupportedException ();
 		}
 

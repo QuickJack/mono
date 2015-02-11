@@ -7,7 +7,11 @@
  * Copyright (C) 2004-2006 Jonathan Pryor
  */
 
+#include <config.h>
+
+#ifndef __OpenBSD__
 #define _XOPEN_SOURCE 600
+#endif
 
 #ifdef PLATFORM_MACOSX
 /* For mincore () */

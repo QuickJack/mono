@@ -33,6 +33,8 @@
 using System;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace System.IO
 {
@@ -45,9 +47,8 @@ namespace System.IO
 		IntPtr initial_pointer;
 		long initial_position;
 		long current_position;
-#if NET_4_0 || MOBILE
 		SafeBuffer safebuffer;
-#endif
+		Task<int> read_task;
 		
 		internal event EventHandler Closed;
 		
@@ -70,7 +71,6 @@ namespace System.IO
 			Initialize (pointer, length, capacity, access);
 		}
 
-#if NET_4_0 || MOBILE
 		public UnmanagedMemoryStream (SafeBuffer buffer, long offset, long length) :
 			this (buffer, offset, length, FileAccess.Read)
 		{
@@ -81,7 +81,6 @@ namespace System.IO
 			closed = true;
 			Initialize (buffer, offset, length, access);
 		}
-#endif
 #endregion
 	
 #region Properties
@@ -139,10 +138,8 @@ namespace System.IO
 		[CLSCompliantAttribute (false)]
 		public unsafe byte* PositionPointer {
 			get {
-#if NET_4_0 || MOBILE
 				if (safebuffer != null)
 					throw new NotSupportedException ("Not supported when using SafeBuffer");
-#endif
 				if (closed)
 					throw new ObjectDisposedException("The stream is closed");
 				if (current_position >= length)
@@ -151,10 +148,8 @@ namespace System.IO
 				return (byte *) initial_pointer + current_position;
 			}
 			set {
-#if NET_4_0 || MOBILE
 				if (safebuffer != null)
 					throw new NotSupportedException ("Not supported when using SafeBuffer");
-#endif
 				if (closed)
 					throw new ObjectDisposedException("The stream is closed");
 
@@ -188,7 +183,6 @@ namespace System.IO
 				return 0;
 
 			int progress = current_position + count < length ? count : (int) (length - current_position);
-#if NET_4_0 || MOBILE
 			if (safebuffer != null) {
 				unsafe {
 					byte *ptr = null;
@@ -201,13 +195,40 @@ namespace System.IO
 					}
 				}
 			} else
-#endif
 			{
 				Marshal.Copy (new IntPtr (initial_pointer.ToInt64 () + current_position), buffer, offset, progress);
 			}
 			current_position += progress;
 			return progress;
 		}
+
+		public override Task<int> ReadAsync (byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+		{
+			if (buffer == null)
+				throw new ArgumentNullException("buffer");
+			if (offset < 0)
+				throw new ArgumentOutOfRangeException("offset", "Non-negative number required.");
+			if (count < 0)
+				throw new ArgumentOutOfRangeException("count", "Non-negative number required.");
+			if ((buffer.Length - offset) < count)
+				throw new ArgumentException("The length of the buffer array minus the offset parameter is less than the count parameter");
+
+			if (cancellationToken.IsCancellationRequested)
+				return TaskConstants<int>.Canceled;
+
+			try {
+				count = Read (buffer, offset, count);
+
+				// Try not to allocate a new task for every buffer read
+				if (read_task == null || read_task.Result != count)
+					read_task = Task<int>.FromResult (count);
+
+				return read_task;
+			} catch (Exception ex) {
+				return Task.FromException<int> (ex);
+			}
+		}
+
 
 		public override int ReadByte ()
 		{
@@ -220,7 +241,6 @@ namespace System.IO
 			if (current_position >= length)
 				return (-1);
 
-#if NET_4_0 || MOBILE
 			if (safebuffer != null) {
 				unsafe {
 					byte *ptr = null;
@@ -233,7 +253,6 @@ namespace System.IO
 					}
 				}
 			} else
-#endif
 			{
 				return (int) Marshal.ReadByte(initial_pointer, (int) current_position++);
 			}
@@ -269,10 +288,8 @@ namespace System.IO
 		 
 		public override void SetLength (long value)
 		{
-#if NET_4_0 || MOBILE
 			if (safebuffer != null)
 				throw new NotSupportedException ("Not supported when using SafeBuffer");
-#endif
 			if (closed)
 				throw new ObjectDisposedException("The stream is closed");
 			if (value < 0)
@@ -292,6 +309,19 @@ namespace System.IO
 				throw new ObjectDisposedException("The stream is closed");
 			//This method performs no action for this class
 			//but is included as part of the Stream base class
+		}
+
+		public override Task FlushAsync (CancellationToken cancellationToken)
+		{
+			if (cancellationToken.IsCancellationRequested)
+				return TaskConstants.Canceled;
+
+			try {
+				Flush ();
+				return TaskConstants.Finished;
+			} catch (Exception ex) {
+				return Task.FromException<object> (ex);
+			}
 		}
 		 
 		protected override void Dispose (bool disposing)
@@ -320,7 +350,6 @@ namespace System.IO
 			if (fileaccess == FileAccess.Read)
 				throw new NotSupportedException ("Stream does not support writing.");
 
-#if NET_4_0 || MOBILE
 			if (safebuffer != null) {
 				unsafe {
 					byte *dest = null;
@@ -336,7 +365,6 @@ namespace System.IO
 					}
 				}
 			} else
-#endif
 			{
 				unsafe {
 					fixed (byte *src = buffer) {
@@ -349,6 +377,30 @@ namespace System.IO
 			if (current_position > length)
 				length = current_position;
 		}
+
+		public override Task WriteAsync (byte[] buffer, int offset, int count, CancellationToken cancellationToken)
+		{
+			if (buffer == null)
+				throw new ArgumentNullException("The buffer parameter is a null reference");
+			if (offset < 0)
+				throw new ArgumentOutOfRangeException("offset", "Non-negative number required.");
+			if (count < 0)
+				throw new ArgumentOutOfRangeException("count", "Non-negative number required.");
+			if ((buffer.Length - offset) < count)
+				throw new ArgumentException("The length of the buffer array minus the offset parameter is less than the count parameter");
+			if (current_position > capacity - count)
+				throw new NotSupportedException ("Unable to expand length of this stream beyond its capacity.");
+
+			if (cancellationToken.IsCancellationRequested)
+				return TaskConstants.Canceled;
+
+			try {
+				Write (buffer, offset, count);
+				return TaskConstants.Finished;
+			} catch (Exception ex) {
+				return Task.FromException<object> (ex);
+			}
+		}
 		
 		public override void WriteByte (byte value)
 		{
@@ -360,7 +412,6 @@ namespace System.IO
 			if (fileaccess == FileAccess.Read)
 				throw new NotSupportedException("Stream does not support writing.");
  
-#if NET_4_0 || MOBILE
 			if (safebuffer != null) {
 				unsafe {
 					byte *dest = null;
@@ -374,7 +425,6 @@ namespace System.IO
 					}
 				}
 			} else
-#endif
 			{
 				unsafe {
 					byte *dest = (byte *) initial_pointer + (int) current_position++;
@@ -412,7 +462,6 @@ namespace System.IO
 			closed = false;
 		}
 
-#if NET_4_0 || MOBILE
 		protected void Initialize (SafeBuffer buffer, long offset, long length, FileAccess access)
 		{
 			if (buffer == null)
@@ -442,7 +491,6 @@ namespace System.IO
 			current_position = offset;
 			closed = false;
 		}
-#endif
 #endregion
 	}
 }

@@ -40,16 +40,14 @@ using System.Globalization;
 namespace System.Runtime.Serialization
 {
 	[System.Runtime.InteropServices.ComVisibleAttribute (true)]
-	public sealed class FormatterServices
+	static
+	public class FormatterServices
 	{
 		private const BindingFlags fieldFlags = BindingFlags.Public |
 							BindingFlags.Instance |
 							BindingFlags.NonPublic |
 							BindingFlags.DeclaredOnly;
 
-		private FormatterServices ()
-		{
-		}
 
 		public static object [] GetObjectData (object obj, MemberInfo [] members)
 		{
@@ -208,7 +206,6 @@ namespace System.Runtime.Serialization
 			return GetUninitializedObject (type);
 		}
 
-#if NET_4_0
 		// This method was introduced in .Net due to a bug serializing objects with circular references
 		// which we don't appear to have, so we just return the same object.
 		// See http://support.microsoft.com/kb/927495/en-us/ in case of doubt.
@@ -217,6 +214,5 @@ namespace System.Runtime.Serialization
 		{
 			return innerSurrogate;
 		}
-#endif
 	}
 }

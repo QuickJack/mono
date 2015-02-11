@@ -22,7 +22,7 @@ VERSION = 0.93
 
 Q=$(if $(V),,@)
 # echo -e "\\t" does not work on some systems, so use 5 spaces
-Q_MCS=$(if $(V),,@echo "MCS     [$(PROFILE)] $(notdir $(@))";)
+Q_MCS=$(if $(V),,@echo "MCS     [$(intermediate)$(PROFILE)] $(notdir $(@))";)
 
 ifndef BUILD_TOOLS_PROFILE
 BUILD_TOOLS_PROFILE = build
@@ -81,8 +81,14 @@ include $(topdir)/build/config-default.make
 
 ifndef PLATFORM
 ifeq ($(OS),Windows_NT)
+ifneq ($(V),)
+$(info *** Assuming PLATFORM is 'win32'.)
+endif
 PLATFORM = win32
 else
+ifneq ($(V),)
+$(info *** Assuming PLATFORM is 'linux'.)
+endif
 PLATFORM = linux
 endif
 endif
@@ -204,6 +210,5 @@ dist-default:
 ## Documentation stuff
 
 Q_MDOC =$(if $(V),,@echo "MDOC    [$(PROFILE)] $(notdir $(@))";)
-# net_2_0 is needed because monodoc is only compiled in that profile
-MDOC   =$(Q_MDOC) MONO_PATH="$(topdir)/class/lib/$(DEFAULT_PROFILE)$(PLATFORM_PATH_SEPARATOR)$(topdir)/class/lib/net_2_0$(PLATFORM_PATH_SEPARATOR)$$MONO_PATH" $(RUNTIME) $(topdir)/class/lib/$(DEFAULT_PROFILE)/mdoc.exe
+MDOC   =$(Q_MDOC) MONO_PATH="$(topdir)/class/lib/$(DEFAULT_PROFILE)$(PLATFORM_PATH_SEPARATOR)$$MONO_PATH" $(RUNTIME) $(topdir)/class/lib/$(DEFAULT_PROFILE)/mdoc.exe
 

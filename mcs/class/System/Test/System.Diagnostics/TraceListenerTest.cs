@@ -28,6 +28,8 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
+#if !MOBILE
+
 using NUnit.Framework;
 using System;
 using System.IO;
@@ -39,7 +41,6 @@ namespace MonoTests.System.Diagnostics
 	[TestFixture]
 	public class TraceListenerTest
 	{
-#if NET_2_0
 		[Test]
 		public void GetSupportedAttributes ()
 		{
@@ -117,15 +118,12 @@ bulldog Transfer: 0 : hoge, relatedActivityId=00000000-0000-0000-0000-0000000000
 ", date.ToString ("o"), time); // date and time are in current culture
 			Assert.AreEqual (expected, sw.ToString ().Replace ("\r\n", "\n"));
 		}
-#endif
 
 		class MyTraceListener : TraceListener
 		{
-#if NET_2_0
 			public string [] SupportedAttributes {
 				get { return base.GetSupportedAttributes (); }
 			}
-#endif
 
 			public override void Write (string message)
 			{
@@ -138,3 +136,4 @@ bulldog Transfer: 0 : hoge, relatedActivityId=00000000-0000-0000-0000-0000000000
 	}
 }
 
+#endif

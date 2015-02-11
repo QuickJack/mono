@@ -64,8 +64,8 @@ namespace System.Diagnostics
 
 		protected Switch(string displayName, string description)
 		{
-			this.name = displayName;
-			this.description = description;
+			this.name = displayName ?? string.Empty;
+			this.description = description ?? string.Empty;
 		}
 
 		protected Switch(string displayName, string description, string defaultSwitchValue)
@@ -141,6 +141,7 @@ namespace System.Diagnostics
 
 		private void GetConfigFileSetting ()
 		{
+#if !MOBILE
 			IDictionary d = (IDictionary) DiagnosticsConfiguration.Settings ["switches"];
 			
 			// Load up the specified switch
@@ -154,6 +155,7 @@ namespace System.Diagnostics
 					return;
 				}
 			}
+#endif  // !MOBILE
 
 			if (defaultSwitchValue != null) {
 				value = defaultSwitchValue;

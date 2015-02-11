@@ -1,6 +1,8 @@
 #ifndef MONO_POLL_H
 #define MONO_POLL_H
 
+#include <mono/utils/mono-publib.h>
+
 #include <config.h>
 #ifdef HAVE_SYS_TIME_H
 #include <sys/time.h>
@@ -11,7 +13,11 @@
 #endif
 
 #ifdef HAVE_POLL
+#ifdef HAVE_POLL_H
+#include <poll.h>
+#elif defined(HAVE_SYS_POLL_H)
 #include <sys/poll.h>
+#endif
 
 #define MONO_POLLIN		POLLIN
 #define MONO_POLLPRI		POLLPRI
@@ -42,7 +48,7 @@ typedef struct {
 
 #endif
 
-int mono_poll (mono_pollfd *ufds, unsigned int nfds, int timeout);
+MONO_API int mono_poll (mono_pollfd *ufds, unsigned int nfds, int timeout);
 
 #endif /* MONO_POLL_H */
 

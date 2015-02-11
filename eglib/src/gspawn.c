@@ -41,12 +41,20 @@
 #include <unistd.h>
 #endif
 
+#ifdef HAVE_SYS_SELECT_H
+#include <sys/select.h>
+#endif
+
 #ifdef HAVE_SYS_TIME_H
 #include <sys/time.h>
 #endif
 
 #ifdef HAVE_SYS_WAIT_H
 #include <sys/wait.h>
+#endif
+
+#ifdef HAVE_SYS_RESOURCE_H
+#  include <sys/resource.h>
 #endif
 
 #ifdef G_OS_WIN32
@@ -209,6 +217,29 @@ write_all (int fd, const void *vbuf, size_t n)
 	return nwritten;
 }
 
+#ifndef G_OS_WIN32
+int
+eg_getdtablesize (void)
+{
+#ifdef HAVE_GETRLIMIT
+	struct rlimit limit;
+	int res;
+
+	res = getrlimit (RLIMIT_NOFILE, &limit);
+	g_assert (res == 0);
+	return limit.rlim_cur;
+#else
+	return getdtablesize ();
+#endif
+}
+#else
+int
+eg_getdtablesize (void)
+{
+	g_error ("Should not be called");
+}
+#endif
+
 gboolean
 g_spawn_command_line_sync (const gchar *command_line,
 				gchar **standard_output,
@@ -252,7 +283,7 @@ g_spawn_command_line_sync (const gchar *command_line,
 			close (stderr_pipe [0]);
 			dup2 (stderr_pipe [1], STDERR_FILENO);
 		}
-		for (i = getdtablesize () - 1; i >= 3; i--)
+		for (i = eg_getdtablesize () - 1; i >= 3; i--)
 			close (i);
 
 		/* G_SPAWN_SEARCH_PATH is always enabled for g_spawn_command_line_sync */
@@ -413,7 +444,7 @@ g_spawn_async_with_pipes (const gchar *working_directory,
 			}
 
 			if ((flags & G_SPAWN_LEAVE_DESCRIPTORS_OPEN) != 0) {
-				for (i = getdtablesize () - 1; i >= 3; i--)
+				for (i = eg_getdtablesize () - 1; i >= 3; i--)
 					close (i);
 			}
 

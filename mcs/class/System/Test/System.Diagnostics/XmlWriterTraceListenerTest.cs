@@ -28,6 +28,8 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
+#if !MOBILE
+
 using NUnit.Framework;
 using System;
 using System.IO;
@@ -40,7 +42,6 @@ namespace MonoTests.System.Diagnostics
 	[TestFixture]
 	public class XmlWriterTraceListenerTest
 	{
-#if NET_2_0
 		string sample1 = @"<E2ETraceEvent xmlns='http://schemas.microsoft.com/2004/06/E2ETraceEvent'><System xmlns='http://schemas.microsoft.com/2004/06/windows/eventlog/system'><EventID>0</EventID><Type>3</Type><SubType Name='Information'>0</SubType><Level>8</Level><TimeCreated SystemTime='2007-04-19T21:18:30.6250000+09:00' /><Source Name='Trace' /><Correlation ActivityID='{00000000-0000-0000-0000-000000000000}' /><Execution ProcessName='zzz' ProcessID='4776' ThreadID='1' /><Channel/><Computer>PC</Computer></System><ApplicationData>sample</ApplicationData></E2ETraceEvent>";
 
 		string sample2 = @"<E2ETraceEvent xmlns='http://schemas.microsoft.com/2004/06/E2ETraceEvent'><System xmlns='http://schemas.microsoft.com/2004/06/windows/eventlog/system'><EventID>4</EventID><Type>3</Type><SubType Name='Error'>0</SubType><Level>2</Level><TimeCreated SystemTime='2007-04-19T21:18:30.6250000+09:00' /><Source Name='' /><Correlation ActivityID='{00000000-0000-0000-0000-000000000000}' /><Execution ProcessName='zzz' ProcessID='4776' ThreadID='1' /><Channel/><Computer>PC</Computer></System><ApplicationData></ApplicationData></E2ETraceEvent>";
@@ -152,7 +153,7 @@ namespace MonoTests.System.Diagnostics
 			Assert.IsTrue (sw.ToString ().IndexOf (xml) > 0, "#1");
 			Assert.IsTrue (sw.ToString ().IndexOf ("</DataItem><DataItem>") > 0, "#2");
 		}
-#endif
 	}
 }
 
+#endif

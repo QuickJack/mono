@@ -71,16 +71,14 @@ public class Int16Test
 	[Test]	
 	public void TestCompareTo()
 	{
-		Assert.IsTrue(MyInt16_3.CompareTo(MyInt16_2) > 0);
-		Assert.IsTrue(MyInt16_2.CompareTo(MyInt16_2) == 0);
-		Assert.IsTrue(MyInt16_1.CompareTo((Int16)(-42)) == 0);
-		Assert.IsTrue(MyInt16_2.CompareTo(MyInt16_3) < 0);
+		Assert.AreEqual(65535, MyInt16_3.CompareTo(MyInt16_2), "#1");
+		Assert.AreEqual(0, MyInt16_2.CompareTo(MyInt16_2), "#2");
+		Assert.AreEqual(0, MyInt16_1.CompareTo((Int16)(-42)), "#3");
+		Assert.AreEqual(-65535, MyInt16_2.CompareTo(MyInt16_3), "#4");
 		try {
 			MyInt16_2.CompareTo((object)100);
 			Assert.Fail ("Should raise a System.ArgumentException");
-		}
-		catch (Exception e) {
-			Assert.IsTrue(typeof(ArgumentException) == e.GetType());
+		} catch (ArgumentException e) {
 		}
 	}
 
@@ -164,8 +162,16 @@ public class Int16Test
 		}
 
 		Assert.AreEqual (7345, Int16.Parse ("7345\0"), "#1");
-		Assert.AreEqual (7345, Int16.Parse ("7345\0\0\0    \0"), "#2");
-		Assert.AreEqual (7345, Int16.Parse ("7345\0\0\0    "), "#3");
+		try {
+			Int16.Parse ("7345\0\0\0    \0");
+			Assert.Fail ("#2");
+		} catch (FormatException) {}
+
+		try {		
+			Int16.Parse ("7345\0\0\0    ");
+			Assert.Fail ("#3");
+		} catch (FormatException) {}
+
 		Assert.AreEqual (7345, Int16.Parse ("7345\0\0\0"), "#4");
 
 		Assert.AreEqual (0, Int16.Parse ("0+", NumberStyles.Any), "#5");

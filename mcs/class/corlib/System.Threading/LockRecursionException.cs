@@ -27,7 +27,6 @@
  */
 
 
-#if NET_4_0 || MOBILE
 
 using System;
 using System.Runtime.Serialization;
@@ -63,4 +62,3 @@ namespace System.Threading
 	}
 }
 
-#endif

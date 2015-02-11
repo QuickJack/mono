@@ -101,6 +101,7 @@ static const int regbank_move_ops [] = {
 
 #define regmask(reg) (((regmask_t)1) << (reg))
 
+#ifdef MONO_ARCH_USE_SHARED_FP_SIMD_BANK
 static const regmask_t regbank_callee_saved_regs [] = {
 	MONO_ARCH_CALLEE_SAVED_REGS,
 	MONO_ARCH_CALLEE_SAVED_FREGS,
@@ -108,6 +109,7 @@ static const regmask_t regbank_callee_saved_regs [] = {
 	MONO_ARCH_CALLEE_SAVED_REGS,
 	MONO_ARCH_CALLEE_SAVED_XREGS,
 };
+#endif
 
 static const regmask_t regbank_callee_regs [] = {
 	MONO_ARCH_CALLEE_REGS,
@@ -409,17 +411,23 @@ typedef struct {
 	regmask_t preferred_mask; /* the hreg where the register should be allocated, or 0 */
 } RegTrack;
 
-#ifndef DISABLE_LOGGING
+#if !defined(DISABLE_LOGGING) && !defined(DISABLE_JIT)
 
-static void
-print_ji (MonoJumpInfo *ji)
+static const char* const patch_info_str[] = {
+#define PATCH_INFO(a,b) "" #a,
+#include "patch-info.h"
+#undef PATCH_INFO
+};
+
+void
+mono_print_ji (const MonoJumpInfo *ji)
 {
 	switch (ji->type) {
 	case MONO_PATCH_INFO_RGCTX_FETCH: {
 		MonoJumpInfoRgctxEntry *entry = ji->data.rgctx_entry;
 
 		printf ("[RGCTX_FETCH ");
-		print_ji (entry->data);
+		mono_print_ji (entry->data);
 		printf (" - %s]", mono_rgctx_info_type_to_str (entry->info_type));
 		break;
 	}
@@ -430,7 +438,7 @@ print_ji (MonoJumpInfo *ji)
 		break;
 	}
 	default:
-		printf ("[%d]", ji->type);
+		printf ("[%s]", patch_info_str [ji->type]);
 		break;
 	}
 }
@@ -447,9 +455,22 @@ mono_print_ins_index (int i, MonoInst *ins)
 	else
 		printf (" %s", mono_inst_name (ins->opcode));
 	if (spec == MONO_ARCH_CPU_SPEC) {
+		gboolean dest_base = FALSE;
+		switch (ins->opcode) {
+		case OP_STOREV_MEMBASE:
+			dest_base = TRUE;
+			break;
+		default:
+			break;
+		}
+
 		/* This is a lowered opcode */
-		if (ins->dreg != -1)
-			printf (" R%d <-", ins->dreg);
+		if (ins->dreg != -1) {
+			if (dest_base)
+				printf (" [R%d + 0x%lx] <-", ins->dreg, (long)ins->inst_offset);
+			else
+				printf (" R%d <-", ins->dreg);
+		}
 		if (ins->sreg1 != -1)
 			printf (" R%d", ins->sreg1);
 		if (ins->sreg2 != -1)
@@ -492,6 +513,7 @@ mono_print_ins_index (int i, MonoInst *ins)
 			printf (" R%d", ((MonoInst*)ins->inst_p0)->dreg);
 			break;
 		case OP_REGOFFSET:
+		case OP_GSHAREDVT_ARG_REGOFFSET:
 			printf (" + 0x%lx", (long)ins->inst_offset);
 			break;
 		default:
@@ -577,11 +599,8 @@ mono_print_ins_index (int i, MonoInst *ins)
 	case OP_CALL_MEMBASE:
 	case OP_CALL_REG:
 	case OP_FCALL:
-	case OP_FCALLVIRT:
 	case OP_LCALL:
-	case OP_LCALLVIRT:
 	case OP_VCALL:
-	case OP_VCALLVIRT:
 	case OP_VCALL_REG:
 	case OP_VCALL_MEMBASE:
 	case OP_VCALL2:
@@ -589,7 +608,6 @@ mono_print_ins_index (int i, MonoInst *ins)
 	case OP_VCALL2_MEMBASE:
 	case OP_VOIDCALL:
 	case OP_VOIDCALL_MEMBASE:
-	case OP_VOIDCALLVIRT:
 	case OP_TAILCALL: {
 		MonoCallInst *call = (MonoCallInst*)ins;
 		GSList *list;
@@ -611,7 +629,7 @@ mono_print_ins_index (int i, MonoInst *ins)
 			MonoJumpInfo *ji = (MonoJumpInfo*)call->fptr;
 
 			printf (" ");
-			print_ji (ji);
+			mono_print_ji (ji);
 		} else if (call->fptr) {
 			MonoJitICallInfo *info = mono_find_jit_icall_by_addr (call->fptr);
 			if (info)
@@ -668,6 +686,7 @@ mono_print_ins_index (int i, MonoInst *ins)
 	case OP_GC_LIVENESS_USE:
 		printf (" R%d", (int)ins->inst_c1);
 		break;
+	case OP_IL_SEQ_POINT:
 	case OP_SEQ_POINT:
 		printf (" il: %x", (int)ins->inst_imm);
 		break;
@@ -699,11 +718,17 @@ print_regtrack (RegTrack *t, int num)
 	}
 }
 #else
+
+void
+mono_print_ji (const MonoJumpInfo *ji)
+{
+}
+
 void
 mono_print_ins_index (int i, MonoInst *ins)
 {
 }
-#endif /* DISABLE_LOGGING */
+#endif /* !defined(DISABLE_LOGGING) && !defined(DISABLE_JIT) */
 
 void
 mono_print_ins (MonoInst *ins)
@@ -808,7 +833,7 @@ get_register_spilling (MonoCompile *cfg, MonoBasicBlock *bb, MonoInst **last, Mo
 
 	g_assert (bank < MONO_NUM_REGBANKS);
 
-	DEBUG (printf ("\tstart regmask to assign R%d: 0x%08" G_GUINT64_FORMAT " (R%d <- R%d R%d R%d)\n", reg, (guint64)regmask, ins->dreg, ins->sreg1, ins->sreg2, ins->sreg3));
+	DEBUG (printf ("\tstart regmask to assign R%d: 0x%08llu (R%d <- R%d R%d R%d)\n", reg, (unsigned long long)regmask, ins->dreg, ins->sreg1, ins->sreg2, ins->sreg3));
 	/* exclude the registers in the current instruction */
 	num_sregs = mono_inst_get_src_registers (ins, sregs);
 	for (i = 0; i < num_sregs; ++i) {
@@ -825,7 +850,7 @@ get_register_spilling (MonoCompile *cfg, MonoBasicBlock *bb, MonoInst **last, Mo
 		DEBUG (printf ("\t\texcluding dreg %s\n", mono_regname_full (ins->dreg, bank)));
 	}
 
-	DEBUG (printf ("\t\tavailable regmask: 0x%08" G_GUINT64_FORMAT "\n", (guint64)regmask));
+	DEBUG (printf ("\t\tavailable regmask: 0x%08llu\n", (unsigned long long)regmask));
 	g_assert (regmask); /* need at least a register we can free */
 	sel = 0;
 	/* we should track prev_use and spill the register that's farther */
@@ -1041,8 +1066,9 @@ assign_reg (MonoCompile *cfg, MonoRegState *rs, int reg, int hreg, int bank)
 	else {
 		g_assert (reg >= MONO_MAX_IREGS);
 		g_assert (hreg < MONO_MAX_IREGS);
-#ifndef TARGET_ARM
+#if !defined(TARGET_ARM) && !defined(TARGET_ARM64)
 		/* this seems to trigger a gcc compilation bug sometime (hreg is 0) */
+		/* On arm64, rgctx_reg is a global hreg, and it is used to pass an argument */
 		g_assert (! is_global_ireg (hreg));
 #endif
 
@@ -1100,7 +1126,7 @@ mono_local_regalloc (MonoCompile *cfg, MonoBasicBlock *bb)
 		desc_to_fixed_reg_inited = TRUE;
 
 		/* Validate the cpu description against the info in mini-ops.h */
-#if defined(TARGET_AMD64) || defined(TARGET_X86) || defined(TARGET_ARM)
+#if defined(TARGET_AMD64) || defined(TARGET_X86) || defined(TARGET_ARM) || defined(TARGET_ARM64)
 		for (i = OP_LOAD; i < OP_LAST; ++i) {
 			const char *ispec;
 
@@ -1148,6 +1174,8 @@ mono_local_regalloc (MonoCompile *cfg, MonoBasicBlock *bb)
 	 * bblock.
 	 */
 	for (ins = bb->code; ins; ins = ins->next) {
+		gboolean modify = FALSE;
+
 		spec = ins_get_spec (ins->opcode);
 
 		if ((ins->dreg != -1) && (ins->dreg < max)) {
@@ -1173,12 +1201,14 @@ mono_local_regalloc (MonoCompile *cfg, MonoBasicBlock *bb)
 #if SIZEOF_REGISTER == 4
 				if (MONO_ARCH_INST_IS_REGPAIR (spec [MONO_INST_SRC1 + j])) {
 					sregs [j]++;
+					modify = TRUE;
 					memset (&reginfo [sregs [j] + 1], 0, sizeof (RegTrack));
 				}
 #endif
 			}
 		}
-		mono_inst_set_src_registers (ins, sregs);
+		if (modify)
+			mono_inst_set_src_registers (ins, sregs);
 	}
 
 	/*if (cfg->opt & MONO_OPT_COPYPROP)
@@ -1427,6 +1457,8 @@ mono_local_regalloc (MonoCompile *cfg, MonoBasicBlock *bb)
 						if (k != j)
 							sreg_masks [k] &= ~ (regmask (dest_sreg));
 					}
+					/* See below */
+					dreg_mask &= ~ (regmask (dest_sreg));
 				} else {
 					val = rs->vassign [sreg];
 					if (val == -1) {
@@ -1446,7 +1478,7 @@ mono_local_regalloc (MonoCompile *cfg, MonoBasicBlock *bb)
 								sreg_masks [k] &= ~ (regmask (dest_sreg));
 						}
 						/* 
-						 * Prevent the dreg from being allocate to dest_sreg 
+						 * Prevent the dreg from being allocated to dest_sreg
 						 * too, since it could force sreg1 to be allocated to 
 						 * the same reg on x86.
 						 */
@@ -1777,7 +1809,7 @@ mono_local_regalloc (MonoCompile *cfg, MonoBasicBlock *bb)
 							continue;
 
 						s = regmask (j);
-						if ((clob_mask & s) && !(rs->free_mask [cur_bank] & s) && (j != ins->sreg1)) {
+						if ((clob_mask & s) && !(rs->free_mask [cur_bank] & s)) {
 							if (j != dreg)
 								free_up_hreg (cfg, bb, tmp, ins, j, cur_bank);
 							else if (rs->symbolic [cur_bank] [j])
@@ -2323,11 +2355,15 @@ mono_opcode_to_cond (int opcode)
 	case OP_LCEQ:
 	case OP_FBEQ:
 	case OP_FCEQ:
+	case OP_RBEQ:
+	case OP_RCEQ:
 	case OP_COND_EXC_EQ:
 	case OP_COND_EXC_IEQ:
 	case OP_CMOV_IEQ:
 	case OP_CMOV_LEQ:
 		return CMP_EQ;
+	case OP_FCNEQ:
+	case OP_ICNEQ:
 	case OP_IBNE_UN:
 	case OP_LBNE_UN:
 	case OP_FBNE_UN:
@@ -2336,12 +2372,16 @@ mono_opcode_to_cond (int opcode)
 	case OP_CMOV_INE_UN:
 	case OP_CMOV_LNE_UN:
 		return CMP_NE;
+	case OP_FCLE:
+	case OP_ICLE:
 	case OP_IBLE:
 	case OP_LBLE:
 	case OP_FBLE:
 	case OP_CMOV_ILE:
 	case OP_CMOV_LLE:
 		return CMP_LE;
+	case OP_FCGE:
+	case OP_ICGE:
 	case OP_IBGE:
 	case OP_LBGE:
 	case OP_FBGE:
@@ -2355,6 +2395,8 @@ mono_opcode_to_cond (int opcode)
 	case OP_LCLT:
 	case OP_FBLT:
 	case OP_FCLT:
+	case OP_RBLT:
+	case OP_RCLT:
 	case OP_COND_EXC_LT:
 	case OP_COND_EXC_ILT:
 	case OP_CMOV_ILT:
@@ -2367,12 +2409,15 @@ mono_opcode_to_cond (int opcode)
 	case OP_LCGT:
 	case OP_FBGT:
 	case OP_FCGT:
+	case OP_RBGT:
+	case OP_RCGT:
 	case OP_COND_EXC_GT:
 	case OP_COND_EXC_IGT:
 	case OP_CMOV_IGT:
 	case OP_CMOV_LGT:
 		return CMP_GT;
 
+	case OP_ICLE_UN:
 	case OP_IBLE_UN:
 	case OP_LBLE_UN:
 	case OP_FBLE_UN:
@@ -2381,6 +2426,8 @@ mono_opcode_to_cond (int opcode)
 	case OP_CMOV_ILE_UN:
 	case OP_CMOV_LLE_UN:
 		return CMP_LE_UN;
+
+	case OP_ICGE_UN:
 	case OP_IBGE_UN:
 	case OP_LBGE_UN:
 	case OP_FBGE_UN:
@@ -2394,6 +2441,8 @@ mono_opcode_to_cond (int opcode)
 	case OP_LCLT_UN:
 	case OP_FBLT_UN:
 	case OP_FCLT_UN:
+	case OP_RBLT_UN:
+	case OP_RCLT_UN:
 	case OP_COND_EXC_LT_UN:
 	case OP_COND_EXC_ILT_UN:
 	case OP_CMOV_ILT_UN:
@@ -2406,6 +2455,8 @@ mono_opcode_to_cond (int opcode)
 	case OP_LCGT_UN:
 	case OP_FCGT_UN:
 	case OP_FBGT_UN:
+	case OP_RCGT_UN:
+	case OP_RBGT_UN:
 	case OP_COND_EXC_GT_UN:
 	case OP_COND_EXC_IGT_UN:
 	case OP_CMOV_IGT_UN:
@@ -2533,7 +2584,8 @@ mono_is_regsize_var (MonoType *t)
 void
 mono_peephole_ins (MonoBasicBlock *bb, MonoInst *ins)
 {
-	MonoInst *last_ins = ins->prev;
+	int filter = FILTER_IL_SEQ_POINT;
+	MonoInst *last_ins = mono_inst_prev (ins, filter);
 
 	switch (ins->opcode) {
 	case OP_MUL_IMM: 
@@ -2557,7 +2609,7 @@ mono_peephole_ins (MonoBasicBlock *bb, MonoInst *ins)
 		 * OP_MOVE reg1, reg2
 		 */
 		if (last_ins && last_ins->opcode == OP_GC_LIVENESS_DEF)
-			last_ins = last_ins->prev;
+			last_ins = mono_inst_prev (ins, filter);
 		if (last_ins &&
 			(((ins->opcode == OP_LOADI4_MEMBASE) && (last_ins->opcode == OP_STOREI4_MEMBASE_REG)) ||
 			 ((ins->opcode == OP_LOAD_MEMBASE) && (last_ins->opcode == OP_STORE_MEMBASE_REG))) &&
@@ -2682,6 +2734,29 @@ mono_peephole_ins (MonoBasicBlock *bb, MonoInst *ins)
 		MONO_DELETE_INS (bb, ins);
 		break;
 	}
+}
+
+int
+mini_exception_id_by_name (const char *name)
+{
+	if (strcmp (name, "IndexOutOfRangeException") == 0)
+		return MONO_EXC_INDEX_OUT_OF_RANGE;
+	if (strcmp (name, "OverflowException") == 0)
+		return MONO_EXC_OVERFLOW;
+	if (strcmp (name, "ArithmeticException") == 0)
+		return MONO_EXC_ARITHMETIC;
+	if (strcmp (name, "DivideByZeroException") == 0)
+		return MONO_EXC_DIVIDE_BY_ZERO;
+	if (strcmp (name, "InvalidCastException") == 0)
+		return MONO_EXC_INVALID_CAST;
+	if (strcmp (name, "NullReferenceException") == 0)
+		return MONO_EXC_NULL_REF;
+	if (strcmp (name, "ArrayTypeMismatchException") == 0)
+		return MONO_EXC_ARRAY_TYPE_MISMATCH;
+	if (strcmp (name, "ArgumentException") == 0)
+		return MONO_EXC_ARGUMENT;
+	g_error ("Unknown intrinsic exception %s\n", name);
+	return -1;
 }
 
 #endif /* DISABLE_JIT */

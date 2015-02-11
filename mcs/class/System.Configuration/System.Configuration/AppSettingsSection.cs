@@ -27,7 +27,6 @@
 // Copyright (C) 2004 Novell, Inc (http://www.novell.com)
 //
 
-#if NET_2_0
 using System;
 using System.ComponentModel;
 using System.Collections.Specialized;
@@ -72,8 +71,12 @@ namespace System.Configuration {
 
 			if (File != "") {
 				try {
-					Stream s = System.IO.File.OpenRead (File);
-					XmlReader subreader = new ConfigXmlTextReader (s, File);
+					string filePath = File;
+					if (!Path.IsPathRooted (filePath))
+						filePath = Path.Combine (Path.GetDirectoryName (Configuration.FilePath), filePath);
+
+					Stream s = System.IO.File.OpenRead (filePath);
+					XmlReader subreader = new ConfigXmlTextReader (s, filePath);
 					base.DeserializeElement (subreader, serializeCollectionKey);
 					s.Close ();
 				}
@@ -135,4 +138,3 @@ namespace System.Configuration {
 		}
 	}
 }
-#endif

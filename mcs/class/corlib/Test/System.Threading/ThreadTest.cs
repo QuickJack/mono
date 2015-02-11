@@ -25,9 +25,7 @@ namespace MonoTests.System.Threading
 	{
 		public static void NoPrincipal () 
 		{
-#if !TARGET_JVM // AppDomain.SetPrincipalPolicy not supported for TARGET_JVM
 			AppDomain.CurrentDomain.SetPrincipalPolicy (PrincipalPolicy.NoPrincipal);
-#endif
 			IPrincipal p = Thread.CurrentPrincipal;
 			Assert.IsNull (p, "#1");
 
@@ -39,7 +37,6 @@ namespace MonoTests.System.Threading
 			// in this case we can return to null
 		}
 
-#if !TARGET_JVM // AppDomain.SetPrincipalPolicy not supported for TARGET_JVM
 		public static void UnauthenticatedPrincipal () 
 		{
 			AppDomain.CurrentDomain.SetPrincipalPolicy (PrincipalPolicy.UnauthenticatedPrincipal);
@@ -76,7 +73,6 @@ namespace MonoTests.System.Threading
 			Assert.IsNotNull (Thread.CurrentPrincipal, "#7");
 			// in this case we can't return to null
 		}
-#endif // TARGET_JVM
 
 		public static void CopyOnNewThread ()
 		{
@@ -86,12 +82,13 @@ namespace MonoTests.System.Threading
 	}
 
 	[TestFixture]
+	[Category("MobileNotWorking")] // Abort #10240
 	public class ThreadTest
 	{
-		TimeSpan Infinite = new TimeSpan (-10000);	// -10000 ticks == -1 ms
+		//TimeSpan Infinite = new TimeSpan (-10000);	// -10000 ticks == -1 ms
 		TimeSpan SmallNegative = new TimeSpan (-2);	// between 0 and -1.0 (infinite) ms
 		TimeSpan Negative = new TimeSpan (-20000);	// really negative
-		TimeSpan MaxValue = TimeSpan.FromMilliseconds ((long) Int32.MaxValue);
+		//TimeSpan MaxValue = TimeSpan.FromMilliseconds ((long) Int32.MaxValue);
 		TimeSpan TooLarge = TimeSpan.FromMilliseconds ((long) Int32.MaxValue + 1);
 
 		static bool is_win32;
@@ -263,38 +260,29 @@ namespace MonoTests.System.Threading
 			C1Test test1 = new C1Test ();
 			Thread tA = new Thread (new ThreadStart (test1.TestMethod));
 			int hA1 = tA.GetHashCode ();
-#if NET_2_0
 			Assert.IsTrue (hA1 > 0, "#A1");
-#endif
 			tA.Start ();
 			int hA2 = tA.GetHashCode ();
 			Assert.AreEqual (hA1, hA2, "#A2");
 			tA.Join ();
 			int hA3 = tA.GetHashCode ();
 			Assert.AreEqual (hA1, hA3, "#A3");
-#if NET_2_0
 			Assert.AreEqual (hA1, tA.ManagedThreadId, "#A4");
-#endif
 
 			test1 = new C1Test ();
 			Thread tB = new Thread (new ThreadStart (test1.TestMethod));
 			int hB1 = tB.GetHashCode ();
-#if NET_2_0
 			Assert.IsTrue (hB1 > 0, "#B1");
-#endif
 			tB.Start ();
 			int hB2 = tB.GetHashCode ();
 			Assert.AreEqual (hB1, hB2, "#B2");
 			tB.Join ();
 			int hB3 = tB.GetHashCode ();
 			Assert.AreEqual (hB1, hB3, "#B3");
-#if NET_2_0
 			Assert.AreEqual (hB1, tB.ManagedThreadId, "#B4");
-#endif
 			Assert.IsFalse (hA2 == hB2, "#B5");
 		}
 
-#if NET_2_0
 		[Test] // bug #82700
 		public void ManagedThreadId ()
 		{
@@ -319,7 +307,6 @@ namespace MonoTests.System.Threading
 			Assert.AreEqual (mtB2, mtB3, "#B2");
 			Assert.IsFalse (mtB1 == mtA1, "#B3");
 		}
-#endif
 
 		[Test]
 		[Category ("NotDotNet")] // it hangs.
@@ -368,11 +355,7 @@ namespace MonoTests.System.Threading
 			Assert.AreEqual (ApartmentState.Unknown, TestThread.ApartmentState, "#1");
 			TestThread.Start();
 			TestUtil.WaitForAlive (TestThread, "wait5");
-#if NET_2_0
 			Assert.AreEqual (ApartmentState.MTA, TestThread.ApartmentState, "#2");
-#else
-			Assert.AreEqual (ApartmentState.Unknown, TestThread.ApartmentState, "#3");
-#endif
 			TestThread.Abort();
 		}
 
@@ -529,11 +512,42 @@ namespace MonoTests.System.Threading
 
 		[Test]
 		[ExpectedException (typeof (InvalidOperationException))]
-		public void ReName ()
+		public void Rename ()
 		{
-			Thread t = new Thread (new ThreadStart (ReName));
+			Thread t = new Thread (new ThreadStart (Rename));
 			t.Name = "a";
 			t.Name = "b";
+		}
+
+		bool rename_finished;
+		bool rename_failed;
+
+		[Test]
+		public void RenameTpThread ()
+		{
+			object monitor = new object ();
+			ThreadPool.QueueUserWorkItem (new WaitCallback (Rename_callback), monitor);
+			lock (monitor) {
+				if (!rename_finished)
+					Monitor.Wait (monitor);
+			}
+			Assert.IsTrue (!rename_failed);
+		}
+
+		void Rename_callback (object o) {
+			Thread.CurrentThread.Name = "a";
+			try {
+				Thread.CurrentThread.Name = "b";
+				//Console.WriteLine ("Thread name is: {0}", Thread.CurrentThread.Name);
+			} catch (Exception e) {
+				//Console.Error.WriteLine (e);
+				rename_failed = true;
+			}
+			object monitor = o;
+			lock (monitor) {
+				rename_finished = true;
+				Monitor.Pulse (monitor);
+			}
 		}
 
 		[Test]
@@ -683,7 +697,6 @@ namespace MonoTests.System.Threading
 			}
 		}
 
-#if !TARGET_JVM // AppDomain.SetPrincipalPolicy not supported for TARGET_JVM
 		[Test]
 		[Ignore ("see comment below.")]
 		public void CurrentPrincipal_PrincipalPolicy_UnauthenticatedPrincipal () 
@@ -712,7 +725,6 @@ namespace MonoTests.System.Threading
 				t.Abort ();
 			}
 		}
-#endif // TARGET_JVM
 		
 		[Test]
 		public void IPrincipal_CopyOnNewThread () 
@@ -836,6 +848,13 @@ namespace MonoTests.System.Threading
 			}
 		}
 
+		[Test]
+		public void GetNamedDataSlotTest ()
+		{
+			Assert.IsNotNull (Thread.GetNamedDataSlot ("te#st"), "#1");
+			Assert.AreSame (Thread.GetNamedDataSlot ("te#st"), Thread.GetNamedDataSlot ("te#st"), "#2");
+		}
+
 		void CheckIsRunning (string s, Thread t)
 		{
 			int c = counter;
@@ -945,7 +964,7 @@ namespace MonoTests.System.Threading
 			public string ad_b2;
 			public string message;
 		}
-
+#if !MOBILE
 		[Test]
 		public void ManagedThreadId_AppDomains ()
 		{
@@ -986,7 +1005,7 @@ namespace MonoTests.System.Threading
 			Assert.AreNotEqual (mbro.ad_b1, AppDomain.CurrentDomain.FriendlyName, "Name #5");
 			Assert.AreNotEqual (mbro.ad_b2, AppDomain.CurrentDomain.FriendlyName, "Name #6");
 		}
-
+#endif
 		void A1 ()
 		{
 			mbro.id_a1 = Thread.CurrentThread.ManagedThreadId;
@@ -1104,11 +1123,7 @@ namespace MonoTests.System.Threading
 				exception_occured = true;
 			}
 			Assert.AreEqual (ApartmentState.Unknown, t3.ApartmentState, "Thread3 Set Invalid");
-#if NET_2_0
 			Assert.IsFalse (exception_occured, "Thread3 Set Invalid Exception Occured");
-#else
-			Assert.IsTrue (exception_occured, "Thread3 Set Invalid Exception Occured");
-#endif
 
 			t1.Start ();
 			exception_occured = false;
@@ -1122,6 +1137,60 @@ namespace MonoTests.System.Threading
 		}
 
 		[Test]
+		public void TestSetApartmentStateSameState ()
+		{
+			Thread t1 = new Thread (new ThreadStart (Start));
+			t1.SetApartmentState (ApartmentState.STA);
+			Assert.AreEqual (ApartmentState.STA, t1.ApartmentState, "Thread1 Set Once");
+
+			t1.SetApartmentState (ApartmentState.STA);
+			Assert.AreEqual (ApartmentState.STA, t1.ApartmentState, "Thread1 Set twice");
+		}
+
+		[Test]
+		[ExpectedException(typeof(InvalidOperationException))]
+		public void TestSetApartmentStateDiffState ()
+		{
+			Thread t1 = new Thread (new ThreadStart (Start));
+			t1.SetApartmentState (ApartmentState.STA);
+			Assert.AreEqual (ApartmentState.STA, t1.ApartmentState, "Thread1 Set Once");
+
+			t1.SetApartmentState (ApartmentState.MTA);
+		}
+
+		[Test]
+		public void TestTrySetApartmentState ()
+		{
+			Thread t1 = new Thread (new ThreadStart (Start));
+			t1.SetApartmentState (ApartmentState.STA);
+			Assert.AreEqual (ApartmentState.STA, t1.ApartmentState, "#1");
+
+			bool result = t1.TrySetApartmentState (ApartmentState.MTA);
+			Assert.IsFalse (result, "#2");
+
+			result = t1.TrySetApartmentState (ApartmentState.STA);
+			Assert.IsTrue (result, "#3");
+		}
+
+		[Test]
+		public void TestTrySetApartmentStateRunning ()
+		{
+			Thread t1 = new Thread (new ThreadStart (Start));
+			t1.SetApartmentState (ApartmentState.STA);
+			Assert.AreEqual (ApartmentState.STA, t1.ApartmentState, "#1");
+
+			t1.Start ();
+
+			try {
+				t1.TrySetApartmentState (ApartmentState.STA);
+				Assert.Fail ("#2");
+			} catch (ThreadStateException) {
+			}
+
+			t1.Join ();
+		}
+
+		[Test]
 		public void Volatile () {
 			double v3 = 55667;
 			Thread.VolatileWrite (ref v3, double.MaxValue);
@@ -1131,6 +1200,43 @@ namespace MonoTests.System.Threading
 			Thread.VolatileWrite (ref v4, float.MaxValue);
 			Assert.AreEqual (v4, float.MaxValue);
 		}
+
+		[Test]
+		public void Culture ()
+		{
+			Assert.IsNotNull (Thread.CurrentThread.CurrentCulture, "CurrentCulture");
+			Assert.IsNotNull (Thread.CurrentThread.CurrentUICulture, "CurrentUICulture");
+		}
+
+		[Test]
+		public void ThreadStartSimple ()
+		{
+			int i = 0;
+			Thread t = new Thread (delegate () {
+				// ensure the NSAutoreleasePool works
+				i++;
+			});
+			t.Start ();
+			t.Join ();
+			Assert.AreEqual (1, i, "ThreadStart");
+		}
+
+		[Test]
+		public void ParametrizedThreadStart ()
+		{
+			int i = 0;
+			object arg = null;
+			Thread t = new Thread (delegate (object obj) {
+				// ensure the NSAutoreleasePool works
+				i++;
+				arg = obj;
+			});
+			t.Start (this);
+			t.Join ();
+
+			Assert.AreEqual (1, i, "ParametrizedThreadStart");
+			Assert.AreEqual (this, arg, "obj");	
+		}		
 
 		[Test]
 		public void SetNameTpThread () {

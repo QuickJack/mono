@@ -26,8 +26,6 @@
 // Copyright (C) 2005 Novell, Inc (http://www.novell.com)
 //
 
-#if NET_2_0
-
 using System;
 using System.IO;
 using System.Security;
@@ -163,34 +161,24 @@ namespace System.Configuration
 		{
 			throw new NotImplementedException ();
 		}
-#if !TARGET_JVM
 		[MethodImplAttribute(MethodImplOptions.InternalCall)]
 		extern private static string get_bundled_machine_config ();
 
 		[MethodImplAttribute(MethodImplOptions.InternalCall)]
 		extern private static string get_bundled_app_config ();
-#endif
 		
 		public virtual Stream OpenStreamForRead (string streamName)
 		{
 			if (String.CompareOrdinal (streamName, System.Runtime.InteropServices.RuntimeEnvironment.SystemConfigurationFile) == 0) {
-#if TARGET_JVM
-				return (Stream) vmw.common.IOUtils.getStreamForGHConfigs (streamName);
-#else
 				string bundle = get_bundled_machine_config ();
 				if (bundle != null)
 					return new MemoryStream (System.Text.Encoding.UTF8.GetBytes (bundle));
-#endif
 			}
 
 			if (String.CompareOrdinal (streamName, AppDomain.CurrentDomain.SetupInformation.ConfigurationFile) == 0) {
-#if TARGET_JVM
-				throw new NotImplementedException();
-#else
 				string bundle = get_bundled_app_config ();
 				if (bundle != null)
 					return new MemoryStream (System.Text.Encoding.UTF8.GetBytes (bundle));
-#endif
 			}
 
 			if (!File.Exists (streamName))
@@ -411,4 +399,3 @@ namespace System.Configuration
 	}
 }
 
-#endif

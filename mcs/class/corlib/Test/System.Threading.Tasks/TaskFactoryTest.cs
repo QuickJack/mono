@@ -28,7 +28,7 @@
 //
 //
 
-#if NET_4_0 || MOBILE
+#if NET_4_0
 
 using System;
 using System.Threading;
@@ -36,6 +36,9 @@ using System.Threading.Tasks;
 using System.Collections.Generic;
 
 using NUnit.Framework;
+#if !MOBILE
+using NUnit.Framework.SyntaxHelpers;
+#endif
 
 namespace MonoTests.System.Threading.Tasks
 {
@@ -220,19 +223,20 @@ namespace MonoTests.System.Threading.Tasks
 			try {
 				factory.ContinueWhenAll (tasks, null);
 				Assert.Fail ("#4");
-			} catch (ArgumentException) {
+			} catch (ArgumentNullException) {
 			}
 
 			try {
 				factory.ContinueWhenAll (tasks, delegate { }, CancellationToken.None, TaskContinuationOptions.None, null);
 				Assert.Fail ("#5");
-			} catch (ArgumentException) {
+			} catch (ArgumentNullException) {
 			}
 
 			try {
 				factory.ContinueWhenAll (tasks, delegate { }, CancellationToken.None, TaskContinuationOptions.OnlyOnCanceled, null);
 				Assert.Fail ("#6");
-			} catch (ArgumentException) {
+			} catch (ArgumentNullException) {
+			} catch (ArgumentOutOfRangeException) {
 			}
 		}
 
@@ -279,6 +283,16 @@ namespace MonoTests.System.Threading.Tasks
 		}
 
 		[Test]
+		public void ContinueWhenAny_WithResult ()
+		{
+			var tcs = new TaskCompletionSource<int>();
+			tcs.SetResult(1);
+			Task[] tasks = new[] { tcs.Task };
+			var res = Task.Factory.ContinueWhenAny (tasks, l => 4);
+			Assert.AreEqual (4, res.Result);
+		}
+
+		[Test]
 		public void ContinueWhenAny_InvalidArguments ()
 		{
 			try {
@@ -306,19 +320,20 @@ namespace MonoTests.System.Threading.Tasks
 			try {
 				factory.ContinueWhenAny (tasks, null);
 				Assert.Fail ("#4");
-			} catch (ArgumentException) {
+			} catch (ArgumentNullException) {
 			}
 
 			try {
 				factory.ContinueWhenAny (tasks, delegate { }, CancellationToken.None, TaskContinuationOptions.None, null);
 				Assert.Fail ("#5");
-			} catch (ArgumentException) {
+			} catch (ArgumentNullException) {
 			}
 
 			try {
 				factory.ContinueWhenAny (tasks, delegate { }, CancellationToken.None, TaskContinuationOptions.OnlyOnCanceled, null);
 				Assert.Fail ("#6");
-			} catch (ArgumentException) {
+			} catch (ArgumentNullException) {
+			} catch (ArgumentOutOfRangeException) {
 			}
 		}
 
@@ -367,16 +382,16 @@ namespace MonoTests.System.Threading.Tasks
 			Task<int> task = factory.FromAsync<int, int> (func.BeginInvoke, func.EndInvoke, 1, null);
 			var cont = task.ContinueWith (_ => continuationTest = true, TaskContinuationOptions.ExecuteSynchronously);
 			try {
-				task.Wait ();
+				task.Wait (2000);
 			} catch { }
-			cont.Wait ();
+			Assert.IsTrue (cont.Wait (2000), "#1");
 
 			Assert.IsTrue (result);
 			Assert.IsTrue (continuationTest);
 			Assert.IsNotNull (task.Exception);
 			var agg = task.Exception;
 			Assert.AreEqual (1, agg.InnerExceptions.Count);
-			Assert.IsInstanceOfType (typeof (ApplicationException), agg.InnerExceptions[0]);
+			Assert.That (agg.InnerExceptions[0], Is.TypeOf (typeof (ApplicationException)));
 			Assert.AreEqual (TaskStatus.Faulted, task.Status);
 
 			try {
@@ -591,16 +606,23 @@ namespace MonoTests.System.Threading.Tasks
 		[Test]
 		public void StartNewCancelled ()
 		{
-			var cts = new CancellationTokenSource ();
-			cts.Cancel ();
+			var ct = new CancellationToken (true);
 
-			var task = factory.StartNew (() => Assert.Fail ("Should never be called"), cts.Token);
+			var task = factory.StartNew (() => Assert.Fail ("Should never be called"), ct);
 			try {
 				task.Start ();
+				Assert.Fail ("#1");
 			} catch (InvalidOperationException) {
 			}
 
-			Assert.IsTrue (task.IsCanceled, "#2");
+			try {
+				task.Wait ();
+				Assert.Fail ("#2");
+			} catch (AggregateException e) {
+				Assert.That (e.InnerException, Is.TypeOf (typeof (TaskCanceledException)), "#3");
+			}
+
+			Assert.IsTrue (task.IsCanceled, "#4");
 		}
 	}
 }

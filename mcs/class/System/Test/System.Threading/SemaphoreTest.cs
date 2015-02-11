@@ -26,7 +26,6 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if NET_2_0
 
 using NUnit.Framework;
 
@@ -182,6 +181,7 @@ namespace MonoTests.System.Threading {
 		}
 
 		[Test]
+		[Category ("MobileNotWorking")]
 		public void Constructor_IntIntStringBoolSecurity ()
 		{
 			bool created = false;
@@ -191,6 +191,7 @@ namespace MonoTests.System.Threading {
 		}
 
 		[Test]
+		[Category ("MobileNotWorking")]
 		[ExpectedException (typeof (ArgumentNullException))]
 		public void OpenExisting_NullName ()
 		{
@@ -198,6 +199,7 @@ namespace MonoTests.System.Threading {
 		}
 
 		[Test]
+		[Category ("MobileNotWorking")]
 		[ExpectedException (typeof (ArgumentException))]
 		public void OpenExisting_EmptyName ()
 		{
@@ -205,6 +207,7 @@ namespace MonoTests.System.Threading {
 		}
 
 		[Test]
+		[Category ("MobileNotWorking")]
 		[ExpectedException (typeof (ArgumentException))]
 		public void OpenExisting_TooLongName ()
 		{
@@ -212,6 +215,7 @@ namespace MonoTests.System.Threading {
 		}
 
 		[Test]
+		[Category ("MobileNotWorking")]
 		[ExpectedException (typeof (WaitHandleCannotBeOpenedException))]
 		public void OpenExisting_Unexisting ()
 		{
@@ -266,4 +270,3 @@ namespace MonoTests.System.Threading {
 	}
 }
 
-#endif

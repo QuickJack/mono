@@ -33,7 +33,12 @@ using System.Threading;
 
 namespace Mono.Security.Protocol.Tls
 {
-	public abstract class SslStreamBase: Stream, IDisposable
+#if INSIDE_SYSTEM
+	internal
+#else
+	public
+#endif
+	abstract class SslStreamBase: Stream, IDisposable
 	{
 		private delegate void AsyncHandshakeDelegate(InternalAsyncResult asyncResult, bool fromWrite);
 		
@@ -91,18 +96,11 @@ namespace Mono.Security.Protocol.Tls
 			{
 				try
 				{
-					this.OnNegotiateHandshakeCallback(asyncResult);
-				}
-				catch (TlsException ex)
-				{
-					this.protocol.SendAlert(ex.Alert);
-
-					throw new IOException("The authentication or decryption has failed.", ex);
+					this.EndNegotiateHandshake(asyncResult);
 				}
 				catch (Exception ex)
 				{
-					this.protocol.SendAlert(AlertDescription.InternalError);
-
+					this.protocol.SendAlert(ref ex);
 					throw new IOException("The authentication or decryption has failed.", ex);
 				}
 
@@ -174,8 +172,8 @@ namespace Mono.Security.Protocol.Tls
 
 		#region Abstracts/Virtuals
 
-		internal abstract IAsyncResult OnBeginNegotiateHandshake(AsyncCallback callback, object state);
-		internal abstract void OnNegotiateHandshakeCallback(IAsyncResult asyncResult);
+		internal abstract IAsyncResult BeginNegotiateHandshake (AsyncCallback callback, object state);
+		internal abstract void EndNegotiateHandshake (IAsyncResult result);
 
 		internal abstract X509Certificate OnLocalCertificateSelection(X509CertificateCollection clientCertificates,
 															X509Certificate serverCertificate,
@@ -487,7 +485,7 @@ namespace Mono.Security.Protocol.Tls
 				{
 					if (this.context.HandshakeState == HandshakeState.None)
 					{
-						this.OnBeginNegotiateHandshake(new AsyncCallback(AsyncHandshakeCallback), asyncResult);
+						this.BeginNegotiateHandshake(new AsyncCallback(AsyncHandshakeCallback), asyncResult);
 
 						return true;
 					}
@@ -497,17 +495,10 @@ namespace Mono.Security.Protocol.Tls
 					}
 				}
 			}
-			catch (TlsException ex)
-			{
-				this.negotiationComplete.Set();
-				this.protocol.SendAlert(ex.Alert);
-
-				throw new IOException("The authentication or decryption has failed.", ex);
-			}
 			catch (Exception ex)
 			{
 				this.negotiationComplete.Set();
-				this.protocol.SendAlert(AlertDescription.InternalError);
+				this.protocol.SendAlert(ref ex);
 
 				throw new IOException("The authentication or decryption has failed.", ex);
 			}
@@ -623,15 +614,10 @@ namespace Mono.Security.Protocol.Tls
 					asyncResult.SetComplete(0);
 				}
 			}
-			catch (TlsException ex)
-			{
-				this.protocol.SendAlert(ex.Alert);
-
-				throw new IOException("The authentication or decryption has failed.", ex);
-			}
 			catch (Exception ex)
 			{
-				throw new IOException("IO exception during read.", ex);
+				this.protocol.SendAlert(ref ex);
+				throw new IOException("The authentication or decryption has failed.", ex);
 			}
 		}
 
@@ -776,16 +762,12 @@ namespace Mono.Security.Protocol.Tls
 						record, 0, record.Length, new AsyncCallback(InternalWriteCallback), asyncResult);
 				}
 			}
-			catch (TlsException ex)
+			catch (Exception ex)
 			{
-				this.protocol.SendAlert(ex.Alert);
+				this.protocol.SendAlert (ref ex);
 				this.Close();
 
 				throw new IOException("The authentication or decryption has failed.", ex);
-			}
-			catch (Exception ex)
-			{
-				throw new IOException("IO exception during Write.", ex);
 			}
 		}
 
@@ -1116,15 +1098,11 @@ namespace Mono.Security.Protocol.Tls
 					byte[] record = this.protocol.EncodeRecord (ContentType.ApplicationData, buffer, offset, count);
 					this.innerStream.Write (record, 0, record.Length);
 				}
-				catch (TlsException ex)
-				{
-					this.protocol.SendAlert(ex.Alert);
-					this.Close();
-					throw new IOException("The authentication or decryption has failed.", ex);
-				}
 				catch (Exception ex)
 				{
-					throw new IOException("IO exception during Write.", ex);
+					this.protocol.SendAlert(ref ex);
+					this.Close();
+					throw new IOException("The authentication or decryption has failed.", ex);
 				}
 			}
 		}

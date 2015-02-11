@@ -5,9 +5,11 @@
 //   Lawrence Pit (loz@cable.a2000.nl)
 //   Martin Willemoes Hansen (mwh@sysrq.dk)
 //   Gonzalo Paniagua Javier (gonzalo@ximian.com)
+//   Andres G. Aragoneses (andres@7digital.com)
 //
 // (C) 2003 Martin Willemoes Hansen
 // Copyright (c) 2005 Novell, Inc. (http://www.novell.com
+// Copyright (c) 2013 7digital Media Ltd (http://www.7digital.com)
 //
 
 using NUnit.Framework;
@@ -22,8 +24,8 @@ using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading;
-#if !TARGET_JVM
 using Mono.Security.Authenticode;
+#if !MOBILE
 using Mono.Security.Protocol.Tls;
 #endif
 
@@ -43,9 +45,6 @@ namespace MonoTests.System.Net
 		}
 
 		[Test]
-#if TARGET_JVM
-		[Ignore ("Ignore failures in Sys.Net")]
-#endif
 		public void Proxy_Null ()
 		{
 			HttpWebRequest req = (HttpWebRequest) WebRequest.Create ("http://www.google.com");
@@ -56,9 +55,6 @@ namespace MonoTests.System.Net
 
 		[Test]
 		[Category("InetAccess")]
-#if TARGET_JVM
-		[Ignore ("NMA - wrong cookies number returned")]
-#endif
 		public void Sync ()
 		{
 			HttpWebRequest req = (HttpWebRequest) WebRequest.Create ("http://www.google.com");
@@ -149,7 +145,7 @@ namespace MonoTests.System.Net
 			}
 		}
 
-#if !TARGET_JVM //NotWorking
+#if !MOBILE
 		[Test]
 		[Ignore ("Fails on MS.NET")]
 		public void SslClientBlock ()
@@ -184,9 +180,6 @@ namespace MonoTests.System.Net
 		}
 #endif
 		[Test]
-#if TARGET_JVM
-		[Category("NotWorking")]
-#endif
 		public void Missing_ContentEncoding ()
 		{
 			ServicePointManager.CertificatePolicy = new AcceptAllPolicy ();
@@ -209,9 +202,6 @@ namespace MonoTests.System.Net
 		}
 
 		[Test]
-#if TARGET_JVM
-		[Category ("NotWorking")]
-#endif
 		public void BadServer_ChunkedClose ()
 		{
 			// The server will send a chunked response without a 'last-chunked' mark
@@ -1000,9 +990,6 @@ namespace MonoTests.System.Net
 		}
 
 		[Test]
-#if TARGET_JVM
-		[Category("NotWorking")]
-#endif
 		[Ignore ("This does not timeout any more. That's how MS works when reading small responses")]
 		public void ReadTimeout ()
 		{
@@ -1037,9 +1024,6 @@ namespace MonoTests.System.Net
 		}
 
 		[Test] // bug #324300
-#if TARGET_JVM
-		[Category("NotWorking")]
-#endif
 		public void AllowAutoRedirect ()
 		{
 			IPEndPoint localEP = new IPEndPoint (IPAddress.Loopback, 8765);
@@ -1432,6 +1416,123 @@ namespace MonoTests.System.Net
 				Assert.AreEqual (((HttpWebResponse) ex.Response).StatusCode, HttpStatusCode.NotModified, "#4");
 			}
 		}
+
+
+		#region Timeout_Bug // https://bugzilla.novell.com/show_bug.cgi?id=317553
+
+		class TimeoutTestHelper {
+
+			string url_to_test;
+			internal DateTime? Start { get; private set; }
+			internal DateTime? End { get; private set; }
+			internal Exception Exception { get; private set; }
+			internal string Body { get; private set; }
+			internal int TimeOutInMilliSeconds { get; private set; }
+
+			internal TimeoutTestHelper (string url, int timeoutInMilliseconds)
+			{
+				url_to_test = url;
+				TimeOutInMilliSeconds = timeoutInMilliseconds;
+			}
+
+			internal void LaunchWebRequest ()
+			{
+				var req = (HttpWebRequest) WebRequest.Create (url_to_test);
+				req.Timeout = TimeOutInMilliSeconds;
+
+				Start = DateTime.Now;
+				try {
+					using (var resp = (HttpWebResponse) req.GetResponse ())
+					{
+						var sr = new StreamReader (resp.GetResponseStream (), Encoding.UTF8);
+						Body = sr.ReadToEnd ();
+					}
+				} catch (Exception e) {
+					End = DateTime.Now;
+					Exception = e;
+				}
+			}
+		}
+
+		void TestTimeOut (string url, WebExceptionStatus expectedExceptionStatus)
+		{
+			var timeoutWorker = new TimeoutTestHelper (url, three_seconds_in_milliseconds);
+			var threadStart = new ThreadStart (timeoutWorker.LaunchWebRequest);
+			var thread = new Thread (threadStart);
+			thread.Start ();
+			Thread.Sleep (three_seconds_in_milliseconds * 3);
+
+			if (timeoutWorker.End == null) {
+				thread.Abort ();
+				Assert.Fail ("Thread finished after triple the timeout specified has passed");
+			}
+
+			if (!String.IsNullOrEmpty (timeoutWorker.Body)) {
+				if (timeoutWorker.Body == response_of_timeout_handler) {
+					Assert.Fail ("Should not be reached, timeout exception was not thrown and webrequest managed to retrieve proper body");
+				}
+				Assert.Fail ("Should not be reached, timeout exception was not thrown and webrequest managed to retrieve an incorrect body: " + timeoutWorker.Body);
+			}
+
+			Assert.IsNotNull (timeoutWorker.Exception, "Exception was not thrown");
+
+			var webEx = timeoutWorker.Exception as WebException;
+			Assert.IsNotNull (webEx, "Exception thrown should be WebException, but was: " +
+			                  timeoutWorker.Exception.GetType ().FullName);
+
+			Assert.AreEqual (expectedExceptionStatus, webEx.Status,
+			                 "WebException was thrown, but with a wrong status (should be " + expectedExceptionStatus + "): " + webEx.Status);
+
+			Assert.IsFalse (timeoutWorker.End > (timeoutWorker.Start + TimeSpan.FromMilliseconds (three_seconds_in_milliseconds + 500)),
+			                "Timeout exception should have been thrown shortly after timeout is reached, however it was at least half-second late");
+		}
+
+		[Test] // 1st possible case of https://bugzilla.novell.com/show_bug.cgi?id=MONO74177
+		public void TestTimeoutPropertyWithServerThatExistsAndRespondsButTooLate ()
+		{
+			var ep = new IPEndPoint (IPAddress.Loopback, 8123);
+			string url = "http://" + ep + "/foobar/";
+
+			using (var responder = new SocketResponder (ep, TimeOutHandler))
+			{
+				responder.Start ();
+
+				TestTimeOut (url, WebExceptionStatus.Timeout);
+
+				responder.Stop ();
+			}
+		}
+
+		[Test] // 2nd possible case of https://bugzilla.novell.com/show_bug.cgi?id=MONO74177
+		public void TestTimeoutWithEndpointThatDoesntExistThrowsConnectFailureBeforeTimeout ()
+		{
+			string url = "http://127.0.0.1:8271/"; // some endpoint that is unlikely to exist
+
+			// connecting to a non-existing endpoint should throw a ConnectFailure before the timeout is reached
+			TestTimeOut (url, WebExceptionStatus.ConnectFailure);
+		}
+
+		const string response_of_timeout_handler = "RESPONSE_OF_TIMEOUT_HANDLER";
+		const int three_seconds_in_milliseconds = 3000;
+
+		private static byte[] TimeOutHandler (Socket socket)
+		{
+			socket.Receive (new byte[4096]);
+
+			Thread.Sleep (three_seconds_in_milliseconds * 2);
+
+			var sw = new StringWriter ();
+			sw.WriteLine ("HTTP/1.1 200 OK");
+			sw.WriteLine ("Content-Type: text/plain");
+			sw.WriteLine ("Content-Length: " + response_of_timeout_handler.Length);
+			sw.WriteLine ();
+			sw.Write (response_of_timeout_handler);
+			sw.Flush ();
+
+			return Encoding.UTF8.GetBytes (sw.ToString ());
+		}
+
+		#endregion
 
 		internal static byte [] EchoRequestHandler (Socket socket)
 		{
@@ -1954,9 +2055,9 @@ namespace MonoTests.System.Net
 			},
 			(c) =>
 			{
-				c.Request.InputStream.ReadAll (received, 0, received.Length);
-				c.Response.StatusCode = 204;
-				c.Response.Close();
+				//c.Request.InputStream.ReadAll (received, 0, received.Length);
+				//c.Response.StatusCode = 204;
+				//c.Response.Close();
 			});
 		}
 
@@ -1982,8 +2083,8 @@ namespace MonoTests.System.Net
 			(c) =>
 			{
 				c.Request.InputStream.ReadAll (received, 0, received.Length);
-				c.Response.StatusCode = 204;
-				c.Response.Close ();
+//				c.Response.StatusCode = 204;
+//				c.Response.Close ();
 			});
 		}
 
@@ -2108,7 +2209,7 @@ namespace MonoTests.System.Net
 				c.Response.ContentLength64 = data64KB.Length;
 				c.Response.OutputStream.Write (data64KB, 0, data64KB.Length / 2);
 				Thread.Sleep (1000);
-				c.Response.OutputStream.Write (data64KB, data64KB.Length / 2, data64KB.Length / 2);
+//				c.Response.OutputStream.Write (data64KB, data64KB.Length / 2, data64KB.Length / 2);
 				c.Response.OutputStream.Close ();
 				c.Response.Close ();
 			});
@@ -2189,16 +2290,18 @@ namespace MonoTests.System.Net
 			(c) =>
 			{
 				aborted.Set ();
-				Thread.Sleep (100);
-				c.Response.StatusCode = 200;
-				c.Response.ContentLength64 = 0;
-				c.Response.Close ();
+//				Thread.Sleep (100);
+//				c.Response.StatusCode = 200;
+//				c.Response.ContentLength64 = 0;
+//				c.Response.Close ();
 			});
+
+			return;
 		}
 
 		void DoRequest (Action<HttpWebRequest, EventWaitHandle> request)
 		{
-			int port = rand.Next (20000, 65535);
+			int port = 30158;
 
 			ManualResetEvent completed = new ManualResetEvent (false);
 			Uri address = new Uri (string.Format ("http://localhost:{0}", port));
@@ -2212,7 +2315,7 @@ namespace MonoTests.System.Net
 
 		void DoRequest (Action<HttpWebRequest, EventWaitHandle> request, Action<HttpListenerContext> processor)
 		{
-			int port = rand.Next (20000, 65535);
+			int port = 30158;
 
 			ManualResetEvent [] completed = new ManualResetEvent [2];
 			completed [0] = new ManualResetEvent (false);
@@ -2359,7 +2462,53 @@ namespace MonoTests.System.Net
 
 			Assert.AreEqual (null, req.Headers.Get ("Date"));
 		}
+		
+		[Test]
+		// Bug #12393
+		public void TestIPv6Host ()
+		{
+			var address = "2001:0000:0000:0001:0001:0001:0157:0000";
+			var address2 = '[' + address + ']';
+			var uri = new Uri (string.Format ("http://{0}/test.css", address2));
+			var hwr = (HttpWebRequest)WebRequest.Create (uri);
+
+			hwr.Host = address2;
+			Assert.AreEqual (address2, hwr.Host, "#1");
+		}
+
+		[Test]
+		// Bug #12393
+		[Category ("NotWorking")]
+		public void TestIPv6Host2 ()
+		{
+			var address = "2001:0000:0000:0001:0001:0001:0157:0000";
+			var address2 = '[' + address + ']';
+			var uri = new Uri (string.Format ("http://{0}/test.css", address2));
+			var hwr = (HttpWebRequest)WebRequest.Create (uri);
+
+			try {
+				hwr.Host = address;
+				Assert.Fail ("#1");
+			} catch (ArgumentException) {
+				;
+			}
+		}
 #endif
+
+#if NET_4_5
+		[Test]
+		public void AllowReadStreamBuffering ()
+		{
+			var hr = WebRequest.CreateHttp ("http://www.google.com");
+			Assert.IsFalse (hr.AllowReadStreamBuffering, "#1");
+			try {
+				hr.AllowReadStreamBuffering = true;
+				Assert.Fail ("#2");
+			} catch (InvalidOperationException) {
+			}
+		}
+#endif
+
 		class ListenerScope : IDisposable {
 			EventWaitHandle completed;
 			public HttpListener listener;
@@ -2409,7 +2558,7 @@ namespace MonoTests.System.Net
 			}
 		}
 
-#if !TARGET_JVM
+#if !MOBILE
 		class SslHttpServer : HttpServer {
 			X509Certificate _certificate;
 
@@ -2740,9 +2889,6 @@ namespace MonoTests.System.Net
 		}
 
 		[Test] // bug #324182
-#if TARGET_JVM
-		[Category ("NotWorking")]
-#endif
 		public void CanTimeout ()
 		{
 			IPEndPoint ep = new IPEndPoint (IPAddress.Loopback, 9128);

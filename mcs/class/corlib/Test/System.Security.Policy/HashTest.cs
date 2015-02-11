@@ -37,6 +37,7 @@ using NUnit.Framework;
 namespace MonoTests.System.Security.Policy {
 
 	[TestFixture]
+	[Category ("MobileNotWorking")]
 	public class HashTest {
 
 		// mcs compiled
@@ -108,9 +109,6 @@ namespace MonoTests.System.Security.Policy {
 		}
 
 		[Test]
-#if !NET_2_0
-		[Category ("NotDotNet")] // Current hashing is compatible with Fx 2.0 but not with Fx 1.0/1.1
-#endif
 		public void MD5_Property ()
 		{
 			Hash h = new Hash (wellKnownAssembly);
@@ -118,9 +116,6 @@ namespace MonoTests.System.Security.Policy {
 		}
 
 		[Test]
-#if !NET_2_0
-		[Category ("NotDotNet")] // Current hashing is compatible with Fx 2.0 but not with Fx 1.0/1.1
-#endif
 		public void SHA1_Property ()
 		{
 			Hash h = new Hash (wellKnownAssembly);
@@ -128,9 +123,6 @@ namespace MonoTests.System.Security.Policy {
 		}
 
 		[Test]
-#if !NET_2_0
-		[Category ("NotDotNet")] // Current hashing is compatible with Fx 2.0 but not with Fx 1.0/1.1
-#endif
 		public void GenerateHash_MD5 ()
 		{
 			Hash h = new Hash (wellKnownAssembly);
@@ -139,9 +131,6 @@ namespace MonoTests.System.Security.Policy {
 		}
 
 		[Test]
-#if !NET_2_0
-		[Category ("NotDotNet")] // Current hashing is compatible with Fx 2.0 but not with Fx 1.0/1.1
-#endif
 		public void GenerateHash_SHA1 ()
 		{
 			Hash h = new Hash (wellKnownAssembly);
@@ -150,9 +139,6 @@ namespace MonoTests.System.Security.Policy {
 		}
 
 		[Test]
-#if !NET_2_0
-		[Category ("NotDotNet")] // Current hashing is compatible with Fx 2.0 but not with Fx 1.0/1.1
-#endif
 		public void GenerateHash_SHA256 ()
 		{
 			Hash h = new Hash (wellKnownAssembly);
@@ -161,9 +147,6 @@ namespace MonoTests.System.Security.Policy {
 		}
 
 		[Test]
-#if !NET_2_0
-		[Category ("NotDotNet")] // Current hashing is compatible with Fx 2.0 but not with Fx 1.0/1.1
-#endif
 		public void GenerateHash_SHA384 ()
 		{
 			Hash h = new Hash (wellKnownAssembly);
@@ -172,9 +155,6 @@ namespace MonoTests.System.Security.Policy {
 		}
 
 		[Test]
-#if !NET_2_0
-		[Category ("NotDotNet")] // Current hashing is compatible with Fx 2.0 but not with Fx 1.0/1.1
-#endif
 		public void GenerateHash_SHA512 ()
 		{
 			Hash h = new Hash (wellKnownAssembly);
@@ -182,7 +162,6 @@ namespace MonoTests.System.Security.Policy {
 			Assert.AreEqual ("C0-05-76-29-F9-E7-32-A9-8D-73-4B-90-12-6A-85-3F-5C-D3-5B-EF-A6-F2-A6-15-38-9C-22-FA-7E-72-CA-10-B0-21-E0-B6-0B-B8-AB-9E-0E-9F-64-0E-C6-F3-48-96-01-7B-A6-20-07-2F-03-6A-51-03-0F-3F-C4-70-B3-0F", BitConverter.ToString (result));
 		}
 
-#if NET_2_0
 		[Test]
 		public void GenerateHash_RIPEMD160 ()
 		{
@@ -250,6 +229,5 @@ namespace MonoTests.System.Security.Policy {
 			Hash h = Hash.CreateSHA1 (new byte [0]);
 			string ts = h.ToString ();
 		}
-#endif
 	}
 }

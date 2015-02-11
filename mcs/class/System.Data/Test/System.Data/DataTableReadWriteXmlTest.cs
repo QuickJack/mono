@@ -23,7 +23,6 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if NET_2_0
 using System;
 using System.Data;
 using System.IO;
@@ -295,9 +294,6 @@ namespace MonoTests.System.Data
         }
         
         [Test]
-#if TARGET_JVM
-	[Ignore ("Should review the test")]
-#endif
         public void TestReadXml()
         {
             // For reading, DataTable.ReadXml only supports reading in xml with
@@ -376,4 +372,3 @@ namespace MonoTests.System.Data
         }
     }
 }
-#endif

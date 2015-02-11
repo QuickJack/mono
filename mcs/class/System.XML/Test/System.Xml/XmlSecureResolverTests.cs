@@ -8,6 +8,8 @@
 // Copyright (C) 2004-2005 Novell, Inc (http://www.novell.com)
 //
 
+#if !MOBILE
+
 using System;
 using System.Collections;
 using System.IO;
@@ -18,7 +20,7 @@ using System.Security.Permissions;
 using System.Xml;
 using NUnit.Framework;
 
-namespace MonoTestsXml
+namespace MonoTests.System.Xml
 {
 	[TestFixture]
 	public class XmlSecureResolverTests
@@ -132,3 +134,4 @@ namespace MonoTestsXml
 	}
 }
 
+#endif

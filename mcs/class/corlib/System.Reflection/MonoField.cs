@@ -149,11 +149,7 @@ namespace System.Reflection {
 				binder = Binder.DefaultBinder;
 			CheckGeneric ();
 			if (val != null) {
-				object newVal;
-				newVal = binder.ChangeType (val, FieldType, culture);
-				if (newVal == null)
-					throw new ArgumentException ("Object type " + val.GetType() + " cannot be converted to target type: " + FieldType, "val");
-				val = newVal;
+				val = binder.ConvertValue (val, FieldType, culture, (invokeAttr & BindingFlags.ExactBinding) != 0);
 			}
 			SetValueInternal (this, obj, val);
 		}
@@ -179,11 +175,9 @@ namespace System.Reflection {
 		[MethodImplAttribute(MethodImplOptions.InternalCall)]
 		public override extern object GetRawConstantValue ();
 
-#if NET_4_0
 		public override IList<CustomAttributeData> GetCustomAttributesData () {
 			return CustomAttributeData.GetCustomAttributes (this);
 		}
-#endif
 
 		void CheckGeneric () {
 			if (DeclaringType.ContainsGenericParameters)

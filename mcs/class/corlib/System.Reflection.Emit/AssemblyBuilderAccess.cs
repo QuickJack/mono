@@ -28,7 +28,7 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if !FULL_AOT_RUNTIME
+#if !FULL_AOT_RUNTIME || IOS_REFLECTION
 using System.Runtime.InteropServices;
 
 namespace System.Reflection.Emit
@@ -41,9 +41,7 @@ namespace System.Reflection.Emit
 		Save = 2,
 		RunAndSave = 3,
 		ReflectionOnly = 6,
-#if NET_4_0
 		RunAndCollect = 9
-#endif
   }
 }
 #endif

@@ -25,6 +25,7 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
+#if !MOBILE
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -350,5 +351,24 @@ namespace MonoTests.System.ServiceModel.Syndication
 		{
 			Assert.IsNull (((IXmlSerializable) new Rss20ItemFormatter ()).GetSchema ());
 		}
+
+		[Test]
+		public void ReadFromGuidPermaLink ()
+		{
+			const string xml1 = "<item><guid isPermaLink=\"false\">urn:myid</guid><description /></item>";
+			using (XmlReader r = CreateReader (xml1)) {
+				var rss = new Rss20ItemFormatter ();
+				rss.ReadFrom (r);
+				Assert.AreEqual ("urn:myid", rss.Item.Id);
+			}
+
+			const string xml2 = "<item><guid isPermaLink=\"true\">urn:myid</guid><description /></item>";
+			using (XmlReader r = CreateReader (xml2)) {
+				var rss = new Rss20ItemFormatter ();
+				rss.ReadFrom (r);
+				Assert.AreEqual ("urn:myid", rss.Item.Id);
+			}
+		}
 	}
 }
+#endif

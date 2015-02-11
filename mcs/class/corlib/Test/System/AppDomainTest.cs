@@ -27,6 +27,8 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
+#if !MOBILE
+
 using NUnit.Framework;
 using System;
 using System.Collections;
@@ -336,7 +338,6 @@ namespace MonoTests.System
 			AssemblyName name = new AssemblyName ();
 			name.Name = "DefineDynamicAssembly2";
 
-#if NET_2_0
 			try {
 				AppDomain.CurrentDomain.DefineDynamicAssembly (
 					name, AssemblyBuilderAccess.Run |
@@ -352,13 +353,6 @@ namespace MonoTests.System
 				Assert.IsNotNull (ex.ParamName, "#6");
 				Assert.AreEqual ("access", ex.ParamName, "#7");
 			}
-#else
-			AssemblyBuilder ab = AppDomain.CurrentDomain.DefineDynamicAssembly (
-				name, AssemblyBuilderAccess.Run |
-				(AssemblyBuilderAccess) 666,
-				AppDomain.CurrentDomain.Evidence);
-			Assert.IsNotNull (ab, "#1");
-#endif
 		}
 
 		[Test] // DefineDynamicAssembly (AssemblyName, AssemblyBuilderAccess, Evidence)
@@ -454,7 +448,6 @@ namespace MonoTests.System
 			AssemblyName name = new AssemblyName ();
 			name.Name = "DefineDynamicAssembly3";
 
-#if NET_2_0
 			try {
 				AppDomain.CurrentDomain.DefineDynamicAssembly (
 					name, AssemblyBuilderAccess.Run |
@@ -470,13 +463,6 @@ namespace MonoTests.System
 				Assert.IsNotNull (ex.ParamName, "#6");
 				Assert.AreEqual ("access", ex.ParamName, "#7");
 			}
-#else
-			AssemblyBuilder ab = AppDomain.CurrentDomain.DefineDynamicAssembly (
-				name, AssemblyBuilderAccess.Run |
-				(AssemblyBuilderAccess) 666,
-				Path.GetTempPath ());
-			Assert.IsNotNull (ab, "#1");
-#endif
 		}
 
 		[Test] // DefineDynamicAssembly (AssemblyName, AssemblyBuilderAccess, String)
@@ -572,7 +558,6 @@ namespace MonoTests.System
 			AssemblyName name = new AssemblyName ();
 			name.Name = "DefineDynamicAssembly4";
 
-#if NET_2_0
 			try {
 				AppDomain.CurrentDomain.DefineDynamicAssembly (
 					name, AssemblyBuilderAccess.Run |
@@ -589,14 +574,6 @@ namespace MonoTests.System
 				Assert.IsNotNull (ex.ParamName, "#6");
 				Assert.AreEqual ("access", ex.ParamName, "#7");
 			}
-#else
-			AssemblyBuilder ab = AppDomain.CurrentDomain.DefineDynamicAssembly (
-				name, AssemblyBuilderAccess.Run |
-				(AssemblyBuilderAccess) 666,
-				Path.GetTempPath (),
-				AppDomain.CurrentDomain.Evidence);
-			Assert.IsNotNull (ab, "#1");
-#endif
 		}
 
 		[Test] // DefineDynamicAssembly (AssemblyName, AssemblyBuilderAccess, String, Evidence)
@@ -696,7 +673,6 @@ namespace MonoTests.System
 			AssemblyName name = new AssemblyName ();
 			name.Name = "DefineDynamicAssembly5";
 
-#if NET_2_0
 			try {
 				AppDomain.CurrentDomain.DefineDynamicAssembly (
 					name, AssemblyBuilderAccess.Run |
@@ -714,15 +690,6 @@ namespace MonoTests.System
 				Assert.IsNotNull (ex.ParamName, "#6");
 				Assert.AreEqual ("access", ex.ParamName, "#7");
 			}
-#else
-			AssemblyBuilder ab = AppDomain.CurrentDomain.DefineDynamicAssembly (
-				name, AssemblyBuilderAccess.Run |
-				(AssemblyBuilderAccess) 666,
-				(PermissionSet) null,
-				(PermissionSet) null,
-				(PermissionSet) null);
-			Assert.IsNotNull (ab, "#1");
-#endif
 		}
 
 		[Test] // DefineDynamicAssembly (AssemblyName, AssemblyBuilderAccess, PermissionSet, PermissionSet, PermissionSet)
@@ -826,7 +793,6 @@ namespace MonoTests.System
 			AssemblyName name = new AssemblyName ();
 			name.Name = "DefineDynamicAssembly6";
 
-#if NET_2_0
 			try {
 				AppDomain.CurrentDomain.DefineDynamicAssembly (
 					name, AssemblyBuilderAccess.Run |
@@ -845,16 +811,6 @@ namespace MonoTests.System
 				Assert.IsNotNull (ex.ParamName, "#6");
 				Assert.AreEqual ("access", ex.ParamName, "#7");
 			}
-#else
-			AssemblyBuilder ab = AppDomain.CurrentDomain.DefineDynamicAssembly (
-				name, AssemblyBuilderAccess.Run |
-				(AssemblyBuilderAccess) 666,
-				AppDomain.CurrentDomain.Evidence,
-				(PermissionSet) null,
-				(PermissionSet) null,
-				(PermissionSet) null);
-			Assert.IsNotNull (ab, "#1");
-#endif
 		}
 
 		[Test] // DefineDynamicAssembly (AssemblyName, AssemblyBuilderAccess, Evidence, PermissionSet, PermissionSet, PermissionSet)
@@ -962,7 +918,6 @@ namespace MonoTests.System
 			AssemblyName name = new AssemblyName ();
 			name.Name = "DefineDynamicAssembly7";
 
-#if NET_2_0
 			try {
 				AppDomain.CurrentDomain.DefineDynamicAssembly (
 					name, AssemblyBuilderAccess.Run |
@@ -981,16 +936,6 @@ namespace MonoTests.System
 				Assert.IsNotNull (ex.ParamName, "#6");
 				Assert.AreEqual ("access", ex.ParamName, "#7");
 			}
-#else
-			AssemblyBuilder ab = AppDomain.CurrentDomain.DefineDynamicAssembly (
-				name, AssemblyBuilderAccess.Run |
-				(AssemblyBuilderAccess) 666,
-				Path.GetTempPath (),
-				(PermissionSet) null,
-				(PermissionSet) null,
-				(PermissionSet) null);
-			Assert.IsNotNull (ab, "#1");
-#endif
 		}
 
 		[Test] // DefineDynamicAssembly (AssemblyName, AssemblyBuilderAccess, String, PermissionSet, PermissionSet, PermissionSet)
@@ -1098,7 +1043,6 @@ namespace MonoTests.System
 			AssemblyName name = new AssemblyName ();
 			name.Name = "DefineDynamicAssembly8";
 
-#if NET_2_0
 			try {
 				AppDomain.CurrentDomain.DefineDynamicAssembly (
 					name, AssemblyBuilderAccess.Run |
@@ -1118,17 +1062,6 @@ namespace MonoTests.System
 				Assert.IsNotNull (ex.ParamName, "#6");
 				Assert.AreEqual ("access", ex.ParamName, "#7");
 			}
-#else
-			AssemblyBuilder ab = AppDomain.CurrentDomain.DefineDynamicAssembly (
-				name, AssemblyBuilderAccess.Run |
-				(AssemblyBuilderAccess) 666,
-				Path.GetTempPath (),
-				AppDomain.CurrentDomain.Evidence,
-				(PermissionSet) null,
-				(PermissionSet) null,
-				(PermissionSet) null);
-			Assert.IsNotNull (ab, "#1");
-#endif
 		}
 
 		[Test] // DefineDynamicAssembly (AssemblyName, AssemblyBuilderAccess, String, Evidence, PermissionSet, PermissionSet, PermissionSet)
@@ -1240,7 +1173,6 @@ namespace MonoTests.System
 			AssemblyName name = new AssemblyName ();
 			name.Name = "DefineDynamicAssembly9";
 
-#if NET_2_0
 			try {
 				AppDomain.CurrentDomain.DefineDynamicAssembly (
 					name, AssemblyBuilderAccess.Run |
@@ -1261,18 +1193,6 @@ namespace MonoTests.System
 				Assert.IsNotNull (ex.ParamName, "#6");
 				Assert.AreEqual ("access", ex.ParamName, "#7");
 			}
-#else
-			AssemblyBuilder ab = AppDomain.CurrentDomain.DefineDynamicAssembly (
-				name, AssemblyBuilderAccess.Run |
-				(AssemblyBuilderAccess) 666,
-				Path.GetTempPath (),
-				AppDomain.CurrentDomain.Evidence,
-				(PermissionSet) null,
-				(PermissionSet) null,
-				(PermissionSet) null,
-				true);
-			Assert.IsNotNull (ab, "#1");
-#endif
 		}
 
 		[Test] // DefineDynamicAssembly (AssemblyName, AssemblyBuilderAccess, String, Evidence, PermissionSet, PermissionSet, PermissionSet, Boolean)
@@ -1382,14 +1302,12 @@ namespace MonoTests.System
 			}
 		}
 
-#if NET_2_0
 		[Test] // DefineDynamicAssembly (AssemblyName, AssemblyBuilderAccess, String, Evidence, PermissionSet, PermissionSet, PermissionSet, Boolean, IEnumerable<CustomAttributeBuilder>)
 		public void DefineDynamicAssembly10_Access_Invalid ()
 		{
 			AssemblyName name = new AssemblyName ();
 			name.Name = "DefineDynamicAssembly10";
 
-#if NET_2_0
 			try {
 				AppDomain.CurrentDomain.DefineDynamicAssembly (
 					name, AssemblyBuilderAccess.Run |
@@ -1411,19 +1329,6 @@ namespace MonoTests.System
 				Assert.IsNotNull (ex.ParamName, "#6");
 				Assert.AreEqual ("access", ex.ParamName, "#7");
 			}
-#else
-			AssemblyBuilder ab = AppDomain.CurrentDomain.DefineDynamicAssembly (
-				name, AssemblyBuilderAccess.Run |
-				(AssemblyBuilderAccess) 666,
-				Path.GetTempPath (),
-				AppDomain.CurrentDomain.Evidence,
-				(PermissionSet) null,
-				(PermissionSet) null,
-				(PermissionSet) null,
-				true,
-				new List<CustomAttributeBuilder> ());
-			Assert.IsNotNull (ab, "#1");
-#endif
 		}
 
 		[Test] // DefineDynamicAssembly (AssemblyName, AssemblyBuilderAccess, String, Evidence, PermissionSet, PermissionSet, PermissionSet, Boolean, IEnumerable<CustomAttributeBuilder>)
@@ -1709,7 +1614,6 @@ namespace MonoTests.System
 			AssemblyName name = new AssemblyName ();
 			name.Name = "DefineDynamicAssembly11";
 
-#if NET_2_0
 			try {
 				AppDomain.CurrentDomain.DefineDynamicAssembly (
 					name, AssemblyBuilderAccess.Run |
@@ -1725,13 +1629,6 @@ namespace MonoTests.System
 				Assert.IsNotNull (ex.ParamName, "#6");
 				Assert.AreEqual ("access", ex.ParamName, "#7");
 			}
-#else
-			AssemblyBuilder ab = AppDomain.CurrentDomain.DefineDynamicAssembly (
-				name, AssemblyBuilderAccess.Run |
-				(AssemblyBuilderAccess) 666,
-				new List<CustomAttributeBuilder> ());
-			Assert.IsNotNull (ab, "#1");
-#endif
 		}
 
 		[Test] // DefineDynamicAssembly (AssemblyName name, AssemblyBuilderAccess, IEnumerable<CustomAttributeBuilder>)
@@ -1832,7 +1729,7 @@ namespace MonoTests.System
 				Assert.AreEqual (typeof (MissingMethodException), ex.GetType (), "#2");
 				Assert.IsNull (ex.InnerException, "#3");
 				Assert.IsNotNull (ex.Message, "#4");
-				Assert.IsTrue (ex.Message.IndexOf (Consts.AssemblyCorlib) != -1, "#5");
+				Assert.IsTrue (ex.Message.IndexOf (typeof (object).Assembly.FullName) != -1, "#5");
 			}
 		}
 
@@ -1848,7 +1745,7 @@ namespace MonoTests.System
 				Assert.AreEqual (typeof (MissingMethodException), ex.GetType (), "#2");
 				Assert.IsNull (ex.InnerException, "#3");
 				Assert.IsNotNull (ex.Message, "#4");
-				Assert.IsTrue (ex.Message.IndexOf (Consts.AssemblyCorlib) != -1, "#5");
+				Assert.IsTrue (ex.Message.IndexOf (typeof (object).Assembly.FullName) != -1, "#5");
 			}
 		}
 
@@ -1865,7 +1762,7 @@ namespace MonoTests.System
 				Assert.AreEqual (typeof (MissingMethodException), ex.GetType (), "#2");
 				Assert.IsNull (ex.InnerException, "#3");
 				Assert.IsNotNull (ex.Message, "#4");
-				Assert.IsTrue (ex.Message.IndexOf (Consts.AssemblyCorlib) != -1, "#5");
+				Assert.IsTrue (ex.Message.IndexOf (typeof (object).Assembly.FullName) != -1, "#5");
 			}
 		}
 
@@ -1883,10 +1780,9 @@ namespace MonoTests.System
 				Assert.AreEqual (typeof (MissingMethodException), ex.GetType (), "#2");
 				Assert.IsNull (ex.InnerException, "#3");
 				Assert.IsNotNull (ex.Message, "#4");
-				Assert.IsTrue (ex.Message.IndexOf (Consts.AssemblyCorlib) != -1, "#5");
+				Assert.IsTrue (ex.Message.IndexOf (typeof (object).Assembly.FullName) != -1, "#5");
 			}
 		}
-#endif
 
 		[Test]
 		public void SetThreadPrincipal ()
@@ -2071,7 +1967,6 @@ namespace MonoTests.System
 				AppDomain.CurrentDomain.ExecuteAssembly (
 					assembly.Location);
 				Assert.Fail ("#1");
-#if NET_2_0
 			} catch (MissingMethodException ex) {
 				// Entry point not found in assembly '...'
 				Assert.AreEqual (typeof (MissingMethodException), ex.GetType (), "#2");
@@ -2079,15 +1974,6 @@ namespace MonoTests.System
 				Assert.IsNotNull (ex.Message, "#4");
 				Assert.IsTrue (ex.Message.IndexOf (assembly.FullName) != -1, "#5");
 			}
-#else
-			} catch (COMException ex) {
-				// Unspecified error
-				Assert.AreEqual (typeof (COMException), ex.GetType (), "#2");
-				Assert.AreEqual (-2147467259, ex.ErrorCode, "#3");
-				Assert.IsNull (ex.InnerException, "#4");
-				Assert.IsNotNull (ex.Message, "#5");
-			}
-#endif
 		}
 
 		[Test] // ExecuteAssembly (String, Evidence)
@@ -2100,7 +1986,6 @@ namespace MonoTests.System
 					assembly.Location,
 					(Evidence) null);
 				Assert.Fail ("#1");
-#if NET_2_0
 			} catch (MissingMethodException ex) {
 				// Entry point not found in assembly '...'
 				Assert.AreEqual (typeof (MissingMethodException), ex.GetType (), "#2");
@@ -2108,15 +1993,6 @@ namespace MonoTests.System
 				Assert.IsNotNull (ex.Message, "#4");
 				Assert.IsTrue (ex.Message.IndexOf (assembly.FullName) != -1, "#5");
 			}
-#else
-			} catch (COMException ex) {
-				// Unspecified error
-				Assert.AreEqual (typeof (COMException), ex.GetType (), "#2");
-				Assert.AreEqual (-2147467259, ex.ErrorCode, "#3");
-				Assert.IsNull (ex.InnerException, "#4");
-				Assert.IsNotNull (ex.Message, "#5");
-			}
-#endif
 		}
 
 		[Test] // ExecuteAssembly (String, Evidence, String [])
@@ -2130,7 +2006,6 @@ namespace MonoTests.System
 					(Evidence) null,
 					new string [0]);
 				Assert.Fail ("#1");
-#if NET_2_0
 			} catch (MissingMethodException ex) {
 				// Entry point not found in assembly '...'
 				Assert.AreEqual (typeof (MissingMethodException), ex.GetType (), "#2");
@@ -2138,15 +2013,6 @@ namespace MonoTests.System
 				Assert.IsNotNull (ex.Message, "#4");
 				Assert.IsTrue (ex.Message.IndexOf (assembly.FullName) != -1, "#5");
 			}
-#else
-			} catch (COMException ex) {
-				// Unspecified error
-				Assert.AreEqual (typeof (COMException), ex.GetType (), "#2");
-				Assert.AreEqual (-2147467259, ex.ErrorCode, "#3");
-				Assert.IsNull (ex.InnerException, "#4");
-				Assert.IsNotNull (ex.Message, "#5");
-			}
-#endif
 		}
 
 		[Test] // ExecuteAssembly (String, Evidence, String [], Byte [], AssemblyHashAlgorithm)
@@ -2163,7 +2029,6 @@ namespace MonoTests.System
 					(byte []) null,
 					AssemblyHashAlgorithm.SHA1);
 				Assert.Fail ("#1");
-#if NET_2_0
 			} catch (MissingMethodException ex) {
 				// Entry point not found in assembly '...'
 				Assert.AreEqual (typeof (MissingMethodException), ex.GetType (), "#2");
@@ -2171,15 +2036,6 @@ namespace MonoTests.System
 				Assert.IsNotNull (ex.Message, "#4");
 				Assert.IsTrue (ex.Message.IndexOf (assembly.FullName) != -1, "#5");
 			}
-#else
-			} catch (COMException ex) {
-				// Unspecified error
-				Assert.AreEqual (typeof (COMException), ex.GetType (), "#2");
-				Assert.AreEqual (-2147467259, ex.ErrorCode, "#3");
-				Assert.IsNull (ex.InnerException, "#4");
-				Assert.IsNotNull (ex.Message, "#5");
-			}
-#endif
 		}
 
 		[Test] // bug #79720
@@ -2662,62 +2518,30 @@ namespace MonoTests.System
 			aname = new AssemblyName ();
 			aname.Name = "bug79522A";
 			aname.CodeBase = assemblyFile;
-#if NET_2_0
 			AppDomain.CurrentDomain.Load (aname);
-#else
-			try {
-				AppDomain.CurrentDomain.Load (aname);
-				Assert.Fail ("#A3");
-			} catch (FileLoadException) {
-			}
-#endif
 
 			aname = new AssemblyName ();
 			aname.Name = "bug79522A";
 			aname.CodeBase = assemblyFile;
 			aname.Version = new Version (2, 5);
-#if NET_2_0
 			// the version number is not considered when comparing the manifest
 			// of the assembly found using codebase
 			AppDomain.CurrentDomain.Load (aname);
-#else
-			try {
-				AppDomain.CurrentDomain.Load (aname);
-				Assert.Fail ("#A4");
-			} catch (FileLoadException) {
-			}
-#endif
 
 			aname = new AssemblyName ();
 			aname.Name = "bug79522A";
 			aname.CodeBase = assemblyFile;
 			aname.Version = new Version (2, 4, 1);
-#if NET_2_0
 			// the version number is not considered when comparing the manifest
 			// of the assembly found using codebase
 			AppDomain.CurrentDomain.Load (aname);
-#else
-			try {
-				AppDomain.CurrentDomain.Load (aname);
-				Assert.Fail ("#A5");
-			} catch (FileLoadException) {
-			}
-#endif
 
 			// if version is set, then culture must also be set
 			aname = new AssemblyName ();
 			aname.Name = "bug79522A";
 			aname.CodeBase = assemblyFile;
 			aname.Version = new Version (2, 4);
-#if NET_2_0
 			AppDomain.CurrentDomain.Load (aname);
-#else
-			try {
-				AppDomain.CurrentDomain.Load (aname);
-				Assert.Fail ("#A6");
-			} catch (FileLoadException) {
-			}
-#endif
 
 			// version number does not need to be set
 			aname = new AssemblyName ();
@@ -2809,49 +2633,23 @@ namespace MonoTests.System
 			aname = new AssemblyName ();
 			aname.Name = "bug79522B";
 			aname.CodeBase = assemblyFile;
-#if NET_2_0
 			// the version number is not considered when comparing the manifest
 			// of the assembly found using codebase
 			AppDomain.CurrentDomain.Load (aname);
-#else
-			try {
-				AppDomain.CurrentDomain.Load (aname);
-				Assert.Fail ("#B3");
-			} catch (FileLoadException) {
-			}
-#endif
 
 			aname = new AssemblyName ();
 			aname.Name = "bug79522B";
 			aname.CodeBase = assemblyFile;
 			aname.Version = new Version (5, 5);
-#if NET_2_0
 			// the version number is not considered when comparing the manifest
 			// of the assembly found using codebase
 			AppDomain.CurrentDomain.Load (aname);
-#else
-			try {
-				AppDomain.CurrentDomain.Load (aname);
-				Assert.Fail ("#B3");
-			} catch (FileLoadException) {
-			}
-#endif
 
 			aname = new AssemblyName ();
 			aname.Name = "bug79522B";
 			aname.CodeBase = assemblyFile;
 			aname.Version = new Version (2, 4, 1);
-#if NET_2_0
 			AppDomain.CurrentDomain.Load (aname);
-#else
-			// when the loaded assembly has a specific culture, then that
-			// culture must be set if you set the Version on the aname
-			try {
-				AppDomain.CurrentDomain.Load (aname);
-				Assert.Fail ("#B4");
-			} catch (FileLoadException) {
-			}
-#endif
 
 			// version does not need to be set
 			aname = new AssemblyName ();
@@ -2936,15 +2734,7 @@ namespace MonoTests.System
 			aname = new AssemblyName ();
 			aname.Name = "bug79522C";
 			aname.CodeBase = assemblyFile;
-#if NET_2_0
 			AppDomain.CurrentDomain.Load (aname);
-#else
-			try {
-				AppDomain.CurrentDomain.Load (aname);
-				Assert.Fail ("#C3");
-			} catch (FileLoadException) {
-			}
-#endif
 
 			aname = new AssemblyName ();
 			aname.Name = "bug79522C";
@@ -2960,64 +2750,27 @@ namespace MonoTests.System
 			aname.Name = "bug79522C";
 			aname.CodeBase = assemblyFile;
 			aname.Version = new Version (2, 4);
-#if NET_2_0
 			AppDomain.CurrentDomain.Load (aname);
-#else
-			// when the loaded assembly has a specific culture/publickey,
-			// then that culture/publickey must be set if you set the
-			// Version on the aname
-			try {
-				AppDomain.CurrentDomain.Load (aname);
-				Assert.Fail ("#C4");
-			} catch (FileLoadException) {
-			}
-#endif
 
 			aname = new AssemblyName ();
 			aname.Name = "bug79522C";
 			aname.CodeBase = assemblyFile;
 			aname.CultureInfo = new CultureInfo ("nl-BE");
 			aname.Version = new Version (2, 4);
-#if NET_2_0
 			AppDomain.CurrentDomain.Load (aname);
-#else
-			// if loaded assembly is signed, then the public key must be set
-			try {
-				AppDomain.CurrentDomain.Load (aname);
-				Assert.Fail ("#C5");
-			} catch (FileLoadException) {
-			}
-#endif
 
 			aname = new AssemblyName ();
 			aname.Name = "bug79522C";
 			aname.CodeBase = assemblyFile;
 			aname.CultureInfo = new CultureInfo ("nl-BE");
 			aname.SetPublicKey (publicKey);
-#if NET_2_0
 			AppDomain.CurrentDomain.Load (aname);
-#else
-			// if public key is set, then version must be set
-			try {
-				AppDomain.CurrentDomain.Load (aname);
-				Assert.Fail ("#C6");
-			} catch (FileLoadException) {
-			}
-#endif
 
 			aname = new AssemblyName ();
 			aname.Name = "bug79522C";
 			aname.CodeBase = assemblyFile;
 			aname.CultureInfo = new CultureInfo ("nl-BE");
-#if NET_2_0
 			AppDomain.CurrentDomain.Load (aname);
-#else
-			try {
-				AppDomain.CurrentDomain.Load (aname);
-				Assert.Fail ("#C7");
-			} catch (FileLoadException) {
-			}
-#endif
 
 			// if culture and version are set, then the version must match
 			aname = new AssemblyName ();
@@ -3042,14 +2795,9 @@ namespace MonoTests.System
 			try {
 				AppDomain.CurrentDomain.Load (aname);
 				Assert.Fail ("#C9");
-#if NET_2_0
 			} catch (SecurityException) {
 				// Invalid assembly public key
 			}
-#else
-			} catch (FileLoadException) {
-			}
-#endif
 
 			aname = new AssemblyName ();
 			aname.Name = "bug79522C";
@@ -3166,7 +2914,6 @@ namespace MonoTests.System
 			AppDomain.CurrentDomain.SetData (null, "data");
 		}
 
-#if NET_2_0
 		[Test]
 		public void ApplyPolicy ()
 		{
@@ -3208,6 +2955,30 @@ namespace MonoTests.System
 			ad = AppDomain.CreateDomain ("ReflectionOnlyGetAssemblies");
 			Assert.IsFalse (ad.IsDefaultAppDomain (), "IsDefaultAppDomain");
 			// we have no public way to get the default appdomain
+		}
+
+		static bool resolve_called;
+
+		[Test]
+		public void AssemblyResolveParseError ()
+		{
+			AppDomain currentDomain = AppDomain.CurrentDomain;
+			ResolveEventHandler d = ParseErrorResolve;
+			currentDomain.AssemblyResolve += d;
+			try {
+				resolve_called = false;
+				var a = Assembly.Load ("MyDynamicType, 1.0.0.0, Culture=neutral, PublicKeyToken=0738eb9f132ed756");
+				Assert.Fail ();
+			} catch (FileNotFoundException) {
+				Assert.IsTrue (resolve_called);
+			}
+			currentDomain.AssemblyResolve -= d;
+		}
+
+		static Assembly ParseErrorResolve (object sender, ResolveEventArgs args)
+		{
+			resolve_called = true;
+			return null;
 		}
 
 		[Test]
@@ -3257,13 +3028,108 @@ namespace MonoTests.System
 		{
 			return Assembly.ReflectionOnlyLoad(args.Name);
 		}
-#endif
+
+
+		public class StuffToPick
+		{
+			public StuffToPick () {}
+			public void Method () {}
+			public int Property { get; set; }
+			public event Action Event;
+			public int Field;
+			public void GenericMethod<T> () {}
+
+			public void Dummy ()
+			{
+				Event += delegate {};
+			}
+		}
+
+		public class StuffToPick<T>
+		{
+			public StuffToPick () {}
+			public void Method () {}
+			public int Property { get; set; }
+			public event Action Event;
+			public int Field;
+			public void GenericMethod<U> () {}
+
+			public void Dummy ()
+			{
+				Event += delegate {};
+			}
+		}
+
+		static void TestSerialization (CrossDomainTester tester, object o)
+		{
+			Assert.AreSame (o, tester.ReturnArg0 (o), "serializing_type_" + o.GetType ());
+		}
+
+		[Test] //BXC #12611
+		public void ReflectionObjectsAreSerializableTest ()
+		{
+			ad = CreateTestDomain (tempDir, true);
+			CrossDomainTester tester = CreateCrossDomainTester (ad);
+
+			TestSerialization (tester, typeof (StuffToPick));
+			TestSerialization (tester, typeof (StuffToPick).GetConstructor(new Type [0]));
+			TestSerialization (tester, typeof (StuffToPick).GetMethod ("Method"));
+			TestSerialization (tester, typeof (StuffToPick).GetProperty ("Property"));
+			TestSerialization (tester, typeof (StuffToPick).GetEvent ("Event"));
+			TestSerialization (tester, typeof (StuffToPick).GetField ("Field"));
+			TestSerialization (tester, typeof (StuffToPick).GetMethod ("GenericMethod"));
+
+			TestSerialization (tester, typeof (StuffToPick<>));
+			TestSerialization (tester, typeof (StuffToPick<>).GetConstructor(new Type [0]));
+			TestSerialization (tester, typeof (StuffToPick<>).GetMethod ("Method"));
+			TestSerialization (tester, typeof (StuffToPick<>).GetProperty ("Property"));
+			TestSerialization (tester, typeof (StuffToPick<>).GetEvent ("Event"));
+			TestSerialization (tester, typeof (StuffToPick<>).GetField ("Field"));
+			TestSerialization (tester, typeof (StuffToPick<>).GetMethod ("GenericMethod"));
+
+			TestSerialization (tester, typeof (StuffToPick<int>));
+			TestSerialization (tester, typeof (StuffToPick<int>).GetConstructor(new Type [0]));
+			TestSerialization (tester, typeof (StuffToPick<int>).GetMethod ("Method"));
+			TestSerialization (tester, typeof (StuffToPick<int>).GetProperty ("Property"));
+			TestSerialization (tester, typeof (StuffToPick<int>).GetEvent ("Event"));
+			TestSerialization (tester, typeof (StuffToPick<int>).GetField ("Field"));
+			TestSerialization (tester, typeof (StuffToPick<int>).GetMethod ("GenericMethod"));
+		}
+
+		[Test] //BXC #12611
+		[Category ("NotWorking")] // Serialization can't handle generic methods
+		public void GenericReflectionObjectsAreSerializableTest ()
+		{
+			ad = CreateTestDomain (tempDir, true);
+			CrossDomainTester tester = CreateCrossDomainTester (ad);
+
+			TestSerialization (tester, typeof (StuffToPick).GetMethod ("GenericMethod").MakeGenericMethod (typeof (int)));
+			TestSerialization (tester, typeof (StuffToPick<>).GetMethod ("GenericMethod").MakeGenericMethod (typeof (int)));
+			TestSerialization (tester, typeof (StuffToPick<int>).GetMethod ("GenericMethod").MakeGenericMethod (typeof (int)));
+		}
+
+		[Test]
+		public void ShadowCopyTypeGetTypeMissingAssemblyTest ()
+		{
+			ad = CreateShadowCopyAppDomain (tempDir, true);
+			CrossDomainTester tester = CreateCrossDomainTester (ad);
+			tester.AssertLoadMissingAssemblyType ();
+		}
 
 		private static AppDomain CreateTestDomain (string baseDirectory, bool assemblyResolver)
 		{
 			AppDomainSetup setup = new AppDomainSetup ();
 			setup.ApplicationBase = baseDirectory;
 			setup.ApplicationName = "testdomain";
+			return CreateTestDomain (setup, assemblyResolver);
+		}
+
+		private static AppDomain CreateShadowCopyAppDomain (string baseDirectory, bool assemblyResolver)
+		{
+			AppDomainSetup setup = new AppDomainSetup ();
+			setup.ApplicationBase = baseDirectory;
+			setup.ApplicationName = "testdomain";
+			setup.ShadowCopyFiles = "true";
 			return CreateTestDomain (setup, assemblyResolver);
 		}
 
@@ -3374,6 +3240,11 @@ namespace MonoTests.System
 				}
 			}
 
+			public void AssertLoadMissingAssemblyType ()
+			{
+				Assert.IsNull (Type.GetType ("A.B.C, MissingAssembly"));
+			}
+
 			public bool AssertFileLoadException (AssemblyName assemblyRef)
 			{
 				try {
@@ -3384,14 +3255,9 @@ namespace MonoTests.System
 				}
 			}
 
-			public bool AssertFileNotFoundException (AssemblyName assemblyRef)
+			public object ReturnArg0 (object obj)
 			{
-				try {
-					AppDomain.CurrentDomain.Load (assemblyRef);
-					return false;
-				} catch (FileNotFoundException) {
-					return true;
-				}
+				return obj;
 			}
 		}
 
@@ -3553,3 +3419,5 @@ namespace MonoTests.System
 		static byte [] pk_token = { 0xce, 0x52, 0x76, 0xd8, 0x68, 0x7e, 0Xc6, 0xdc };
 	}
 }
+
+#endif

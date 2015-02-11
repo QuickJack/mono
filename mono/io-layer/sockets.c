@@ -45,10 +45,12 @@
 
 #include <netinet/in.h>
 #include <netinet/tcp.h>
-#include <netdb.h>
 #include <arpa/inet.h>
 #ifdef HAVE_SYS_SENDFILE_H
 #include <sys/sendfile.h>
+#endif
+#ifdef HAVE_NETDB_H
+#include <netdb.h>
 #endif
 
 #if 0
@@ -57,7 +59,6 @@
 #define DEBUG(...)
 #endif
 
-static guint32 startup_count=0;
 static guint32 in_cleanup = 0;
 
 static void socket_close (gpointer handle, gpointer data);
@@ -85,11 +86,6 @@ static void socket_close (gpointer handle, gpointer data)
 
 	DEBUG ("%s: closing socket handle %p", __func__, handle);
 
-	if (startup_count == 0 && !in_cleanup) {
-		WSASetLastError (WSANOTINITIALISED);
-		return;
-	}
-
 	/* Shutdown the socket for reading, to interrupt any potential
 	 * receives that may be blocking for data.  See bug 75705.
 	 */
@@ -112,33 +108,6 @@ static void socket_close (gpointer handle, gpointer data)
 		socket_handle->saved_error = 0;
 }
 
-int WSAStartup(guint32 requested, WapiWSAData *data)
-{
-	if (data == NULL) {
-		return(WSAEFAULT);
-	}
-
-	/* Insist on v2.0+ */
-	if (requested < MAKEWORD(2,0)) {
-		return(WSAVERNOTSUPPORTED);
-	}
-
-	startup_count++;
-
-	/* I've no idea what is the minor version of the spec I read */
-	data->wHighVersion = MAKEWORD(2,2);
-	
-	data->wVersion = requested < data->wHighVersion? requested:
-		data->wHighVersion;
-
-	DEBUG ("%s: high version 0x%x", __func__, data->wHighVersion);
-	
-	strncpy (data->szDescription, "WAPI", WSADESCRIPTION_LEN);
-	strncpy (data->szSystemStatus, "groovy", WSASYS_STATUS_LEN);
-	
-	return(0);
-}
-
 static gboolean
 cleanup_close (gpointer handle, gpointer data)
 {
@@ -146,19 +115,13 @@ cleanup_close (gpointer handle, gpointer data)
 	return TRUE;
 }
 
-int WSACleanup(void)
+void _wapi_cleanup_networking(void)
 {
 	DEBUG ("%s: cleaning up", __func__);
-
-	if (--startup_count) {
-		/* Do nothing */
-		return(0);
-	}
 
 	in_cleanup = 1;
 	_wapi_handle_foreach (WAPI_HANDLE_SOCKET, cleanup_close, NULL);
 	in_cleanup = 0;
-	return(0);
 }
 
 void WSASetLastError(int error)
@@ -192,11 +155,6 @@ guint32 _wapi_accept(guint32 fd, struct sockaddr *addr, socklen_t *addrlen)
 	struct _WapiHandle_socket new_socket_handle = {0};
 	gboolean ok;
 	int new_fd;
-	
-	if (startup_count == 0) {
-		WSASetLastError (WSANOTINITIALISED);
-		return(INVALID_SOCKET);
-	}
 
 	if (addr != NULL && *addrlen < sizeof(struct sockaddr)) {
 		WSASetLastError (WSAEFAULT);
@@ -266,11 +224,6 @@ int _wapi_bind(guint32 fd, struct sockaddr *my_addr, socklen_t addrlen)
 	gpointer handle = GUINT_TO_POINTER (fd);
 	int ret;
 	
-	if (startup_count == 0) {
-		WSASetLastError (WSANOTINITIALISED);
-		return(SOCKET_ERROR);
-	}
-
 	if (_wapi_handle_type (handle) != WAPI_HANDLE_SOCKET) {
 		WSASetLastError (WSAENOTSOCK);
 		return(SOCKET_ERROR);
@@ -295,11 +248,6 @@ int _wapi_connect(guint32 fd, const struct sockaddr *serv_addr,
 	struct _WapiHandle_socket *socket_handle;
 	gboolean ok;
 	gint errnum;
-	
-	if (startup_count == 0) {
-		WSASetLastError (WSANOTINITIALISED);
-		return(SOCKET_ERROR);
-	}
 	
 	if (_wapi_handle_type (handle) != WAPI_HANDLE_SOCKET) {
 		WSASetLastError (WSAENOTSOCK);
@@ -346,7 +294,7 @@ int _wapi_connect(guint32 fd, const struct sockaddr *serv_addr,
 		}
 
 		fds.fd = fd;
-		fds.events = POLLOUT;
+		fds.events = MONO_POLLOUT;
 		while (mono_poll (&fds, 1, -1) == -1 &&
 		       !_wapi_thread_cur_apc_pending ()) {
 			if (errno != EINTR) {
@@ -400,11 +348,6 @@ int _wapi_getpeername(guint32 fd, struct sockaddr *name, socklen_t *namelen)
 	gpointer handle = GUINT_TO_POINTER (fd);
 	int ret;
 	
-	if (startup_count == 0) {
-		WSASetLastError (WSANOTINITIALISED);
-		return(SOCKET_ERROR);
-	}
-	
 	if (_wapi_handle_type (handle) != WAPI_HANDLE_SOCKET) {
 		WSASetLastError (WSAENOTSOCK);
 		return(SOCKET_ERROR);
@@ -429,11 +372,6 @@ int _wapi_getsockname(guint32 fd, struct sockaddr *name, socklen_t *namelen)
 {
 	gpointer handle = GUINT_TO_POINTER (fd);
 	int ret;
-	
-	if (startup_count == 0) {
-		WSASetLastError (WSANOTINITIALISED);
-		return(SOCKET_ERROR);
-	}
 	
 	if (_wapi_handle_type (handle) != WAPI_HANDLE_SOCKET) {
 		WSASetLastError (WSAENOTSOCK);
@@ -464,11 +402,6 @@ int _wapi_getsockopt(guint32 fd, int level, int optname, void *optval,
 	void *tmp_val;
 	struct _WapiHandle_socket *socket_handle;
 	gboolean ok;
-	
-	if (startup_count == 0) {
-		WSASetLastError (WSANOTINITIALISED);
-		return(SOCKET_ERROR);
-	}
 	
 	if (_wapi_handle_type (handle) != WAPI_HANDLE_SOCKET) {
 		WSASetLastError (WSAENOTSOCK);
@@ -529,11 +462,6 @@ int _wapi_listen(guint32 fd, int backlog)
 	gpointer handle = GUINT_TO_POINTER (fd);
 	int ret;
 	
-	if (startup_count == 0) {
-		WSASetLastError (WSANOTINITIALISED);
-		return(SOCKET_ERROR);
-	}
-	
 	if (_wapi_handle_type (handle) != WAPI_HANDLE_SOCKET) {
 		WSASetLastError (WSAENOTSOCK);
 		return(SOCKET_ERROR);
@@ -565,11 +493,6 @@ int _wapi_recvfrom(guint32 fd, void *buf, size_t len, int recv_flags,
 	struct _WapiHandle_socket *socket_handle;
 	gboolean ok;
 	int ret;
-	
-	if (startup_count == 0) {
-		WSASetLastError (WSANOTINITIALISED);
-		return(SOCKET_ERROR);
-	}
 	
 	if (_wapi_handle_type (handle) != WAPI_HANDLE_SOCKET) {
 		WSASetLastError (WSAENOTSOCK);
@@ -628,11 +551,6 @@ _wapi_recvmsg(guint32 fd, struct msghdr *msg, int recv_flags)
 	gboolean ok;
 	int ret;
 	
-	if (startup_count == 0) {
-		WSASetLastError (WSANOTINITIALISED);
-		return(SOCKET_ERROR);
-	}
-	
 	if (_wapi_handle_type (handle) != WAPI_HANDLE_SOCKET) {
 		WSASetLastError (WSAENOTSOCK);
 		return(SOCKET_ERROR);
@@ -669,11 +587,6 @@ int _wapi_send(guint32 fd, const void *msg, size_t len, int send_flags)
 {
 	gpointer handle = GUINT_TO_POINTER (fd);
 	int ret;
-	
-	if (startup_count == 0) {
-		WSASetLastError (WSANOTINITIALISED);
-		return(SOCKET_ERROR);
-	}
 	
 	if (_wapi_handle_type (handle) != WAPI_HANDLE_SOCKET) {
 		WSASetLastError (WSAENOTSOCK);
@@ -712,11 +625,6 @@ int _wapi_sendto(guint32 fd, const void *msg, size_t len, int send_flags,
 	gpointer handle = GUINT_TO_POINTER (fd);
 	int ret;
 	
-	if (startup_count == 0) {
-		WSASetLastError (WSANOTINITIALISED);
-		return(SOCKET_ERROR);
-	}
-	
 	if (_wapi_handle_type (handle) != WAPI_HANDLE_SOCKET) {
 		WSASetLastError (WSAENOTSOCK);
 		return(SOCKET_ERROR);
@@ -744,11 +652,6 @@ _wapi_sendmsg(guint32 fd,  const struct msghdr *msg, int send_flags)
 {
 	gpointer handle = GUINT_TO_POINTER (fd);
 	int ret;
-	
-	if (startup_count == 0) {
-		WSASetLastError (WSANOTINITIALISED);
-		return(SOCKET_ERROR);
-	}
 	
 	if (_wapi_handle_type (handle) != WAPI_HANDLE_SOCKET) {
 		WSASetLastError (WSAENOTSOCK);
@@ -778,12 +681,11 @@ int _wapi_setsockopt(guint32 fd, int level, int optname,
 	gpointer handle = GUINT_TO_POINTER (fd);
 	int ret;
 	const void *tmp_val;
+#if defined (__linux__)
+	/* This has its address taken so it cannot be moved to the if block which uses it */
+	int bufsize = 0;
+#endif
 	struct timeval tv;
-	
-	if (startup_count == 0) {
-		WSASetLastError (WSANOTINITIALISED);
-		return(SOCKET_ERROR);
-	}
 	
 	if (_wapi_handle_type (handle) != WAPI_HANDLE_SOCKET) {
 		WSASetLastError (WSAENOTSOCK);
@@ -805,7 +707,7 @@ int _wapi_setsockopt(guint32 fd, int level, int optname,
 		 * buffer sizes "to allow space for bookkeeping
 		 * overhead."
 		 */
-		int bufsize = *((int *) optval);
+		bufsize = *((int *) optval);
 
 		bufsize /= 2;
 		tmp_val = &bufsize;
@@ -846,12 +748,7 @@ int _wapi_shutdown(guint32 fd, int how)
 	gboolean ok;
 	gpointer handle = GUINT_TO_POINTER (fd);
 	int ret;
-	
-	if (startup_count == 0) {
-		WSASetLastError (WSANOTINITIALISED);
-		return(SOCKET_ERROR);
-	}
-	
+
 	if (_wapi_handle_type (handle) != WAPI_HANDLE_SOCKET) {
 		WSASetLastError (WSAENOTSOCK);
 		return(SOCKET_ERROR);
@@ -902,6 +799,7 @@ guint32 _wapi_socket(int domain, int type, int protocol, void *unused,
 	if (fd == -1 && domain == AF_INET && type == SOCK_RAW &&
 	    protocol == 0) {
 		/* Retry with protocol == 4 (see bug #54565) */
+		// https://bugzilla.novell.com/show_bug.cgi?id=MONO54565
 		socket_handle.protocol = 4;
 		fd = socket (AF_INET, SOCK_RAW, 4);
 	}
@@ -927,6 +825,7 @@ guint32 _wapi_socket(int domain, int type, int protocol, void *unused,
 
 	/* .net seems to set this by default for SOCK_STREAM, not for
 	 * SOCK_DGRAM (see bug #36322)
+	 * https://bugzilla.novell.com/show_bug.cgi?id=MONO36322
 	 *
 	 * It seems winsock has a rather different idea of what
 	 * SO_REUSEADDR means.  If it's set, then a new socket can be
@@ -937,6 +836,7 @@ guint32 _wapi_socket(int domain, int type, int protocol, void *unused,
 	 * behaves as though any other system would when SO_REUSEADDR
 	 * is true, so we don't need to do anything else here.  See
 	 * bug 53992.
+	 * https://bugzilla.novell.com/show_bug.cgi?id=MONO53992
 	 */
 	{
 		int ret, true = 1;
@@ -971,45 +871,6 @@ guint32 _wapi_socket(int domain, int type, int protocol, void *unused,
 	DEBUG ("%s: returning socket handle %p", __func__, handle);
 
 	return(fd);
-}
-
-struct hostent *_wapi_gethostbyname(const char *hostname)
-{
-	struct hostent *he;
-	
-	if (startup_count == 0) {
-		WSASetLastError (WSANOTINITIALISED);
-		return(NULL);
-	}
-
-	he = gethostbyname (hostname);
-	if (he == NULL) {
-		DEBUG ("%s: gethostbyname error: %s", __func__,
-			   strerror (h_errno));
-
-		switch(h_errno) {
-		case HOST_NOT_FOUND:
-			WSASetLastError (WSAHOST_NOT_FOUND);
-			break;
-#if NO_ADDRESS != NO_DATA
-		case NO_ADDRESS:
-#endif
-		case NO_DATA:
-			WSASetLastError (WSANO_DATA);
-			break;
-		case NO_RECOVERY:
-			WSASetLastError (WSANO_RECOVERY);
-			break;
-		case TRY_AGAIN:
-			WSASetLastError (WSATRY_AGAIN);
-			break;
-		default:
-			g_warning ("%s: Need to translate %d into winsock error", __func__, h_errno);
-			break;
-		}
-	}
-	
-	return(he);
 }
 
 static gboolean socket_disconnect (guint32 fd)
@@ -1157,12 +1018,7 @@ TransmitFile (guint32 socket, gpointer file, guint32 bytes_to_write, guint32 byt
 {
 	gpointer sock = GUINT_TO_POINTER (socket);
 	gint ret;
-	
-	if (startup_count == 0) {
-		WSASetLastError (WSANOTINITIALISED);
-		return FALSE;
-	}
-	
+
 	if (_wapi_handle_type (sock) != WAPI_HANDLE_SOCKET) {
 		WSASetLastError (WSAENOTSOCK);
 		return FALSE;
@@ -1211,11 +1067,6 @@ WSAIoctl (guint32 fd, gint32 command,
 	gpointer handle = GUINT_TO_POINTER (fd);
 	int ret;
 	gchar *buffer = NULL;
-
-	if (startup_count == 0) {
-		WSASetLastError (WSANOTINITIALISED);
-		return(SOCKET_ERROR);
-	}
 
 	if (_wapi_handle_type (handle) != WAPI_HANDLE_SOCKET) {
 		WSASetLastError (WSAENOTSOCK);
@@ -1291,13 +1142,13 @@ WSAIoctl (guint32 fd, gint32 command,
 			keepalivetime /= 1000;
 			if (keepalivetime == 0 || rem >= 500)
 				keepalivetime++;
-			ret = setsockopt (fd, SOL_TCP, TCP_KEEPIDLE, &keepalivetime, sizeof (uint32_t));
+			ret = setsockopt (fd, IPPROTO_TCP, TCP_KEEPIDLE, &keepalivetime, sizeof (uint32_t));
 			if (ret == 0) {
 				rem = keepaliveinterval % 1000;
 				keepaliveinterval /= 1000;
 				if (keepaliveinterval == 0 || rem >= 500)
 					keepaliveinterval++;
-				ret = setsockopt (fd, SOL_TCP, TCP_KEEPINTVL, &keepaliveinterval, sizeof (uint32_t));
+				ret = setsockopt (fd, IPPROTO_TCP, TCP_KEEPINTVL, &keepaliveinterval, sizeof (uint32_t));
 			}
 			if (ret != 0) {
 				gint errnum = errno;
@@ -1354,11 +1205,6 @@ int ioctlsocket(guint32 fd, gint32 command, gpointer arg)
 {
 	gpointer handle = GUINT_TO_POINTER (fd);
 	int ret;
-	
-	if (startup_count == 0) {
-		WSASetLastError (WSANOTINITIALISED);
-		return(SOCKET_ERROR);
-	}
 	
 	if (_wapi_handle_type (handle) != WAPI_HANDLE_SOCKET) {
 		WSASetLastError (WSAENOTSOCK);
@@ -1432,11 +1278,6 @@ int _wapi_select(int nfds G_GNUC_UNUSED, fd_set *readfds, fd_set *writefds,
 {
 	int ret, maxfd;
 	
-	if (startup_count == 0) {
-		WSASetLastError (WSANOTINITIALISED);
-		return(SOCKET_ERROR);
-	}
-
 	for (maxfd = FD_SETSIZE-1; maxfd >= 0; maxfd--) {
 		if ((readfds && FD_ISSET (maxfd, readfds)) ||
 		    (writefds && FD_ISSET (maxfd, writefds)) ||

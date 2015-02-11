@@ -27,7 +27,6 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if NET_2_0
 
 using System;
 using System.Collections;
@@ -138,7 +137,7 @@ namespace Mainsoft.Web.Security
 				if (returnValue == 0)
 					return true;
 				if (returnValue == 2)
-					return false; //role does not exists
+					return false; //role does not exist
 				else if (returnValue == 3 && throwOnPopulatedRole)
 					throw new ProviderException (rolename + " is not empty");
 				else
@@ -372,5 +371,4 @@ namespace Mainsoft.Web.Security
 		}
 	}
 }
-#endif
 

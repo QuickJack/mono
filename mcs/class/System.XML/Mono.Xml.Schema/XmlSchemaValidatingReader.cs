@@ -38,7 +38,6 @@ using System.Xml.XPath;
 using Mono.Xml;
 #endif
 
-#if NET_2_0
 
 using System.Collections.Generic;
 using QName = System.Xml.XmlQualifiedName;
@@ -125,7 +124,7 @@ namespace Mono.Xml.Schema
 				schemas,
 				nsResolver,
 				options);
-			if (reader.BaseURI != String.Empty)
+			if (reader.BaseURI != String.Empty && Uri.IsWellFormedUriString(reader.BaseURI, UriKind.Absolute))
 				v.SourceUri = new Uri (reader.BaseURI);
 
 			readerLineInfo = reader as IXmlLineInfo;
@@ -818,4 +817,3 @@ namespace Mono.Xml.Schema
 	}
 }
 
-#endif

@@ -60,6 +60,9 @@
 #include <mono/utils/mono-stdlib.h>
 #include <mono/utils/mono-io-portability.h>
 #include <mono/utils/mono-error-internals.h>
+#include <mono/utils/atomic.h>
+#include <mono/utils/mono-memory-model.h>
+#include <mono/utils/mono-threads.h>
 #ifdef HOST_WIN32
 #include <direct.h>
 #endif
@@ -75,7 +78,7 @@
  * Changes which are already detected at runtime, like the addition
  * of icalls, do not require an increment.
  */
-#define MONO_CORLIB_VERSION 109
+#define MONO_CORLIB_VERSION 117
 
 typedef struct
 {
@@ -85,14 +88,12 @@ typedef struct
 	gchar *filename;
 } RuntimeConfig;
 
-CRITICAL_SECTION mono_delegate_section;
+mono_mutex_t mono_delegate_section;
 
-CRITICAL_SECTION mono_strtod_mutex;
+mono_mutex_t mono_strtod_mutex;
 
 static gunichar2 process_guid [36];
 static gboolean process_guid_set = FALSE;
-
-static gboolean shutting_down = FALSE;
 
 static gboolean no_exec = FALSE;
 
@@ -104,10 +105,6 @@ mono_domain_assembly_preload (MonoAssemblyName *aname,
 static MonoAssembly *
 mono_domain_assembly_search (MonoAssemblyName *aname,
 							 gpointer user_data);
-
-static MonoAssembly *
-mono_domain_assembly_postload_search (MonoAssemblyName *aname,
-									  gpointer user_data);
 
 static void
 mono_domain_fire_assembly_load (MonoAssembly *assembly, gpointer user_data);
@@ -233,25 +230,25 @@ mono_runtime_init (MonoDomain *domain, MonoThreadStartCB start_cb,
 	mono_install_assembly_refonly_preload_hook (mono_domain_assembly_preload, GUINT_TO_POINTER (TRUE));
 	mono_install_assembly_search_hook (mono_domain_assembly_search, GUINT_TO_POINTER (FALSE));
 	mono_install_assembly_refonly_search_hook (mono_domain_assembly_search, GUINT_TO_POINTER (TRUE));
-	mono_install_assembly_postload_search_hook (mono_domain_assembly_postload_search, GUINT_TO_POINTER (FALSE));
-	mono_install_assembly_postload_refonly_search_hook (mono_domain_assembly_postload_search, GUINT_TO_POINTER (TRUE));
+	mono_install_assembly_postload_search_hook ((void*)mono_domain_assembly_postload_search, GUINT_TO_POINTER (FALSE));
+	mono_install_assembly_postload_refonly_search_hook ((void*)mono_domain_assembly_postload_search, GUINT_TO_POINTER (TRUE));
 	mono_install_assembly_load_hook (mono_domain_fire_assembly_load, NULL);
 	mono_install_lookup_dynamic_token (mono_reflection_lookup_dynamic_token);
 
 	mono_thread_init (start_cb, attach_cb);
 
 	class = mono_class_from_name (mono_defaults.corlib, "System", "AppDomainSetup");
-	setup = (MonoAppDomainSetup *) mono_object_new (domain, class);
+	setup = (MonoAppDomainSetup *) mono_object_new_pinned (domain, class);
 
 	class = mono_class_from_name (mono_defaults.corlib, "System", "AppDomain");
-	ad = (MonoAppDomain *) mono_object_new (domain, class);
+	ad = (MonoAppDomain *) mono_object_new_pinned (domain, class);
 	ad->data = domain;
 	domain->domain = ad;
 	domain->setup = setup;
 
-	InitializeCriticalSection (&mono_delegate_section);
+	mono_mutex_init_recursive (&mono_delegate_section);
 
-	InitializeCriticalSection (&mono_strtod_mutex);
+	mono_mutex_init_recursive (&mono_strtod_mutex);
 	
 	mono_thread_attach (domain);
 	mono_context_init (domain);
@@ -329,7 +326,7 @@ mono_context_init (MonoDomain *domain)
 	MonoAppContext *context;
 
 	class = mono_class_from_name (mono_defaults.corlib, "System.Runtime.Remoting.Contexts", "Context");
-	context = (MonoAppContext *) mono_object_new (domain, class);
+	context = (MonoAppContext *) mono_object_new_pinned (domain, class);
 	context->domain_id = domain->domain_id;
 	context->context_id = 0;
 	domain->default_context = context;
@@ -347,8 +344,6 @@ mono_context_init (MonoDomain *domain)
 void
 mono_runtime_cleanup (MonoDomain *domain)
 {
-	shutting_down = TRUE;
-
 	mono_attach_cleanup ();
 
 	/* This ends up calling any pending pending (for at most 2 seconds) */
@@ -381,33 +376,6 @@ mono_runtime_quit ()
 		quit_function (mono_get_root_domain (), NULL);
 }
 
-/** 
- * mono_runtime_set_shutting_down:
- *
- * Invoked by System.Environment.Exit to flag that the runtime
- * is shutting down.
- */
-void
-mono_runtime_set_shutting_down (void)
-{
-	shutting_down = TRUE;
-}
-
-/**
- * mono_runtime_is_shutting_down:
- *
- * Returns whether the runtime has been flagged for shutdown.
- *
- * This is consumed by the P:System.Environment.HasShutdownStarted
- * property.
- *
- */
-gboolean
-mono_runtime_is_shutting_down (void)
-{
-	return shutting_down;
-}
-
 /**
  * mono_domain_create_appdomain:
  * @friendly_name: The friendly name of the appdomain to create
@@ -429,6 +397,25 @@ mono_domain_create_appdomain (char *friendly_name, char *configuration_file)
 	ad = mono_domain_create_appdomain_internal (friendly_name, setup);
 
 	return mono_domain_from_appdomain (ad);
+}
+
+/**
+ * mono_domain_set_config:
+ * @domain: MonoDomain initialized with the appdomain we want to change
+ * @base_dir: new base directory for the appdomain
+ * @config_file_name: path to the new configuration for the app domain
+ *
+ * Used to set the system configuration for an appdomain
+ *
+ * Without using this, embedded builds will get 'System.Configuration.ConfigurationErrorsException: 
+ * Error Initializing the configuration system. ---> System.ArgumentException: 
+ * The 'ExeConfigFilename' argument cannot be null.' for some managed calls.
+ */
+void
+mono_domain_set_config (MonoDomain *domain, const char *base_dir, const char *config_file_name)
+{
+	MONO_OBJECT_SETREF (domain->setup, application_base, mono_string_new (domain, base_dir));
+	MONO_OBJECT_SETREF (domain->setup, configuration_file, mono_string_new (domain, config_file_name));
 }
 
 static MonoAppDomainSetup*
@@ -505,7 +492,6 @@ mono_domain_create_appdomain_internal (char *friendly_name, MonoAppDomainSetup *
 	shadow_location = get_shadow_assembly_location_base (data, &error);
 	if (!mono_error_ok (&error))
 		mono_error_raise_exception (&error);
-	mono_debugger_event_create_appdomain (data, shadow_location);
 	g_free (shadow_location);
 #endif
 
@@ -864,12 +850,17 @@ mono_set_private_bin_path_from_config (MonoDomain *domain)
 MonoAppDomain *
 ves_icall_System_AppDomain_createDomain (MonoString *friendly_name, MonoAppDomainSetup *setup)
 {
+#ifdef DISABLE_APPDOMAINS
+	mono_raise_exception (mono_get_exception_not_supported ("AppDomain creation is not supported on this runtime."));
+	return NULL;
+#else
 	char *fname = mono_string_to_utf8 (friendly_name);
 	MonoAppDomain *ad = mono_domain_create_appdomain_internal (fname, setup);
 	
 	g_free (fname);
 
 	return ad;
+#endif
 }
 
 MonoArray *
@@ -918,12 +909,12 @@ ves_icall_System_AppDomain_GetAssemblies (MonoAppDomain *ad, MonoBoolean refonly
 }
 
 MonoReflectionAssembly *
-mono_try_assembly_resolve (MonoDomain *domain, MonoString *fname, gboolean refonly)
+mono_try_assembly_resolve (MonoDomain *domain, MonoString *fname, MonoAssembly *requesting, gboolean refonly)
 {
 	MonoClass *klass;
 	MonoMethod *method;
 	MonoBoolean isrefonly;
-	gpointer params [2];
+	gpointer params [3];
 
 	if (mono_runtime_get_no_exec ())
 		return NULL;
@@ -941,15 +932,15 @@ mono_try_assembly_resolve (MonoDomain *domain, MonoString *fname, gboolean refon
 
 	isrefonly = refonly ? 1 : 0;
 	params [0] = fname;
-	params [1] = &isrefonly;
+	params [1] = (requesting) ? mono_assembly_get_object (domain, requesting) : NULL;
+	params [2] = &isrefonly;
 	return (MonoReflectionAssembly *) mono_runtime_invoke (method, domain->domain, params, NULL);
 }
 
-static MonoAssembly *
-mono_domain_assembly_postload_search (MonoAssemblyName *aname,
-									  gpointer user_data)
+MonoAssembly *
+mono_domain_assembly_postload_search (MonoAssemblyName *aname, MonoAssembly *requesting,
+									  gboolean refonly)
 {
-	gboolean refonly = GPOINTER_TO_UINT (user_data);
 	MonoReflectionAssembly *assembly;
 	MonoDomain *domain = mono_domain_get ();
 	char *aname_str;
@@ -963,7 +954,7 @@ mono_domain_assembly_postload_search (MonoAssemblyName *aname,
 		g_free (aname_str);
 		return NULL;
 	}
-	assembly = mono_try_assembly_resolve (domain, str, refonly);
+	assembly = mono_try_assembly_resolve (domain, str, requesting, refonly);
 	g_free (aname_str);
 
 	if (assembly)
@@ -1483,18 +1474,28 @@ static gboolean
 private_file_needs_copying (const char *src, struct stat *sbuf_src, char *dest)
 {
 	struct stat sbuf_dest;
+	gchar *stat_src;
 	gchar *real_src = mono_portability_find_file (src, TRUE);
 
 	if (!real_src)
-		real_src = (gchar*)src;
-	
-	if (stat (real_src, sbuf_src) == -1) {
+		stat_src = (gchar*)src;
+	else
+		stat_src = real_src;
+
+	if (stat (stat_src, sbuf_src) == -1) {
 		time_t tnow = time (NULL);
+
+		if (real_src)
+			g_free (real_src);
+
 		memset (sbuf_src, 0, sizeof (*sbuf_src));
 		sbuf_src->st_mtime = tnow;
 		sbuf_src->st_atime = tnow;
 		return TRUE;
 	}
+
+	if (real_src)
+		g_free (real_src);
 
 	if (stat (dest, &sbuf_dest) == -1)
 		return TRUE;
@@ -1614,6 +1615,8 @@ mono_is_shadow_copy_enabled (MonoDomain *domain, const gchar *dir_name)
 /*
 This function raises exceptions so it can cause as sorts of nasty stuff if called
 while holding a lock.
+Returns old file name if shadow copy is disabled, new shadow copy file name if successful
+or NULL if source file not found.
 FIXME bubble up the error instead of raising it here
 */
 char *
@@ -1623,6 +1626,7 @@ mono_make_shadow_copy (const char *filename)
 	gchar *sibling_source, *sibling_target;
 	gint sibling_source_len, sibling_target_len;
 	guint16 *orig, *dest;
+	guint32 attrs;
 	char *shadow;
 	gboolean copy_result;
 	MonoException *exc;
@@ -1675,6 +1679,16 @@ mono_make_shadow_copy (const char *filename)
 	orig = g_utf8_to_utf16 (filename, strlen (filename), NULL, NULL, NULL);
 	dest = g_utf8_to_utf16 (shadow, strlen (shadow), NULL, NULL, NULL);
 	DeleteFile (dest);
+
+	/* Fix for bug #17066 - make sure we can read the file. if not then don't error but rather 
+	 * let the assembly fail to load. This ensures you can do Type.GetType("NS.T, NonExistantAssembly)
+	 * and not have it runtime error" */
+	attrs = GetFileAttributes (orig);
+	if (attrs == INVALID_FILE_ATTRIBUTES) {
+		g_free (shadow);
+		return (char *)filename;
+	}
+
 	copy_result = CopyFile (orig, dest, FALSE);
 
 	/* Fix for bug #556884 - make sure the files have the correct mode so that they can be
@@ -1687,6 +1701,11 @@ mono_make_shadow_copy (const char *filename)
 
 	if (copy_result == FALSE) {
 		g_free (shadow);
+
+		/* Fix for bug #17251 - if file not found try finding assembly by other means (it is not fatal error) */
+		if (GetLastError() == ERROR_FILE_NOT_FOUND || GetLastError() == ERROR_PATH_NOT_FOUND)
+			return NULL; /* file not found, shadow copy failed */
+
 		exc = mono_get_exception_execution_engine ("Failed to create shadow copy (CopyFile).");
 		mono_raise_exception (exc);
 	}
@@ -1857,7 +1876,7 @@ mono_domain_assembly_search (MonoAssemblyName *aname,
 	for (tmp = domain->domain_assemblies; tmp; tmp = tmp->next) {
 		ass = tmp->data;
 		/* Dynamic assemblies can't match here in MS.NET */
-		if (ass->dynamic || refonly != ass->ref_only || !mono_assembly_names_equal (aname, &ass->aname))
+		if (assembly_is_dynamic (ass) || refonly != ass->ref_only || !mono_assembly_names_equal (aname, &ass->aname))
 			continue;
 
 		mono_domain_assemblies_unlock (domain);
@@ -1959,7 +1978,9 @@ ves_icall_System_AppDomain_LoadAssembly (MonoAppDomain *ad,  MonoString *assRef,
 
 	if (!parsed) {
 		/* This is a parse error... */
-		return NULL;
+		if (!refOnly)
+			refass = mono_try_assembly_resolve (domain, assRef, NULL, refOnly);
+		return refass;
 	}
 
 	ass = mono_assembly_load_full_nosearch (&aname, NULL, &status, refOnly);
@@ -1968,7 +1989,7 @@ ves_icall_System_AppDomain_LoadAssembly (MonoAppDomain *ad,  MonoString *assRef,
 	if (!ass) {
 		/* MS.NET doesn't seem to call the assembly resolve handler for refonly assemblies */
 		if (!refOnly)
-			refass = mono_try_assembly_resolve (domain, assRef, refOnly);
+			refass = mono_try_assembly_resolve (domain, assRef, NULL, refOnly);
 		else
 			refass = NULL;
 		if (!refass) {
@@ -2006,6 +2027,9 @@ ves_icall_System_AppDomain_InternalUnload (gint32 domain_id)
 	 */
 	if (g_getenv ("MONO_NO_UNLOAD"))
 		return;
+#ifdef __native_client__
+	return;
+#endif
 
 	mono_domain_unload (domain);
 }
@@ -2025,6 +2049,7 @@ gint32
 ves_icall_System_AppDomain_ExecuteAssembly (MonoAppDomain *ad, 
 											MonoReflectionAssembly *refass, MonoArray *args)
 {
+	MonoError error;
 	MonoImage *image;
 	MonoMethod *method;
 
@@ -2034,10 +2059,10 @@ ves_icall_System_AppDomain_ExecuteAssembly (MonoAppDomain *ad,
 	image = refass->assembly->image;
 	g_assert (image);
 
-	method = mono_get_method (image, mono_image_get_entry_point (image), NULL);
+	method = mono_get_method_checked (image, mono_image_get_entry_point (image), NULL, NULL, &error);
 
 	if (!method)
-		g_error ("No entry point method found in %s", image->name);
+		g_error ("No entry point method found in %s due to %s", image->name, mono_error_get_message (&error));
 
 	if (!args)
 		args = (MonoArray *) mono_array_new (ad->data, mono_defaults.string_class, 0);
@@ -2187,29 +2212,28 @@ zero_static_data (MonoVTable *vtable)
 	void *data;
 
 	if (klass->has_static_refs && (data = mono_vtable_get_static_field_data (vtable)))
-		mono_gc_bzero (data, mono_class_data_size (klass));
+		mono_gc_bzero_aligned (data, mono_class_data_size (klass));
 }
 
 typedef struct unload_data {
+	gboolean done;
 	MonoDomain *domain;
 	char *failure_reason;
+	gint32 refcount;
 } unload_data;
 
 static void
-deregister_reflection_info_roots_nspace_table (gpointer key, gpointer value, gpointer image)
+unload_data_unref (unload_data *data)
 {
-	guint32 index = GPOINTER_TO_UINT (value);
-	MonoClass *class = mono_class_get (image, MONO_TOKEN_TYPE_DEF | index);
-
-	g_assert (class);
-
-	mono_class_free_ref_info (class);
-}
-
-static void
-deregister_reflection_info_roots_name_space (gpointer key, gpointer value, gpointer user_data)
-{
-	g_hash_table_foreach (value, deregister_reflection_info_roots_nspace_table, user_data);
+	gint32 count;
+	do {
+		mono_atomic_load_acquire (count, gint32, &data->refcount);
+		g_assert (count >= 1 && count <= 2);
+		if (count == 1) {
+			g_free (data);
+			return;
+		}
+	} while (InterlockedCompareExchange (&data->refcount, count - 1, count) != count);
 }
 
 static void
@@ -2225,7 +2249,6 @@ deregister_reflection_info_roots_from_list (MonoImage *image)
 		list = list->next;
 	}
 
-	g_slist_free (image->reflection_info_unregister_classes);
 	image->reflection_info_unregister_classes = NULL;
 }
 
@@ -2234,29 +2257,28 @@ deregister_reflection_info_roots (MonoDomain *domain)
 {
 	GSList *list;
 
-	mono_loader_lock ();
 	mono_domain_assemblies_lock (domain);
 	for (list = domain->domain_assemblies; list; list = list->next) {
 		MonoAssembly *assembly = list->data;
 		MonoImage *image = assembly->image;
 		int i;
-		/*No need to take the image lock here since dynamic images are appdomain bound and at this point the mutator is gone.*/
-		if (image->dynamic && image->name_cache)
-			g_hash_table_foreach (image->name_cache, deregister_reflection_info_roots_name_space, image);
-		deregister_reflection_info_roots_from_list (image);
+
+		/*
+		 * No need to take the image lock here since dynamic images are appdomain bound and
+		 * at this point the mutator is gone.  Taking the image lock here would mean
+		 * promoting it from a simple lock to a complex lock, which we better avoid if
+		 * possible.
+		 */
+		if (image_is_dynamic (image))
+			deregister_reflection_info_roots_from_list (image);
+
 		for (i = 0; i < image->module_count; ++i) {
 			MonoImage *module = image->modules [i];
-			if (module) {
-				if (module->dynamic && module->name_cache) {
-					g_hash_table_foreach (module->name_cache,
-							deregister_reflection_info_roots_name_space, module);
-				}
+			if (module && image_is_dynamic (module))
 				deregister_reflection_info_roots_from_list (module);
-			}
 		}
 	}
 	mono_domain_assemblies_unlock (domain);
-	mono_loader_unlock ();
 }
 
 static guint32 WINAPI
@@ -2268,7 +2290,8 @@ unload_thread_main (void *arg)
 	int i;
 
 	/* Have to attach to the runtime so shutdown can wait for this thread */
-	thread = mono_thread_attach (mono_get_root_domain ());
+	/* Force it to be attached to avoid racing during shutdown. */
+	thread = mono_thread_attach_full (mono_get_root_domain (), TRUE);
 
 	/* 
 	 * FIXME: Abort our parent thread last, so we can return a failure 
@@ -2276,18 +2299,18 @@ unload_thread_main (void *arg)
 	 */
 	if (!mono_threads_abort_appdomain_threads (domain, -1)) {
 		data->failure_reason = g_strdup_printf ("Aborting of threads in domain %s timed out.", domain->friendly_name);
-		return 1;
+		goto failure;
 	}
 
 	if (!mono_thread_pool_remove_domain_jobs (domain, -1)) {
 		data->failure_reason = g_strdup_printf ("Cleanup of threadpool jobs of domain %s timed out.", domain->friendly_name);
-		return 1;
+		goto failure;
 	}
 
 	/* Finalize all finalizable objects in the doomed appdomain */
 	if (!mono_domain_finalize (domain, -1)) {
 		data->failure_reason = g_strdup_printf ("Finalization of domain %s timed out.", domain->friendly_name);
-		return 1;
+		goto failure;
 	}
 
 	/* Clear references to our vtables in class->runtime_info.
@@ -2295,7 +2318,7 @@ unload_thread_main (void *arg)
 	 * class->runtime_info.
 	 */
 
-	mono_loader_lock ();
+	mono_loader_lock (); //FIXME why do we need the loader lock here?
 	mono_domain_lock (domain);
 #ifdef HAVE_SGEN_GC
 	/*
@@ -2333,9 +2356,16 @@ unload_thread_main (void *arg)
 
 	mono_gc_collect (mono_gc_max_generation ());
 
+	mono_atomic_store_release (&data->done, TRUE);
+	unload_data_unref (data);
 	mono_thread_detach (thread);
-
 	return 0;
+
+failure:
+	mono_atomic_store_release (&data->done, TRUE);
+	unload_data_unref (data);
+	mono_thread_detach (thread);
+	return 1;
 }
 
 /*
@@ -2377,12 +2407,12 @@ void
 mono_domain_try_unload (MonoDomain *domain, MonoObject **exc)
 {
 	HANDLE thread_handle;
-	gsize tid;
-	guint32 res;
 	MonoAppDomainState prev_state;
 	MonoMethod *method;
-	unload_data thread_data;
+	unload_data *thread_data;
+	MonoNativeThreadId tid;
 	MonoDomain *caller_domain = mono_domain_get ();
+	char *name;
 
 	/* printf ("UNLOAD STARTING FOR %s (%p) IN THREAD 0x%x.\n", domain->friendly_name, domain, GetCurrentThreadId ()); */
 
@@ -2405,8 +2435,6 @@ mono_domain_try_unload (MonoDomain *domain, MonoObject **exc)
 		}
 	}
 
-	mono_debugger_event_unload_appdomain (domain);
-
 	mono_domain_set (domain, FALSE);
 	/* Notify OnDomainUnload listeners */
 	method = mono_class_get_method_from_name (domain->domain->mbr.obj.vtable->klass, "DoDomainUnload", -1);	
@@ -2421,8 +2449,11 @@ mono_domain_try_unload (MonoDomain *domain, MonoObject **exc)
 	}
 	mono_domain_set (caller_domain, FALSE);
 
-	thread_data.domain = domain;
-	thread_data.failure_reason = NULL;
+	thread_data = g_new0 (unload_data, 1);
+	thread_data->domain = domain;
+	thread_data->failure_reason = NULL;
+	thread_data->done = FALSE;
+	thread_data->refcount = 2; /*Must be 2: unload thread + initiator */
 
 	/*The managed callback finished successfully, now we start tearing down the appdomain*/
 	domain->state = MONO_APPDOMAIN_UNLOADING;
@@ -2430,41 +2461,37 @@ mono_domain_try_unload (MonoDomain *domain, MonoObject **exc)
 	 * First we create a separate thread for unloading, since
 	 * we might have to abort some threads, including the current one.
 	 */
-	/*
-	 * If we create a non-suspended thread, the runtime will hang.
-	 * See:
-	 * http://bugzilla.ximian.com/show_bug.cgi?id=27663
-	 */ 
-#if 0
-	thread_handle = mono_create_thread (NULL, 0, unload_thread_main, &thread_data, 0, &tid);
-#else
-	thread_handle = mono_create_thread (NULL, 0, (LPTHREAD_START_ROUTINE)unload_thread_main, &thread_data, CREATE_SUSPENDED, &tid);
-	if (thread_handle == NULL) {
+	thread_handle = mono_threads_create_thread ((LPTHREAD_START_ROUTINE)unload_thread_main, thread_data, 0, CREATE_SUSPENDED, &tid);
+	if (thread_handle == NULL)
 		return;
-	}
-	ResumeThread (thread_handle);
-#endif
+	name = g_strdup_printf ("Unload thread for domain %x", domain);
+	mono_thread_info_set_name (tid, name);
+	mono_thread_info_resume (tid);
+	g_free (name);
 
 	/* Wait for the thread */	
-	while ((res = WaitForSingleObjectEx (thread_handle, INFINITE, TRUE) == WAIT_IO_COMPLETION)) {
+	while (!thread_data->done && WaitForSingleObjectEx (thread_handle, INFINITE, TRUE) == WAIT_IO_COMPLETION) {
 		if (mono_thread_internal_has_appdomain_ref (mono_thread_internal_current (), domain) && (mono_thread_interruption_requested ())) {
 			/* The unload thread tries to abort us */
 			/* The icall wrapper will execute the abort */
 			CloseHandle (thread_handle);
+			unload_data_unref (thread_data);
 			return;
 		}
 	}
 	CloseHandle (thread_handle);
 
-	if (thread_data.failure_reason) {
+	if (thread_data->failure_reason) {
 		/* Roll back the state change */
 		domain->state = MONO_APPDOMAIN_CREATED;
 
-		g_warning ("%s", thread_data.failure_reason);
+		g_warning ("%s", thread_data->failure_reason);
 
-		*exc = (MonoObject *) mono_get_exception_cannot_unload_appdomain (thread_data.failure_reason);
+		*exc = (MonoObject *) mono_get_exception_cannot_unload_appdomain (thread_data->failure_reason);
 
-		g_free (thread_data.failure_reason);
-		thread_data.failure_reason = NULL;
+		g_free (thread_data->failure_reason);
+		thread_data->failure_reason = NULL;
 	}
+
+	unload_data_unref (thread_data);
 }

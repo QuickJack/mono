@@ -38,9 +38,7 @@ namespace System.ServiceModel.Channels
 {
 	internal class HttpChannelFactory<TChannel> : TransportChannelFactoryBase<TChannel>
 	{
-#if NET_2_1
 		IHttpCookieContainerManager cookie_manager;
-#endif
 
 		public HttpChannelFactory (HttpTransportBindingElement source, BindingContext ctx)
 			: base (source, ctx)
@@ -50,13 +48,11 @@ namespace System.ServiceModel.Channels
 				MessageEncodingBindingElement mbe = be as MessageEncodingBindingElement;
 				if (mbe != null) {
 					MessageEncoder = CreateEncoder<TChannel> (mbe);
-					break;
+					continue;
 				}
-#if NET_2_1
-				var cbe = be as HttpCookieContainerBindingElement;
-				if (cbe != null)
-					cookie_manager = cbe.GetProperty<IHttpCookieContainerManager> (ctx);
-#endif
+				var tbe = be as HttpTransportBindingElement;
+				if (tbe != null)
+					cookie_manager = tbe.GetProperty<IHttpCookieContainerManager> (ctx);
 			}
 			if (MessageEncoder == null)
 				MessageEncoder = new TextMessageEncoder (MessageVersion.Default, Encoding.UTF8);
@@ -109,10 +105,8 @@ namespace System.ServiceModel.Channels
 
 		public override T GetProperty<T> ()
 		{
-#if NET_2_1
 			if (cookie_manager is T)
 				return (T) (object) cookie_manager;
-#endif
 			return base.GetProperty<T> ();
 		}
 	}

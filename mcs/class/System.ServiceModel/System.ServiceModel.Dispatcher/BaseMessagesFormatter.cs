@@ -150,11 +150,9 @@ namespace System.ServiceModel.Dispatcher
 		{
 			MethodInfo attrProvider = desc.SyncMethod ?? desc.BeginMethod;
 			object [] attrs;
-#if !MOONLIGHT
 			attrs = attrProvider.GetCustomAttributes (typeof (XmlSerializerFormatAttribute), false);
 			if (attrs != null && attrs.Length > 0)
 				return new XmlMessagesFormatter (desc, (XmlSerializerFormatAttribute) attrs [0]);
-#endif
 
 			attrs = attrProvider.GetCustomAttributes (typeof (DataContractFormatAttribute), false);
 			DataContractFormatAttribute dataAttr = null;
@@ -283,9 +281,10 @@ namespace System.ServiceModel.Dispatcher
 			}
 			else {
 				int index = ParamsOffset (md.Body);
-				foreach (ParameterInfo pi in requestMethodParams)
+				foreach (ParameterInfo pi in replyMethodParams) {
 					if (pi.IsOut || pi.ParameterType.IsByRef)
 						parameters [pi.Position] = parts [index++];
+				}
 				return HasReturnValue (md.Body) ? parts [0] : null;
 			}
 		}

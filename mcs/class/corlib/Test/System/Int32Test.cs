@@ -252,20 +252,40 @@ public class Int32Test
 			Assert.IsTrue (typeof (ArgumentException) == e.GetType (), "C#42");
 		}
 
+		try {
+			Int32.Parse ("５", NumberStyles.Any, CultureInfo.InvariantCulture);
+			Assert.Fail ("C#42");
+		} catch (FormatException) {
+		}
+
+		try {
+			Int32.Parse ("\xFF15\xFF15", NumberStyles.Any, CultureInfo.InvariantCulture);
+			Assert.Fail ("C#43");
+		} catch (FormatException) {
+		}
+
 		// Pass a DateTimeFormatInfo, it is unable to format
 		// numbers, but we should not crash
 		
 		Int32.Parse ("123", new DateTimeFormatInfo ());
 
 		Assert.AreEqual (734561, Int32.Parse ("734561\0"), "C#43");
-		Assert.AreEqual (734561, Int32.Parse ("734561\0\0\0    \0"), "C#44");
-		Assert.AreEqual (734561, Int32.Parse ("734561\0\0\0    "), "C#45");
+		try {
+			Int32.Parse ("734561\0\0\0    \0");
+			Assert.Fail ("C#44");
+		} catch (FormatException) {}
+
+		try {
+			Int32.Parse ("734561\0\0\0    ");
+			Assert.Fail ("C#45");
+		} catch (FormatException) {}
+
 		Assert.AreEqual (734561, Int32.Parse ("734561\0\0\0"), "C#46");
 
 		Assert.AreEqual (0, Int32.Parse ("0+", NumberStyles.Any), "#50");
 	}
 
-    [Test]
+	[Test]
 	public void TestParseExponent ()
 	{
 		Assert.AreEqual (2, Int32.Parse ("2E0", NumberStyles.AllowExponent), "A#1");
@@ -274,6 +294,11 @@ public class Int32Test
 		Assert.AreEqual (2000000, Int32.Parse ("2E6", NumberStyles.AllowExponent), "A#4");
 		Assert.AreEqual (200, Int32.Parse ("2E+2", NumberStyles.AllowExponent), "A#5");
 		Assert.AreEqual (2, Int32.Parse ("2", NumberStyles.AllowExponent), "A#6");
+		Assert.AreEqual (21, Int32.Parse ("2.1E1", NumberStyles.AllowDecimalPoint | NumberStyles.AllowExponent), "A#7");
+		Assert.AreEqual (520, Int32.Parse (".52E3", NumberStyles.AllowDecimalPoint | NumberStyles.AllowExponent), "A#8");
+		Assert.AreEqual (32500000, Int32.Parse ("32.5E6", NumberStyles.AllowDecimalPoint | NumberStyles.AllowExponent), "A#9");
+		Assert.AreEqual (890, Int32.Parse ("8.9000E2", NumberStyles.AllowDecimalPoint | NumberStyles.AllowExponent), "A#10");
+		Assert.AreEqual (35, Int32.Parse ("3500E-02", NumberStyles.AllowExponent), "A#5");
 
 		try {
 			Int32.Parse ("2E");
@@ -313,15 +338,21 @@ public class Int32Test
 		}
 
 		try {
-			Int32.Parse ("2E-1", NumberStyles.AllowExponent); // negative exponent
+			Int32.Parse ("2E-1", NumberStyles.AllowExponent);
 			Assert.Fail ("B#7");
-		} catch (OverflowException) {
+		} catch (OverflowException){
 		}
 
 		try {
 			Int32.Parse ("2 math e1", NumberStyles.AllowExponent);
 			Assert.Fail ("B#8");
 		} catch (FormatException) {
+		}
+
+		try {
+			Int32.Parse ("2.09E1",  NumberStyles.AllowDecimalPoint | NumberStyles.AllowExponent);
+			Assert.Fail ("B#9");
+		} catch (OverflowException) {
 		}
 	}
 
@@ -381,6 +412,8 @@ public class Int32Test
 		Assert.AreEqual (true, Int32.TryParse ("ffffffff", NumberStyles.HexNumber, Nfi, out result));
 		Assert.AreEqual (-1, result);
 		Assert.AreEqual (false, Int32.TryParse ("100000000", NumberStyles.HexNumber, Nfi, out result));
+		Assert.IsFalse (int.TryParse ("-", NumberStyles.AllowLeadingSign, Nfi, out result));
+		Assert.IsFalse (int.TryParse (Nfi.CurrencySymbol + "-", NumberStyles.AllowLeadingSign | NumberStyles.AllowCurrencySymbol, Nfi, out result));
 	}
 
 	[Test]	

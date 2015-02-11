@@ -28,9 +28,6 @@
 using System;
 using System.Threading;
 using System.Reflection;
-#if !TARGET_JVM
-using System.Reflection.Emit;
-#endif // TARGET_JVM
 using System.Runtime.InteropServices;
 
 using NUnit.Framework;
@@ -73,7 +70,6 @@ namespace MonoTests.System.Reflection
 			Assert.IsNotNull (pub.GetRemoveMethod (), "#B3");
 		}
 
-#if NET_2_0
 		[Test]
 		public void AddHandlerToNullInstanceEventRaisesTargetException ()
 		{
@@ -117,7 +113,6 @@ namespace MonoTests.System.Reflection
 				Assert.Fail ("#1");
 			} catch (InvalidOperationException) {}			
 		}
-#endif
 
 #pragma warning disable 67
 		public class PrivateEvent

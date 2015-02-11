@@ -13,7 +13,6 @@
 #define GC_I_HIDE_POINTERS
 #include <mono/metadata/gc-internal.h>
 #include <mono/metadata/mono-gc.h>
-#include <mono/metadata/gc-internal.h>
 #include <mono/metadata/profiler-private.h>
 #include <mono/metadata/class-internals.h>
 #include <mono/metadata/method-builder.h>
@@ -22,11 +21,16 @@
 #include <mono/metadata/metadata-internals.h>
 #include <mono/metadata/marshal.h>
 #include <mono/metadata/runtime.h>
+#include <mono/metadata/sgen-toggleref.h>
+#include <mono/utils/atomic.h>
 #include <mono/utils/mono-logger-internal.h>
+#include <mono/utils/mono-memory-model.h>
 #include <mono/utils/mono-time.h>
 #include <mono/utils/mono-threads.h>
 #include <mono/utils/dtrace.h>
 #include <mono/utils/gc_wrapper.h>
+#include <mono/utils/mono-mutex.h>
+#include <mono/utils/mono-counters.h>
 
 #if HAVE_BOEHM_GC
 
@@ -47,9 +51,17 @@ void *pthread_get_stackaddr_np(pthread_t);
 #define MIN_BOEHM_MAX_HEAP_SIZE (MIN_BOEHM_MAX_HEAP_SIZE_IN_MB << 20)
 
 static gboolean gc_initialized = FALSE;
+static mono_mutex_t mono_gc_lock;
 
 static void*
 boehm_thread_register (MonoThreadInfo* info, void *baseptr);
+static void
+boehm_thread_unregister (MonoThreadInfo *p);
+static void
+register_test_toggleref_callback (void);
+
+#define BOEHM_GC_BIT_FINALIZER_AWARE 1
+static MonoGCFinalizerCallbacks fin_callbacks;
 
 static void
 mono_gc_warning (char *msg, GC_word arg)
@@ -61,10 +73,13 @@ void
 mono_gc_base_init (void)
 {
 	MonoThreadInfoCallbacks cb;
-	char *env;
+	const char *env;
+	int dummy;
 
 	if (gc_initialized)
 		return;
+
+	mono_counters_init ();
 
 	/*
 	 * Handle the case when we are called from a thread different from the main thread,
@@ -74,7 +89,7 @@ mono_gc_base_init (void)
 	 * we used to do this only when running on valgrind,
 	 * but it happens also in other setups.
 	 */
-#if defined(HAVE_PTHREAD_GETATTR_NP) && defined(HAVE_PTHREAD_ATTR_GETSTACK)
+#if defined(HAVE_PTHREAD_GETATTR_NP) && defined(HAVE_PTHREAD_ATTR_GETSTACK) && !defined(__native_client__)
 	{
 		size_t size;
 		void *sstart;
@@ -147,12 +162,12 @@ mono_gc_base_init (void)
 	GC_allow_register_threads();
 #endif
 
-	if ((env = getenv ("MONO_GC_PARAMS"))) {
+	if ((env = g_getenv ("MONO_GC_PARAMS"))) {
 		char **ptr, **opts = g_strsplit (env, ",", -1);
 		for (ptr = opts; *ptr; ++ptr) {
 			char *opt = *ptr;
 			if (g_str_has_prefix (opt, "max-heap-size=")) {
-				glong max_heap;
+				size_t max_heap;
 
 				opt = strchr (opt, '=') + 1;
 				if (*opt && mono_gc_parse_environment_string_extract_number (opt, &max_heap)) {
@@ -165,6 +180,9 @@ mono_gc_base_init (void)
 					fprintf (stderr, "max-heap-size must be an integer.\n");
 					exit (1);
 				}
+				continue;
+			} else if (g_str_has_prefix (opt, "toggleref-test")) {
+				register_test_toggleref_callback ();
 				continue;
 			} else {
 				/* Could be a parameter for sgen */
@@ -180,12 +198,17 @@ mono_gc_base_init (void)
 
 	memset (&cb, 0, sizeof (cb));
 	cb.thread_register = boehm_thread_register;
+	cb.thread_unregister = boehm_thread_unregister;
 	cb.mono_method_is_critical = (gpointer)mono_runtime_is_critical_method;
 #ifndef HOST_WIN32
+	cb.thread_exit = mono_gc_pthread_exit;
 	cb.mono_gc_pthread_create = (gpointer)mono_gc_pthread_create;
 #endif
 	
 	mono_threads_init (&cb, sizeof (MonoThreadInfo));
+	mono_mutex_init (&mono_gc_lock);
+
+	mono_thread_info_attach (&dummy);
 
 	mono_gc_enable_events ();
 	gc_initialized = TRUE;
@@ -299,26 +322,6 @@ mono_gc_get_heap_size (void)
 	return GC_get_heap_size ();
 }
 
-void
-mono_gc_disable (void)
-{
-#ifdef HAVE_GC_ENABLE
-	GC_disable ();
-#else
-	g_assert_not_reached ();
-#endif
-}
-
-void
-mono_gc_enable (void)
-{
-#ifdef HAVE_GC_ENABLE
-	GC_enable ();
-#else
-	g_assert_not_reached ();
-#endif
-}
-
 gboolean
 mono_gc_is_gc_thread (void)
 {
@@ -369,6 +372,17 @@ boehm_thread_register (MonoThreadInfo* info, void *baseptr)
 	return NULL;
 #endif
 #endif
+}
+
+static void
+boehm_thread_unregister (MonoThreadInfo *p)
+{
+	MonoNativeThreadId tid;
+
+	tid = mono_thread_info_get_tid (p);
+
+	if (p->runtime_thread)
+		mono_threads_add_joinable_thread ((gpointer)tid);
 }
 
 gboolean
@@ -444,7 +458,7 @@ on_gc_notification (GCEventType event)
 			mono_perfcounters->gc_gen0size = heap_size;
 		}
 #endif
-		gc_stats.major_gc_time_usecs += (mono_100ns_ticks () - gc_start_time) / 10;
+		gc_stats.major_gc_time += mono_100ns_ticks () - gc_start_time;
 		mono_trace_message (MONO_TRACE_GC, "gc took %d usecs", (mono_100ns_ticks () - gc_start_time) / 10);
 		break;
 	}
@@ -584,9 +598,9 @@ mono_gc_alloc_fixed (size_t size, void *descr)
 	/*
 	static int count;
 	count ++;
-	if (count == atoi (getenv ("COUNT2")))
+	if (count == atoi (g_getenv ("COUNT2")))
 		printf ("HIT!\n");
-	if (count > atoi (getenv ("COUNT2")))
+	if (count > atoi (g_getenv ("COUNT2")))
 		return GC_MALLOC (size);
 	*/
 
@@ -635,13 +649,19 @@ mono_gc_wbarrier_set_arrayref (MonoArray *arr, gpointer slot_ptr, MonoObject* va
 void
 mono_gc_wbarrier_arrayref_copy (gpointer dest_ptr, gpointer src_ptr, int count)
 {
-	mono_gc_memmove (dest_ptr, src_ptr, count * sizeof (gpointer));
+	mono_gc_memmove_aligned (dest_ptr, src_ptr, count * sizeof (gpointer));
 }
 
 void
 mono_gc_wbarrier_generic_store (gpointer ptr, MonoObject* value)
 {
 	*(void**)ptr = value;
+}
+
+void
+mono_gc_wbarrier_generic_store_atomic (gpointer ptr, MonoObject *value)
+{
+	InterlockedWritePointer (ptr, value);
 }
 
 void
@@ -652,14 +672,14 @@ mono_gc_wbarrier_generic_nostore (gpointer ptr)
 void
 mono_gc_wbarrier_value_copy (gpointer dest, gpointer src, int count, MonoClass *klass)
 {
-	mono_gc_memmove (dest, src, count * mono_class_value_size (klass, NULL));
+	mono_gc_memmove_atomic (dest, src, count * mono_class_value_size (klass, NULL));
 }
 
 void
 mono_gc_wbarrier_object_copy (MonoObject* obj, MonoObject *src)
 {
 	/* do not copy the sync state */
-	mono_gc_memmove ((char*)obj + sizeof (MonoObject), (char*)src + sizeof (MonoObject),
+	mono_gc_memmove_aligned ((char*)obj + sizeof (MonoObject), (char*)src + sizeof (MonoObject),
 			mono_object_class (obj)->instance_size - sizeof (MonoObject));
 }
 
@@ -673,6 +693,16 @@ mono_gc_get_suspend_signal (void)
 {
 #ifdef USE_INCLUDED_GC
 	return GC_get_suspend_signal ();
+#else
+	return -1;
+#endif
+}
+
+int
+mono_gc_get_restart_signal (void)
+{
+#ifdef USE_INCLUDED_GC
+	return GC_get_restart_signal ();
 #else
 	return -1;
 #endif
@@ -701,7 +731,7 @@ enum {
 };
 
 static MonoMethod*
-create_allocator (int atype, int offset)
+create_allocator (int atype, int tls_key)
 {
 	int index_var, bytes_var, my_fl_var, my_entry_var;
 	guint32 no_freelist_branch, not_small_enough_branch = 0;
@@ -726,7 +756,7 @@ create_allocator (int atype, int offset)
 	bytes_var = mono_mb_add_local (mb, &mono_defaults.int32_class->byval_arg);
 	if (atype == ATYPE_STRING) {
 		/* a string alloator method takes the args: (vtable, len) */
-		/* bytes = (sizeof (MonoString) + ((len + 1) * 2)); */
+		/* bytes = (offsetof (MonoString, chars) + ((len + 1) * 2)); */
 		mono_mb_emit_ldarg (mb, 1);
 		mono_mb_emit_icon (mb, 1);
 		mono_mb_emit_byte (mb, MONO_CEE_ADD);
@@ -780,7 +810,7 @@ create_allocator (int atype, int offset)
 	/* my_fl = ((GC_thread)tsd) -> ptrfree_freelists + index; */
 	mono_mb_emit_byte (mb, MONO_CUSTOM_PREFIX);
 	mono_mb_emit_byte (mb, 0x0D); /* CEE_MONO_TLS */
-	mono_mb_emit_i4 (mb, offset);
+	mono_mb_emit_i4 (mb, tls_key);
 	if (atype == ATYPE_FREEPTR || atype == ATYPE_FREEPTR_FOR_BOX || atype == ATYPE_STRING)
 		mono_mb_emit_icon (mb, G_STRUCT_OFFSET (struct GC_Thread_Rep, ptrfree_freelists));
 	else if (atype == ATYPE_NORMAL)
@@ -931,11 +961,10 @@ mono_gc_is_critical_method (MonoMethod *method)
  */
 
 MonoMethod*
-mono_gc_get_managed_allocator (MonoVTable *vtable, gboolean for_box)
+mono_gc_get_managed_allocator (MonoClass *klass, gboolean for_box)
 {
 	int offset = -1;
 	int atype;
-	MonoClass *klass = vtable->klass;
 	MONO_THREAD_VAR_OFFSET (GC_thread_tls, offset);
 
 	/*g_print ("thread tls: %d\n", offset);*/
@@ -943,9 +972,11 @@ mono_gc_get_managed_allocator (MonoVTable *vtable, gboolean for_box)
 		return NULL;
 	if (!SMALL_ENOUGH (klass->instance_size))
 		return NULL;
-	if (mono_class_has_finalizer (klass) || klass->marshalbyref || (mono_profiler_get_events () & MONO_PROFILE_ALLOCATIONS))
+	if (mono_class_has_finalizer (klass) || mono_class_is_marshalbyref (klass) || (mono_profiler_get_events () & MONO_PROFILE_ALLOCATIONS))
 		return NULL;
 	if (klass->rank)
+		return NULL;
+	if (mono_class_is_open_constructed_type (&klass->byval_arg))
 		return NULL;
 	if (klass->byval_arg.type == MONO_TYPE_STRING) {
 		atype = ATYPE_STRING;
@@ -969,7 +1000,7 @@ mono_gc_get_managed_allocator (MonoVTable *vtable, gboolean for_box)
 }
 
 MonoMethod*
-mono_gc_get_managed_array_allocator (MonoVTable *vtable, int rank)
+mono_gc_get_managed_array_allocator (MonoClass *klass)
 {
 	return NULL;
 }
@@ -986,11 +1017,22 @@ mono_gc_get_managed_allocator_by_type (int atype)
 	MonoMethod *res;
 	MONO_THREAD_VAR_OFFSET (GC_thread_tls, offset);
 
-	mono_loader_lock ();
+	mono_tls_key_set_offset (TLS_KEY_BOEHM_GC_THREAD, offset);
+
 	res = alloc_method_cache [atype];
-	if (!res)
-		res = alloc_method_cache [atype] = create_allocator (atype, offset);
-	mono_loader_unlock ();
+	if (res)
+		return res;
+
+	res = create_allocator (atype, TLS_KEY_BOEHM_GC_THREAD);
+	mono_mutex_lock (&mono_gc_lock);
+	if (alloc_method_cache [atype]) {
+		mono_free_method (res);
+		res = alloc_method_cache [atype];
+	} else {
+		mono_memory_barrier ();
+		alloc_method_cache [atype] = res;
+	}
+	mono_mutex_unlock (&mono_gc_lock);
 	return res;
 }
 
@@ -1016,13 +1058,13 @@ mono_gc_is_critical_method (MonoMethod *method)
 }
 
 MonoMethod*
-mono_gc_get_managed_allocator (MonoVTable *vtable, gboolean for_box)
+mono_gc_get_managed_allocator (MonoClass *klass, gboolean for_box)
 {
 	return NULL;
 }
 
 MonoMethod*
-mono_gc_get_managed_array_allocator (MonoVTable *vtable, int rank)
+mono_gc_get_managed_array_allocator (MonoClass *klass)
 {
 	return NULL;
 }
@@ -1138,7 +1180,7 @@ mono_gc_conservatively_scan_area (void *start, void *end)
 }
 
 void *
-mono_gc_scan_object (void *obj)
+mono_gc_scan_object (void *obj, void *gc_data)
 {
 	g_assert_not_reached ();
 	return NULL;
@@ -1163,6 +1205,19 @@ mono_gc_set_stack_end (void *stack_end)
 
 void mono_gc_set_skip_thread (gboolean value)
 {
+}
+
+void
+mono_gc_register_for_finalization (MonoObject *obj, void *user_data)
+{
+	guint offset = 0;
+
+#ifndef GC_DEBUG
+	/* This assertion is not valid when GC_DEBUG is defined */
+	g_assert (GC_base (obj) == (char*)obj - offset);
+#endif
+
+	GC_REGISTER_FINALIZER_NO_ORDER ((char*)obj - offset, user_data, GUINT_TO_POINTER (offset), NULL, NULL);
 }
 
 /*
@@ -1193,6 +1248,7 @@ void
 mono_gc_pthread_exit (void *retval)
 {
 	pthread_exit (retval);
+	g_assert_not_reached ();
 }
 
 #endif
@@ -1211,6 +1267,10 @@ BOOL APIENTRY mono_gc_dllmain (HMODULE module_handle, DWORD reason, LPVOID reser
 guint
 mono_gc_get_vtable_bits (MonoClass *class)
 {
+	if (fin_callbacks.is_class_finalization_aware) {
+		if (fin_callbacks.is_class_finalization_aware (class))
+			return BOEHM_GC_BIT_FINALIZER_AWARE;
+	}
 	return 0;
 }
 
@@ -1234,6 +1294,18 @@ mono_gc_get_los_limit (void)
 	return G_MAXINT;
 }
 
+void
+mono_gc_set_string_length (MonoString *str, gint32 new_length)
+{
+	mono_unichar2 *new_end = str->chars + new_length;
+	
+	/* zero the discarded string. This null-delimits the string and allows 
+	 * the space to be reclaimed by SGen. */
+	 
+	memset (new_end, 0, (str->length - new_length + 1) * sizeof (mono_unichar2));
+	str->length = new_length;
+}
+
 gboolean
 mono_gc_user_markers_supported (void)
 {
@@ -1245,6 +1317,74 @@ mono_gc_make_root_descr_user (MonoGCRootMarkFunc marker)
 {
 	g_assert_not_reached ();
 	return NULL;
+}
+
+gboolean
+mono_gc_set_allow_synchronous_major (gboolean flag)
+{
+	return flag;
+}
+/* Toggleref support */
+
+void
+mono_gc_toggleref_add (MonoObject *object, mono_bool strong_ref)
+{
+	GC_toggleref_add ((GC_PTR)object, (int)strong_ref);
+}
+
+void
+mono_gc_toggleref_register_callback (MonoToggleRefStatus (*proccess_toggleref) (MonoObject *obj))
+{
+	GC_toggleref_register_callback ((int (*) (GC_PTR obj)) proccess_toggleref);
+}
+
+/* Test support code */
+
+static MonoToggleRefStatus
+test_toggleref_callback (MonoObject *obj)
+{
+	static MonoClassField *mono_toggleref_test_field;
+	int status = MONO_TOGGLE_REF_DROP;
+
+	if (!mono_toggleref_test_field) {
+		mono_toggleref_test_field = mono_class_get_field_from_name (mono_object_get_class (obj), "__test");
+		g_assert (mono_toggleref_test_field);
+	}
+
+	mono_field_get_value (obj, mono_toggleref_test_field, &status);
+	printf ("toggleref-cb obj %d\n", status);
+	return status;
+}
+
+static void
+register_test_toggleref_callback (void)
+{
+	mono_gc_toggleref_register_callback (test_toggleref_callback);
+}
+
+static gboolean
+is_finalization_aware (MonoObject *obj)
+{
+	MonoVTable *vt = obj->vtable;
+	return (vt->gc_bits & BOEHM_GC_BIT_FINALIZER_AWARE) == BOEHM_GC_BIT_FINALIZER_AWARE;
+}
+
+static void
+fin_notifier (MonoObject *obj)
+{
+	if (is_finalization_aware (obj))
+		fin_callbacks.object_queued_for_finalization (obj);
+}
+
+void
+mono_gc_register_finalizer_callbacks (MonoGCFinalizerCallbacks *callbacks)
+{
+	if (callbacks->version != MONO_GC_FINALIZER_EXTENSION_VERSION)
+		g_error ("Invalid finalizer callback version. Expected %d but got %d\n", MONO_GC_FINALIZER_EXTENSION_VERSION, callbacks->version);
+
+	fin_callbacks = *callbacks;
+
+	GC_set_finalizer_notify_proc ((void (*) (GC_PTR))fin_notifier);
 }
 
 #endif /* no Boehm GC */

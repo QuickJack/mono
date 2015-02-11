@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env bash
 # Run this to generate all the initial makefiles, etc.
 # Ripped off from GNOME macros version
 
@@ -37,7 +37,7 @@ if [ -z "$LIBTOOL" ]; then
   fi
 fi
 
-(grep "^AM_PROG_LIBTOOL" $srcdir/configure.in >/dev/null) && {
+(grep "^AM_PROG_LIBTOOL" $srcdir/configure.ac >/dev/null) && {
   ($LIBTOOL --version) < /dev/null > /dev/null 2>&1 || {
     echo
     echo "**Error**: You must have \`libtool' installed to compile Mono."
@@ -47,8 +47,8 @@ fi
   }
 }
 
-grep "^AM_GNU_GETTEXT" $srcdir/configure.in >/dev/null && {
-  grep "sed.*POTFILES" $srcdir/configure.in >/dev/null || \
+grep "^AM_GNU_GETTEXT" $srcdir/configure.ac >/dev/null && {
+  grep "sed.*POTFILES" $srcdir/configure.ac >/dev/null || \
   (gettext --version) < /dev/null > /dev/null 2>&1 || {
     echo
     echo "**Error**: You must have \`gettext' installed to compile Mono."
@@ -95,7 +95,7 @@ xlc )
 esac
 
 
-if grep "^AM_PROG_LIBTOOL" configure.in >/dev/null; then
+if grep "^AM_PROG_LIBTOOL" configure.ac >/dev/null; then
   if test -z "$NO_LIBTOOLIZE" ; then 
     echo "Running libtoolize..."
     ${LIBTOOL}ize --force --copy
@@ -107,19 +107,22 @@ fi
 # Plug in the extension module
 #
 has_ext_mod=false
+ext_mod_args=''
 for PARAM; do
-    if test "$PARAM" = "--enable-extension-module" ; then
-		has_ext_mod=true
-	fi
+    if [[ $PARAM =~ "--enable-extension-module" ]] ; then
+        has_ext_mod=true
+        if [[ $PARAM =~ "=" ]] ; then
+            ext_mod_args=`echo $PARAM | cut -d= -f2`
+        fi
+    fi
 done
 
 if test x$has_ext_mod = xtrue; then
 	pushd ../mono-extensions/scripts
-	sh ./prepare-repo.sh || exit 1
+	sh ./prepare-repo.sh $ext_mod_args || exit 1
 	popd
 else
 	cat mono/mini/Makefile.am.in > mono/mini/Makefile.am
-	cat mono/metadata/Makefile.am.in > mono/metadata/Makefile.am
 fi
 
 
@@ -134,7 +137,7 @@ aclocal -Wnone -I m4 -I . $ACLOCAL_FLAGS || {
   exit 1
 }
 
-if grep "^AC_CONFIG_HEADERS" configure.in >/dev/null; then
+if grep "^AC_CONFIG_HEADERS" configure.ac >/dev/null; then
   echo "Running autoheader..."
   autoheader || { echo "**Error**: autoheader failed."; exit 1; }
 fi

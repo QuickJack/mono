@@ -57,6 +57,8 @@ MonoArray *mono_array_new_2 (MonoMethod *cm, guint32 length1, guint32 length2) M
 
 MonoArray *mono_array_new_3 (MonoMethod *cm, guint32 length1, guint32 length2, guint32 length3) MONO_INTERNAL;
 
+MonoArray *mono_array_new_4 (MonoMethod *cm, guint32 length1, guint32 length2, guint32 length3, guint32 length4) MONO_INTERNAL;
+
 gpointer mono_class_static_field_address (MonoDomain *domain, MonoClassField *field) MONO_INTERNAL;
 
 gpointer mono_ldtoken_wrapper (MonoImage *image, int token, MonoGenericContext *context) MONO_INTERNAL;
@@ -72,6 +74,12 @@ guint32 mono_fconv_u4 (double v) MONO_INTERNAL;
 gint64 mono_fconv_ovf_i8 (double v) MONO_INTERNAL;
 
 guint64 mono_fconv_ovf_u8 (double v) MONO_INTERNAL;
+
+gint64 mono_rconv_i8 (float v) MONO_INTERNAL;
+
+gint64 mono_rconv_ovf_i8 (float v) MONO_INTERNAL;
+
+guint64 mono_rconv_ovf_u8 (float v) MONO_INTERNAL;
 
 double mono_lconv_to_r8 (gint64 a) MONO_INTERNAL;
 
@@ -163,7 +171,7 @@ MonoException *mono_create_corlib_exception_1 (guint32 token, MonoString *arg) M
 
 MonoException *mono_create_corlib_exception_2 (guint32 token, MonoString *arg1, MonoString *arg2) MONO_INTERNAL;
 
-MonoObject* mono_object_castclass (MonoObject *obj, MonoClass *klass) MONO_INTERNAL;
+MonoObject* mono_object_castclass_unbox (MonoObject *obj, MonoClass *klass) MONO_INTERNAL;
 
 gpointer mono_get_native_calli_wrapper (MonoImage *image, MonoMethodSignature *sig, gpointer func) MONO_INTERNAL;
 
@@ -173,7 +181,10 @@ mono_object_isinst_with_cache (MonoObject *obj, MonoClass *klass, gpointer *cach
 MonoObject*
 mono_object_castclass_with_cache (MonoObject *obj, MonoClass *klass, gpointer *cache);
 
-MonoObject* mono_object_tostring_gsharedvt (gpointer mp, MonoMethod *cmethod, MonoClass *klass) MONO_INTERNAL;
+MonoObject*
+mono_gsharedvt_constrained_call (gpointer mp, MonoMethod *cmethod, MonoClass *klass, gboolean deref_arg, gpointer *args) MONO_INTERNAL;
+
+void mono_gsharedvt_value_copy (gpointer dest, gpointer src, MonoClass *klass) MONO_INTERNAL;
 
 #endif /* __MONO_JIT_ICALLS_H__ */
 

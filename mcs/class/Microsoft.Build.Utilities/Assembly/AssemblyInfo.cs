@@ -26,7 +26,6 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if NET_2_0
 
 using System;
 using System.Reflection;
@@ -46,9 +45,9 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyCompany (Consts.MonoCompany)]
 [assembly: AssemblyProduct (Consts.MonoProduct)]
 [assembly: AssemblyCopyright (Consts.MonoCopyright)]
-[assembly: AssemblyVersion (Consts.FxVersion)]
-[assembly: SatelliteContractVersion (Consts.FxVersion)]
-[assembly: AssemblyInformationalVersion (Consts.FxFileVersion)]
+[assembly: AssemblyVersion (XBuildConsts.AssemblyVersion)]
+[assembly: SatelliteContractVersion (XBuildConsts.AssemblyVersion)]
+[assembly: AssemblyInformationalVersion (XBuildConsts.FileVersion)]
 
 [assembly: NeutralResourcesLanguage ("en-US")]
 
@@ -57,6 +56,5 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyDelaySign (true)]
 [assembly: AssemblyKeyFile("../msfinal.pub")]
 
-[assembly: AssemblyFileVersion (Consts.FxFileVersion)]
+[assembly: AssemblyFileVersion (XBuildConsts.FileVersion)]
 
-#endif

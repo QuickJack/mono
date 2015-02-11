@@ -95,9 +95,7 @@ namespace System.Xml.Linq
 		public static XDocument Load (string uri, LoadOptions options)
 		{
 			XmlReaderSettings s = new XmlReaderSettings ();
-#if !MOONLIGHT
 			s.ProhibitDtd = false; // see XNodeNavigatorTest.MoveToId().
-#endif
 			s.IgnoreWhitespace = (options & LoadOptions.PreserveWhitespace) == 0;
 			using (XmlReader r = XmlReader.Create (uri, s)) {
 				return LoadCore (r, options);
@@ -122,9 +120,7 @@ namespace System.Xml.Linq
 		public static XDocument Load (TextReader textReader, LoadOptions options)
 		{
 			XmlReaderSettings s = new XmlReaderSettings ();
-#if !MOONLIGHT
 			s.ProhibitDtd = false; // see XNodeNavigatorTest.MoveToId().
-#endif
 			s.IgnoreWhitespace = (options & LoadOptions.PreserveWhitespace) == 0;
 			using (XmlReader r = XmlReader.Create (textReader, s)) {
 				return LoadCore (r, options);
@@ -200,10 +196,8 @@ namespace System.Xml.Linq
 			XmlWriterSettings s = new XmlWriterSettings ();
 			if ((options & SaveOptions.DisableFormatting) == SaveOptions.None)
 				s.Indent = true;
-#if NET_4_0
 			if ((options & SaveOptions.OmitDuplicateNamespaces) == SaveOptions.OmitDuplicateNamespaces)
 				s.NamespaceHandling |= NamespaceHandling.OmitDuplicates;
-#endif
 			
 			using (XmlWriter w = XmlWriter.Create (fileName, s)) {
 				Save (w);
@@ -220,10 +214,8 @@ namespace System.Xml.Linq
 			XmlWriterSettings s = new XmlWriterSettings ();
 			if ((options & SaveOptions.DisableFormatting) == SaveOptions.None)
 				s.Indent = true;
-#if NET_4_0
 			if ((options & SaveOptions.OmitDuplicateNamespaces) == SaveOptions.OmitDuplicateNamespaces)
 				s.NamespaceHandling |= NamespaceHandling.OmitDuplicates;
-#endif
 			using (XmlWriter w = XmlWriter.Create (textWriter, s)) {
 				Save (w);
 			}
@@ -272,7 +264,6 @@ namespace System.Xml.Linq
 					throw new InvalidOperationException ("An element cannot be added before the document type declaration");
 			}
 		}
-#if NET_4_0
 		public void Save (Stream stream)
 		{
 			Save (stream, SaveOptions.None);
@@ -291,6 +282,5 @@ namespace System.Xml.Linq
 			}
 		}
 
-#endif
 	}
 }

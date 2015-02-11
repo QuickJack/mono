@@ -28,7 +28,6 @@
 // Copyright (C) 2005-2009 Novell, Inc (http://www.novell.com)
 //
 
-#if NET_2_0
 
 using System;
 using System.IO;
@@ -36,9 +35,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Reflection;
-#if MONOWEB_DEP
 using Mono.Web.Util;
-#endif
 using System.Xml;
 using System.Configuration;
 using System.Configuration.Internal;
@@ -69,104 +66,15 @@ namespace System.Web.Configuration {
 		static readonly char[] pathTrimChars = { '/' };
 		static readonly object suppressAppReloadLock = new object ();
 		static readonly object saveLocationsCacheLock = new object ();
+		static readonly object getSectionLock = new object ();
 		
 		// See comment for the cacheLock field at top of System.Web.Caching/Cache.cs
 		static readonly ReaderWriterLockSlim sectionCacheLock;
-		
-#if !TARGET_J2EE
+
 		static IInternalConfigConfigurationFactory configFactory;
 		static Hashtable configurations = Hashtable.Synchronized (new Hashtable ());
-		static Dictionary <int, object> sectionCache = new Dictionary <int, object> ();
 		static Hashtable configPaths = Hashtable.Synchronized (new Hashtable ());
 		static bool suppressAppReload;
-#else
-		const string AppSettingsKey = "WebConfigurationManager.AppSettings";
-		
-		static internal IInternalConfigConfigurationFactory configFactory
-		{
-			get{
-				IInternalConfigConfigurationFactory factory = (IInternalConfigConfigurationFactory)AppDomain.CurrentDomain.GetData("WebConfigurationManager.configFactory");
-				if (factory == null){
-					lock (AppDomain.CurrentDomain){
-						object initialized = AppDomain.CurrentDomain.GetData("WebConfigurationManager.configFactory.initialized");
-						if (initialized == null){
-							PropertyInfo prop = typeof(ConfigurationManager).GetProperty("ConfigurationFactory", BindingFlags.Static | BindingFlags.NonPublic);
-							if (prop != null){
-								factory = prop.GetValue(null, null) as IInternalConfigConfigurationFactory;
-								configFactory = factory;
-							}
-						}
-					}
-				}
-				return factory != null ? factory : configFactory;
-			}
-			set{
-				AppDomain.CurrentDomain.SetData("WebConfigurationManager.configFactory", value);
-				AppDomain.CurrentDomain.SetData("WebConfigurationManager.configFactory.initialized", true);
-			}
-		}
-
-		static internal Hashtable configurations
-		{
-			get{
-				Hashtable table = (Hashtable)AppDomain.CurrentDomain.GetData("WebConfigurationManager.configurations");
-				if (table == null){
-					lock (AppDomain.CurrentDomain){
-						object initialized = AppDomain.CurrentDomain.GetData("WebConfigurationManager.configurations.initialized");
-						if (initialized == null){
-							table = Hashtable.Synchronized (new Hashtable (StringComparer.OrdinalIgnoreCase));
-							configurations = table;
-						}
-					}
-				}
-				return table != null ? table : configurations;
-
-			}
-			set{
-				AppDomain.CurrentDomain.SetData("WebConfigurationManager.configurations", value);
-				AppDomain.CurrentDomain.SetData("WebConfigurationManager.configurations.initialized", true);
-			}
-		}
-
-		static Dictionary <int, object> sectionCache
-		{
-			get
-			{
-				Dictionary <int, object> sectionCache = AppDomain.CurrentDomain.GetData ("sectionCache") as Dictionary <int, object>;
-				if (sectionCache == null) {
-					sectionCache = new Dictionary <int, object> ();
-					AppDomain.CurrentDomain.SetData ("sectionCache", sectionCache);
-				}
-				return sectionCache;
-			}
-			set
-			{
-				AppDomain.CurrentDomain.SetData ("sectionCache", value);
-			}
-		}
-
-		static internal Hashtable configPaths
-		{
-			get{
-				Hashtable table = (Hashtable)AppDomain.CurrentDomain.GetData("WebConfigurationManager.configPaths");
-				if (table == null){
-					lock (AppDomain.CurrentDomain){
-						object initialized = AppDomain.CurrentDomain.GetData("WebConfigurationManager.configPaths.initialized");
-						if (initialized == null){
-							table = Hashtable.Synchronized (new Hashtable (StringComparer.OrdinalIgnoreCase));
-							configPaths = table;
-						}
-					}
-				}
-				return table != null ? table : configPaths;
-
-			}
-			set{
-				AppDomain.CurrentDomain.SetData("WebConfigurationManager.configPaths", value);
-				AppDomain.CurrentDomain.SetData("WebConfigurationManager.configPaths.initialized", true);
-			}
-		}
-#endif
 		static Dictionary <string, DateTime> saveLocationsCache;
 		static Timer saveLocationsTimer;
 		
@@ -179,18 +87,27 @@ namespace System.Web.Configuration {
 			}
 		}
 
-		static bool hasConfigErrors = false;
-		static object hasConfigErrorsLock = new object ();
-		static internal bool HasConfigErrors {
-			get {
-				lock (hasConfigErrorsLock) {
-					return hasConfigErrors;
-				}
-			}
-		}
+		const int DEFAULT_SECTION_CACHE_SIZE = 100;
+		const string CACHE_SIZE_OVERRIDING_KEY = "MONO_ASPNET_WEBCONFIG_CACHESIZE";
+		static LruCache<int, object> sectionCache;
 		
 		static WebConfigurationManager ()
 		{
+			var section_cache_size = DEFAULT_SECTION_CACHE_SIZE;
+			int section_cache_size_override;
+			bool size_overriden = false;
+			if (int.TryParse (Environment.GetEnvironmentVariable (CACHE_SIZE_OVERRIDING_KEY), out section_cache_size_override)) {
+				section_cache_size = section_cache_size_override;
+				size_overriden = true;
+				Console.WriteLine ("WebConfigurationManager's LRUcache Size overriden to: {0} (via {1})", section_cache_size_override, CACHE_SIZE_OVERRIDING_KEY);
+			}
+			sectionCache = new LruCache<int, object> (section_cache_size);
+			string eviction_warning = "WebConfigurationManager's LRUcache evictions count reached its max size";
+			if (!size_overriden)
+				eviction_warning += String.Format ("{0}Cache Size: {1} (overridable via {2})",
+				                                   Environment.NewLine, section_cache_size, CACHE_SIZE_OVERRIDING_KEY);
+			sectionCache.EvictionWarning = eviction_warning;
+
 			configFactory = ConfigurationManager.ConfigurationFactory;
 			_Configuration.SaveStart += ConfigurationSaveHandler;
 			_Configuration.SaveEnd += ConfigurationSaveHandler;
@@ -347,15 +264,8 @@ namespace System.Web.Configuration {
 			_Configuration conf = null;
 			conf = (_Configuration) configurations [confKey];
 			if (conf == null) {
-				try {
-					conf = ConfigurationFactory.Create (typeof (WebConfigurationHost), null, path, site, locationSubPath, server, userName, password, inAnotherApp);
-					configurations [confKey] = conf;
-				} catch (Exception ex) {
-					lock (hasConfigErrorsLock) {
-						hasConfigErrors = true;
-					}
-					throw ex;
-				}
+				conf = ConfigurationFactory.Create (typeof (WebConfigurationHost), null, path, site, locationSubPath, server, userName, password, inAnotherApp);
+				configurations [confKey] = conf;
 			}
 			return conf;
 		}
@@ -452,7 +362,7 @@ namespace System.Web.Configuration {
 				baseCacheKey ^= configPath.GetHashCode ();
 			
 			try {
-				sectionCacheLock.EnterReadLock ();
+				sectionCacheLock.EnterWriteLock ();
 				
 				object o;
 				if (pathPresent) {
@@ -468,7 +378,7 @@ namespace System.Web.Configuration {
 				if (sectionCache.TryGetValue (baseCacheKey, out o))
 					return o;
 			} finally {
-				sectionCacheLock.ExitReadLock ();
+				sectionCacheLock.ExitWriteLock ();
 			}
 
 			string cachePath = null;
@@ -501,24 +411,14 @@ namespace System.Web.Configuration {
 					cachePath = path;
 			}
 
-			ConfigurationSection section = c.GetSection (sectionName);
+			ConfigurationSection section;
+			lock (getSectionLock) {
+				section = c.GetSection (sectionName);
+			}
 			if (section == null)
 				return null;
 
-#if TARGET_J2EE
-			object value = get_runtime_object.Invoke (section, new object [0]);
-			if (String.CompareOrdinal ("appSettings", sectionName) == 0) {
-				NameValueCollection collection;
-				collection = new KeyValueMergedCollection (HttpContext.Current, (NameValueCollection) value);
-				value = collection;
-			}
-#else
-#if MONOWEB_DEP
-			object value = SettingsMappingManager.MapSection (get_runtime_object.Invoke (section, new object [0]));
-#else
-			object value = null;
-#endif
-#endif
+			object value = SettingsMappingManager.MapSection (section.GetRuntimeObject ());
 			if (cachePath != null)
 				cacheKey = baseCacheKey ^ cachePath.GetHashCode ();
 			else
@@ -665,9 +565,6 @@ namespace System.Web.Configuration {
 			configurations.Remove (GetCurrentPath (ctx));
 		}
 
-#if TARGET_J2EE || MONOWEB_DEP
-		readonly static MethodInfo get_runtime_object = typeof (ConfigurationSection).GetMethod ("GetRuntimeObject", BindingFlags.NonPublic | BindingFlags.Instance);
-#endif		
 
 		public static object GetWebApplicationSection (string sectionName)
 		{
@@ -693,66 +590,27 @@ namespace System.Web.Configuration {
 		{
 			object cachedSection;
 
+			bool locked = false;
 			try {
-				if (!sectionCacheLock.TryEnterUpgradeableReadLock (SECTION_CACHE_LOCK_TIMEOUT))
+				if (!sectionCacheLock.TryEnterWriteLock (SECTION_CACHE_LOCK_TIMEOUT))
 					return;
-					
+				locked = true;
+
 				if (sectionCache.TryGetValue (key, out cachedSection) && cachedSection != null)
 					return;
 
-				try {
-					if (!sectionCacheLock.TryEnterWriteLock (SECTION_CACHE_LOCK_TIMEOUT))
-						return;
-					sectionCache.Add (key, section);
-				} finally {
-					try {
-						sectionCacheLock.ExitWriteLock ();
-					} catch (SynchronizationLockException) {
-						// we can ignore it here
-					}
-				}
+				sectionCache.Add (key, section);
 			} finally {
-				try {
-					sectionCacheLock.ExitUpgradeableReadLock ();
-				} catch (SynchronizationLockException) {
-					// we can ignore it here
+				if (locked) {
+					sectionCacheLock.ExitWriteLock ();
 				}
 			}
 		}
 		
 #region stuff copied from WebConfigurationSettings
-#if TARGET_J2EE
-		static internal IConfigurationSystem oldConfig {
-			get {
-				return (IConfigurationSystem)AppDomain.CurrentDomain.GetData("WebConfigurationManager.oldConfig");
-			}
-			set {
-				AppDomain.CurrentDomain.SetData("WebConfigurationManager.oldConfig", value);
-			}
-		}
-
-		static Web20DefaultConfig config {
-			get {
-				return (Web20DefaultConfig) AppDomain.CurrentDomain.GetData ("Web20DefaultConfig.config");
-			}
-			set {
-				AppDomain.CurrentDomain.SetData ("Web20DefaultConfig.config", value);
-			}
-		}
-
-		static IInternalConfigSystem configSystem {
-			get {
-				return (IInternalConfigSystem) AppDomain.CurrentDomain.GetData ("IInternalConfigSystem.configSystem");
-			}
-			set {
-				AppDomain.CurrentDomain.SetData ("IInternalConfigSystem.configSystem", value);
-			}
-		}
-#else
 		static internal IConfigurationSystem oldConfig;
 		static Web20DefaultConfig config;
 		//static IInternalConfigSystem configSystem;
-#endif
 		const BindingFlags privStatic = BindingFlags.NonPublic | BindingFlags.Static;
 		static readonly object lockobj = new object ();
 
@@ -799,23 +657,7 @@ namespace System.Web.Configuration {
 
 	class Web20DefaultConfig : IConfigurationSystem
 	{
-#if TARGET_J2EE
-		static Web20DefaultConfig instance {
-			get {
-				Web20DefaultConfig val = (Web20DefaultConfig)AppDomain.CurrentDomain.GetData("Web20DefaultConfig.instance");
-				if (val == null) {
-					val = new Web20DefaultConfig();
-					AppDomain.CurrentDomain.SetData("Web20DefaultConfig.instance", val);
-				}
-				return val;
-			}
-			set {
-				AppDomain.CurrentDomain.SetData("Web20DefaultConfig.instance", value);
-			}
-		}
-#else
 		static Web20DefaultConfig instance;
-#endif
 
 		static Web20DefaultConfig ()
 		{
@@ -856,4 +698,3 @@ namespace System.Web.Configuration {
 #endregion
 }
 
-#endif

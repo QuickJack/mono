@@ -120,7 +120,7 @@ namespace Microsoft.Build.Tasks {
 				
 				copiedFiles = temporaryCopiedFiles.ToArray ();
 
-				return true;
+				return !Log.HasLoggedErrors;
 			}
 			catch (Exception ex) {
 				Log.LogErrorFromException (ex);
@@ -163,7 +163,6 @@ namespace Microsoft.Build.Tasks {
 			}
 		}
 
-#if NET_3_5
 		public bool OverwriteReadOnlyFiles {
 			get {
 				return overwriteReadOnlyFiles;
@@ -172,7 +171,6 @@ namespace Microsoft.Build.Tasks {
 				overwriteReadOnlyFiles = value;
 			}
 		}
-#endif
 
 		[Required]
 		public ITaskItem[] SourceFiles {

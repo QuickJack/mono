@@ -38,7 +38,9 @@ namespace System.Security.Principal {
 
 	[Serializable]
 	[ComVisible (true)]
-	public class WindowsIdentity : IIdentity, IDeserializationCallback, ISerializable, IDisposable {
+	public class WindowsIdentity :
+	System.Security.Claims.ClaimsIdentity,
+	IIdentity, IDeserializationCallback, ISerializable, IDisposable {
 		private IntPtr _token;
 		private string _type;
 		private WindowsAccountType _account;
@@ -47,6 +49,9 @@ namespace System.Security.Principal {
 		private SerializationInfo _info;
 
 		static private IntPtr invalidWindows = IntPtr.Zero;
+
+		[NonSerialized]
+		public new const string DefaultIssuer = "AD AUTHORITY";
 
 		[SecurityPermission (SecurityAction.Demand, ControlPrincipal=true)]
 		public WindowsIdentity (IntPtr userToken) 
@@ -168,7 +173,7 @@ namespace System.Security.Principal {
 		}
 
 		// properties
-
+		sealed override
 		public string AuthenticationType {
 			get { return _type; }
 		}
@@ -178,7 +183,8 @@ namespace System.Security.Principal {
 			get { return (_account == WindowsAccountType.Anonymous); }
 		}
 
-		public virtual bool IsAuthenticated
+		override
+		public bool IsAuthenticated
 		{
 			get { return _authenticated; }
 		}
@@ -193,7 +199,8 @@ namespace System.Security.Principal {
 			get { return (_account == WindowsAccountType.System); }
 		}
 
-		public virtual string Name
+		override
+		public string Name
 		{
 			get {
 				if (_name == null) {
@@ -244,7 +251,7 @@ namespace System.Security.Principal {
 			else {
 				// validate token by getting name
 				_name = GetTokenName (_token);
-				if ((_name == String.Empty) || (_name == null))
+				if (_name == null)
 					throw new SerializationException ("Token doesn't match a user.");
 			}
 			_type = _info.GetString ("m_type");

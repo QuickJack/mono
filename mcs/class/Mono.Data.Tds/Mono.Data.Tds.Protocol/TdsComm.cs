@@ -93,7 +93,6 @@ namespace Mono.Data.Tds.Protocol {
 			bool have_exception = false;
 			
 			try {
-#if NET_2_0
 				IPAddress ip;
 				if(IPAddress.TryParse(this.dataSource, out ip)) {
 					endPoint = new IPEndPoint(ip, port);
@@ -101,10 +100,6 @@ namespace Mono.Data.Tds.Protocol {
 					IPHostEntry hostEntry = Dns.GetHostEntry (this.dataSource);
 					endPoint = new IPEndPoint(hostEntry.AddressList [0], port);
 				}
-#else
-				IPHostEntry hostEntry = Dns.Resolve (this.dataSource);
-				endPoint = new IPEndPoint (hostEntry.AddressList [0], port);
-#endif
 			} catch (SocketException e) {
 				throw new TdsInternalException ("Server does not exist or connection refused.", e);
 			}
@@ -125,9 +120,7 @@ namespace Mono.Data.Tds.Protocol {
 				}
 
 				try {
-#if NET_2_0
 					socket.NoDelay = true;
-#endif
 					socket.SetSocketOption (SocketOptionLevel.Socket, SocketOptionName.SendTimeout, timeout_ms);
 					socket.SetSocketOption (SocketOptionLevel.Socket, SocketOptionName.ReceiveTimeout, timeout_ms);
 				} catch {
@@ -398,6 +391,18 @@ namespace Mono.Data.Tds.Protocol {
 			}
 		}	
 
+		public void AppendNonUnicode (string s)
+		{
+			if (tdsVersion < TdsVersion.tds70) { 
+				Append (encoder.GetBytes (s));
+			} else {
+				for (int i = 0; i < s.Length; i++) {
+					SendIfFull (sizeof(byte));
+					Append ((byte)s[i]);
+				}
+			}
+		}
+
 		// Appends with padding
 		public byte[] Append (string s, int len, byte pad)
 		{
@@ -440,9 +445,47 @@ namespace Mono.Data.Tds.Protocol {
 		public void Append (decimal d, int bytes)
 		{
 			int[] arr = Decimal.GetBits (d);
-			byte sign =  (d > 0 ? (byte)1 : (byte)0);
+			byte sign = (d > 0 ? (byte)1 : (byte)0);
 			SendIfFull (bytes);
-			Append (sign) ;
+			Append (sign);
+			AppendInternal (arr[0]);
+			AppendInternal (arr[1]);
+			AppendInternal (arr[2]);
+			AppendInternal ((int)0);
+		}
+
+		public void AppendMoney (decimal d, int size)
+		{
+			// The method for this is to simply multiply by 10^4 and then stuff
+			// the value into either a int or long value depending on the size
+
+			SendIfFull (size);
+
+			decimal tmpD = Decimal.Multiply(d, 10000m);
+			if (size > 4) {
+				long longValue = Decimal.ToInt64(tmpD);
+
+				int significantHalf = (int) ((longValue >> 32) & 0xffffffff);
+				int lessSignificantHalf = (int)(longValue & 0xffffffff);
+
+				AppendInternal (significantHalf);
+				AppendInternal (lessSignificantHalf);
+			} else {
+				int intValue = Decimal.ToInt32(tmpD);
+				AppendInternal (intValue);
+			}
+		} 
+
+		// A method for decimals that properly scales the decimal out before putting on the TDS steam
+		public void AppendDecimal (decimal d, int bytes, int scale)
+		{
+			decimal tmpD1 = Decimal.Multiply (d, (decimal)System.Math.Pow (10.0, scale));
+			decimal tmpD2 = System.Math.Abs(Decimal.Truncate (tmpD1));
+
+			int[] arr = Decimal.GetBits (tmpD2);
+			byte sign = (d > 0 ? (byte)1 : (byte)0);
+			SendIfFull (bytes);
+			Append (sign);
 			AppendInternal (arr[0]);
 			AppendInternal (arr[1]);
 			AppendInternal (arr[2]);
@@ -746,6 +789,7 @@ namespace Mono.Data.Tds.Protocol {
 		{
 			if (nextOutBufferIndex > headerLength || packetType == TdsPacketType.Cancel) {
 				byte status =  (byte) ((isLastSegment ? 0x01 : 0x00) | (connReset ? 0x08 : 0x00)); 
+
 				// packet type
 				Store (0, (byte) packetType);
 				Store (1, status);
@@ -760,6 +804,12 @@ namespace Mono.Data.Tds.Protocol {
 
 				stream.Write (outBuffer, 0, nextOutBufferIndex);
 				stream.Flush ();
+
+				if (!isLastSegment && packetType == TdsPacketType.Bulk)
+				{
+					System.Threading.Thread.Sleep (100);    
+				}
+
 				packetsSent++;
 			}
 		}
@@ -791,7 +841,6 @@ namespace Mono.Data.Tds.Protocol {
 		}
 
 		#endregion // Methods
-#if NET_2_0
                 #region Async Methods
 
                 public IAsyncResult BeginReadPacket (AsyncCallback callback, object stateObject)
@@ -850,7 +899,6 @@ namespace Mono.Data.Tds.Protocol {
                 }
                 
                 #endregion // Async Methods
-#endif // NET_2_0
 
 	}
 

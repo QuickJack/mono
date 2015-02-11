@@ -40,6 +40,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
+using System.Threading;
 using System.Globalization;
 
 namespace System {
@@ -49,8 +50,12 @@ namespace System {
 	[ComVisible (true)]
 	[ComDefaultInterface (typeof (_Type))]
 	[StructLayout (LayoutKind.Sequential)]
+#if MOBILE
+	public abstract class Type : MemberInfo, IReflect {
+#else
 	public abstract class Type : MemberInfo, IReflect, _Type {
-		
+#endif
+
 		internal RuntimeTypeHandle _impl;
 
 		public static readonly char Delimiter = '.';
@@ -69,11 +74,11 @@ namespace System {
 			string name = (string) filterCriteria;
 			if (name == null || name.Length == 0 )
 				return false; // because m.Name cannot be null or empty
-				
-			if (name [name.Length-1] == '*')
-				return string.CompareOrdinal (name, 0, m.Name, 0, name.Length-1) == 0;
-
-           	return name.Equals (m.Name);            	
+			
+			if (name [name.Length - 1] == '*')
+				return m.Name.StartsWithOrdinalUnchecked (name.Substring (0, name.Length - 1));
+			
+			return m.Name == name;
 		}
 
 		static bool FilterNameIgnoreCase_impl (MemberInfo m, object filterCriteria)
@@ -82,15 +87,18 @@ namespace System {
 			if (name == null || name.Length == 0 )
 				return false; // because m.Name cannot be null or empty
 				
-			if (name [name.Length-1] == '*')
-				return string.Compare (name, 0, m.Name, 0, name.Length-1, StringComparison.OrdinalIgnoreCase) == 0;
-
-			return string.Equals (name, m.Name, StringComparison.OrdinalIgnoreCase);
+			if (name [name.Length - 1] == '*')
+				return m.Name.StartsWithOrdinalCaseInsensitiveUnchecked (name.Substring (0, name.Length - 1));
+			
+			return string.CompareOrdinalCaseInsensitiveUnchecked (m.Name, name) == 0;
 		}
 
 		static bool FilterAttribute_impl (MemberInfo m, object filterCriteria)
 		{
-			int flags = ((IConvertible)filterCriteria).ToInt32 (null);
+			if (!(filterCriteria is int))
+				throw new InvalidFilterCriteriaException ("Int32 value is expected for filter criteria");
+
+			int flags = (int) filterCriteria;
 			if (m is MethodInfo)
 				return ((int)((MethodInfo)m).Attributes & flags) != 0;
 			if (m is FieldInfo)
@@ -224,13 +232,11 @@ namespace System {
 			}
 		}
 		
-#if NET_4_5
 		public virtual bool IsConstructedGenericType {
 			get {
 				throw new NotImplementedException ();
 			}
 		}
-#endif
 
 		public bool IsContextful {
 			get {
@@ -239,9 +245,7 @@ namespace System {
 		}
 
 		public
-#if NET_4_0
 		virtual
-#endif
 		bool IsEnum {
 			get {
 				return IsSubclassOf (typeof (Enum));
@@ -345,9 +349,7 @@ namespace System {
 		}
 
 		public
-#if NET_4_0
 		virtual
-#endif
 		bool IsSerializable {
 			get {
 				if ((Attributes & TypeAttributes.Serializable) != 0)
@@ -435,20 +437,9 @@ namespace System {
 
 		public override bool Equals (object o)
 		{
-#if NET_4_0
 			return Equals (o as Type);
-#else
-			if (o == this)
-				return true;
-
-			Type me = UnderlyingSystemType;
-			if (me == null)
-				return false;
-			return me.EqualsInternal (o as Type);
-#endif
 		}
 
-#if NET_4_0
 		public virtual bool Equals (Type o)
 		{
 			if ((object)o == (object)this)
@@ -466,21 +457,6 @@ namespace System {
 				return true;
 			return me.EqualsInternal (o);
 		}		
-#else
-		public bool Equals (Type o)
-		{
-
-			if (o == this)
-				return true;
-			if (o == null)
-				return false;
-			Type me = UnderlyingSystemType;
-			if (me == null)
-				return false;
-			return me.EqualsInternal (o.UnderlyingSystemType);
-		}
-#endif
-#if NET_4_0
 		[MonoTODO ("Implement it properly once 4.0 impl details are known.")]
 		public static bool operator == (Type left, Type right)
 		{
@@ -539,81 +515,14 @@ namespace System {
 			throw CreateNIE ();
 		}
 
-		bool IsValidEnumType (Type type) {
-			return (type.IsPrimitive && type != typeof (bool) && type != typeof (double) && type != typeof (float)) || type.IsEnum;
+		public virtual string GetEnumName (object value)
+		{
+			return Enum.GetName (this, value);
 		}
 
-		[MonoInternalNote ("Reimplement this in MonoType for bonus speed")]
-		public virtual string GetEnumName (object value) {
-			if (value == null)
-				throw new ArgumentException ("Value is null", "value");
-			if (!IsValidEnumType (value.GetType ()))
-				throw new ArgumentException ("Value is not the enum or a valid enum underlying type", "value");
-			if (!IsEnum)
-				throw new ArgumentException ("Type is not an enumeration", "enumType");
-
-			object obj = null;
-			var fields = GetFields (BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
-			
-			for (int i = 0; i < fields.Length; ++i) {
-				var fv = fields [i].GetValue (null);
-				if (obj == null) {
-					try {
-						//XXX we can't use 'this' as argument as it might be an UserType
-						obj = Enum.ToObject (fv.GetType (), value);
-					} catch (OverflowException) {
-						return null;
-					} catch (InvalidCastException) {
-						throw new ArgumentException ("Value is not valid", "value");
-					}
-				}
-				if (fv.Equals (obj))
-					return fields [i].Name;
-			}
-
-			return null;
-		}
-
-		[MonoInternalNote ("Reimplement this in MonoType for bonus speed")]
-		public virtual bool IsEnumDefined (object value) {
-			if (value == null)
-				throw new ArgumentException ("Value is null", "value");
-			if (!IsEnum)
-				throw new ArgumentException ("Type is not an enumeration", "enumType");
-
-			Type vt = value.GetType ();
-			if (!IsValidEnumType (vt) && vt != typeof (string))
-				throw new InvalidOperationException ("Value is not the enum or a valid enum underlying type");
-
-			var fields = GetFields (BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
-
-			if (value is string) {
-				for (int i = 0; i < fields.Length; ++i) {
-					if (fields [i].Name.Equals (value))
-						return true;
-				}
-			} else {
-				if (vt != this && vt != GetEnumUnderlyingType ())
-					throw new ArgumentException ("Value is not the enum or a valid enum underlying type", "value");
-
-				object obj = null;
-				for (int i = 0; i < fields.Length; ++i) {
-					var fv = fields [i].GetValue (null);
-					if (obj == null) {
-						try {
-							//XXX we can't use 'this' as argument as it might be an UserType
-							obj = Enum.ToObject (fv.GetType (), value);
-						} catch (OverflowException) {
-							return false;
-						} catch (InvalidCastException) {
-							throw new ArgumentException ("Value is not valid", "value");
-						}
-					}
-					if (fv.Equals (obj))
-						return true;
-				}
-			}
-			return false;
+		public virtual bool IsEnumDefined (object value)
+		{
+			return Enum.IsDefined (this, value);
 		}
 	
 		public static Type GetType (string typeName, Func<AssemblyName,Assembly> assemblyResolver, Func<Assembly,string,bool,Type> typeResolver)
@@ -646,7 +555,6 @@ namespace System {
 		{
 			get { throw CreateNIE (); }
 		}
-#endif
 		
 		[MethodImplAttribute(MethodImplOptions.InternalCall)]
 		internal extern bool EqualsInternal (Type type);
@@ -703,9 +611,7 @@ namespace System {
 		[MethodImplAttribute(MethodImplOptions.InternalCall)]
 		internal extern static TypeCode GetTypeCodeInternal (Type type);
 
-#if NET_4_0
 		protected virtual
-#endif
 		TypeCode GetTypeCodeImpl () {
 			Type type = this;
 			if (type is MonoType)
@@ -730,28 +636,82 @@ namespace System {
 			return type.GetTypeCodeImpl ();
 		}
 
-		[MonoTODO("This operation is currently not supported by Mono")]
+#if !FULL_AOT_RUNTIME
+		private static Dictionary<Guid, Type> clsid_types;
+		private static AssemblyBuilder clsid_assemblybuilder;
+#endif
+
+		[MonoTODO("COM servers only work on Windows")]
 		public static Type GetTypeFromCLSID (Guid clsid)
 		{
-			throw new NotImplementedException ();
+			return GetTypeFromCLSID (clsid, null, true);
 		}
 
-		[MonoTODO("This operation is currently not supported by Mono")]
+		[MonoTODO("COM servers only work on Windows")]
 		public static Type GetTypeFromCLSID (Guid clsid, bool throwOnError)
 		{
-			throw new NotImplementedException ();
+			return GetTypeFromCLSID (clsid, null, throwOnError);
 		}
 
-		[MonoTODO("This operation is currently not supported by Mono")]
+		[MonoTODO("COM servers only work on Windows")]
 		public static Type GetTypeFromCLSID (Guid clsid, string server)
 		{
-			throw new NotImplementedException ();
+			return GetTypeFromCLSID (clsid, server, true);
 		}
 
-		[MonoTODO("This operation is currently not supported by Mono")]
+		[MonoTODO("COM servers only work on Windows")]
 		public static Type GetTypeFromCLSID (Guid clsid, string server, bool throwOnError)
 		{
+#if !FULL_AOT_RUNTIME
+			Type result;
+
+			if (clsid_types == null)
+			{
+				Dictionary<Guid, Type> new_clsid_types = new Dictionary<Guid, Type> ();
+				Interlocked.CompareExchange<Dictionary<Guid, Type>>(
+					ref clsid_types, new_clsid_types, null);
+			}
+
+			lock (clsid_types) {
+				if (clsid_types.TryGetValue(clsid, out result))
+					return result;
+
+				if (clsid_assemblybuilder == null)
+				{
+					AssemblyName assemblyname = new AssemblyName ();
+					assemblyname.Name = "GetTypeFromCLSIDDummyAssembly";
+					clsid_assemblybuilder = AppDomain.CurrentDomain.DefineDynamicAssembly (
+						assemblyname, AssemblyBuilderAccess.Run);
+				}
+				ModuleBuilder modulebuilder = clsid_assemblybuilder.DefineDynamicModule (
+					clsid.ToString ());
+
+				TypeBuilder typebuilder = modulebuilder.DefineType ("System.__ComObject",
+					TypeAttributes.Public | TypeAttributes.Class, typeof(System.__ComObject));
+
+				Type[] guidattrtypes = new Type[] { typeof(string) };
+
+				CustomAttributeBuilder customattr = new CustomAttributeBuilder (
+					typeof(GuidAttribute).GetConstructor (guidattrtypes),
+					new object[] { clsid.ToString () });
+
+				typebuilder.SetCustomAttribute (customattr);
+
+				customattr = new CustomAttributeBuilder (
+					typeof(ComImportAttribute).GetConstructor (EmptyTypes),
+					new object[0] {});
+
+				typebuilder.SetCustomAttribute (customattr);
+
+				result = typebuilder.CreateType ();
+
+				clsid_types.Add(clsid, result);
+
+				return result;
+			}
+#else
 			throw new NotImplementedException ();
+#endif
 		}
 
 		public static Type GetTypeFromHandle (RuntimeTypeHandle handle)
@@ -849,25 +809,9 @@ namespace System {
 		internal static extern void GetInterfaceMapData (Type t, Type iface, out MethodInfo[] targets, out MethodInfo[] methods);
 
 		[ComVisible (true)]
-		public virtual InterfaceMapping GetInterfaceMap (Type interfaceType) {
-			if (!IsSystemType)
-				throw new NotSupportedException ("Derived classes must provide an implementation.");
-			if (interfaceType == null)
-				throw new ArgumentNullException ("interfaceType");
-			if (!interfaceType.IsSystemType)
-				throw new ArgumentException ("interfaceType", "Type is an user type");
-			InterfaceMapping res;
-			if (!interfaceType.IsInterface)
-				throw new ArgumentException (Locale.GetText ("Argument must be an interface."), "interfaceType");
-			if (IsInterface)
-				throw new ArgumentException ("'this' type cannot be an interface itself");
-			res.TargetType = this;
-			res.InterfaceType = interfaceType;
-			GetInterfaceMapData (this, interfaceType, out res.TargetMethods, out res.InterfaceMethods);
-			if (res.TargetMethods == null)
-				throw new ArgumentException (Locale.GetText ("Interface not found"), "interfaceType");
-
-			return res;
+		public virtual InterfaceMapping GetInterfaceMap (Type interfaceType)
+		{
+			throw new NotSupportedException ();
 		}
 
 		public abstract Type[] GetInterfaces ();
@@ -1231,10 +1175,10 @@ namespace System {
 		{
 			object [] att = GetCustomAttributes (typeof (DefaultMemberAttribute), true);
 			if (att.Length == 0)
-				return new MemberInfo [0];
+				return EmptyArray<MemberInfo>.Value;
 
 			MemberInfo [] member = GetMember (((DefaultMemberAttribute) att [0]).MemberName);
-			return (member != null) ? member : new MemberInfo [0];
+			return (member != null) ? member : EmptyArray<MemberInfo>.Value;
 		}
 
 		public virtual MemberInfo[] FindMembers (MemberTypes memberType, BindingFlags bindingAttr,
@@ -1243,8 +1187,6 @@ namespace System {
 			MemberInfo[] result;
 			ArrayList l = new ArrayList ();
 
-			// Console.WriteLine ("FindMembers for {0} (Type: {1}): {2}",
-			// this.FullName, this.GetType().FullName, this.obj_address());
 			if ((memberType & MemberTypes.Method) != 0) {
 				MethodInfo[] c = GetMethods (bindingAttr);
 				if (filter != null) {
@@ -1369,6 +1311,17 @@ namespace System {
 			return FullName;
 		}
 
+		internal static bool ShouldPrintFullName (Type type)
+		{
+			while (type.HasElementType)
+				type = type.GetElementType ();
+
+			if (type == typeof (void) || type.IsNested)
+				return false;
+
+			return !type.IsPrimitive;
+		}
+
 		internal virtual Type InternalResolve ()
 		{
 			return UnderlyingSystemType;
@@ -1380,13 +1333,11 @@ namespace System {
 			}
 		}
 		
-#if NET_4_5
 		public virtual Type[] GenericTypeArguments {
 			get {
 				return IsGenericType ? GetGenericArguments () : EmptyTypes;
 			}
 		}
-#endif
 
 		public virtual Type[] GetGenericArguments ()
 		{
@@ -1442,11 +1393,13 @@ namespace System {
 				systemTypes [i] = t;
 			}
 
-#if !FULL_AOT_RUNTIME
 			if (hasUserType) {
+#if FULL_AOT_RUNTIME
+				throw new NotSupportedException ("User types are not supported under full aot");
+#else
 				return new MonoGenericClass (this, typeArguments);
-			}
 #endif
+			}
 
 			Type res = MakeGenericType (this, systemTypes);
 			if (res == null)
@@ -1589,11 +1542,7 @@ namespace System {
 
 		public virtual StructLayoutAttribute StructLayoutAttribute {
 			get {
-#if NET_4_0
 				throw new NotSupportedException ();
-#else
-				return GetStructLayoutAttribute ();
-#endif
 			}
 		}
 		
@@ -1652,12 +1601,10 @@ namespace System {
 		}			
 
 
-#if NET_4_0
 		public virtual bool IsEquivalentTo (Type other)
 		{
 			return this == other;
 		}
-#endif
 
 		/* 
 		 * Return whenever this object is an instance of a user defined subclass
@@ -1671,6 +1618,7 @@ namespace System {
 			}
 		}
 
+#if !MOBILE
 		void _Type.GetIDsOfNames ([In] ref Guid riid, IntPtr rgszNames, uint cNames, uint lcid, IntPtr rgDispId)
 		{
 			throw new NotImplementedException ();
@@ -1690,5 +1638,6 @@ namespace System {
 		{
 			throw new NotImplementedException ();
 		}
+#endif
 	}
 }

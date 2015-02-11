@@ -366,12 +366,12 @@ public class StreamReaderTest
 		m.Close();
 	}
 
-	public void TestCurrentEncoding() {
+	public void TestCurrentEncoding()
+	{
 		Byte[] b = {};
 		MemoryStream m = new MemoryStream(b);
 		StreamReader r = new StreamReader(m);
-		Assert.AreEqual (Encoding.UTF8.GetType (), r.CurrentEncoding.GetType (),
-			"wrong encoding");
+		Assert.AreSame (Encoding.UTF8, r.CurrentEncoding, "wrong encoding");
 	}
 
 	// TODO - Close - annoying spec - won't commit to any exceptions. How to test?
@@ -773,7 +773,8 @@ public class StreamReaderTest
 		return decodedString == TestString;
 	}
     
-    	[Test] // Bug445326
+    [Test] // Bug445326
+	[Category ("MobileNotWorking")]
 	public void EndOfBufferIsCR ()
 	{
 		using (StreamReader reader = new StreamReader ("Test/resources/Fergie.GED")) {
@@ -837,6 +838,13 @@ public class StreamReaderTest
 		}
 	}
 
+	[Test]
+	public void NullStream ()
+	{
+		var buffer = new char[2];
+		Assert.AreEqual (0, StreamReader.Null.ReadBlock (buffer, 0, buffer.Length));
+	}
+
 #if NET_4_5
 	[Test]
 	public void ReadLineAsync ()
@@ -854,7 +862,9 @@ public class StreamReaderTest
 			}
 		};
 
-		Assert.AreEqual ("ab" + Environment.NewLine, res ().Result);
+		var result = res ();
+		Assert.IsTrue (result.Wait (3000), "#1");
+		Assert.AreEqual ("ab" + Environment.NewLine, result.Result);
 	}
 #endif
 }

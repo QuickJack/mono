@@ -42,6 +42,7 @@ namespace MonoTests.System.Runtime.CompilerServices
 		class MyContext : SynchronizationContext
 		{
 			public int PostCounter;
+			public ManualResetEvent mre = new ManualResetEvent (false);
 
 			public override void OperationStarted ()
 			{
@@ -56,6 +57,7 @@ namespace MonoTests.System.Runtime.CompilerServices
 			public override void Post (SendOrPostCallback d, object state)
 			{
 				++PostCounter;
+				mre.Set ();
 				base.Post (d, state);
 			}
 
@@ -86,18 +88,34 @@ namespace MonoTests.System.Runtime.CompilerServices
 			}
 		}
 
+		[Category ("NotWorking")] // Bug #18629
 		[Test]
-		public void GetResultNotCompleted ()
+		public void GetResultAfterMultipleExceptions ()
 		{
-			TaskAwaiter<int> awaiter;
-
-			task = new Task<int> (() => 1);
-			awaiter = task.GetAwaiter ();
-
+			TaskAwaiter<object> awaiter;
+			CreateFaultedAwaiter (out awaiter);
 			try {
 				awaiter.GetResult ();
 				Assert.Fail ();
-			} catch (InvalidOperationException) {
+			} catch (AggregateException ae) {
+				Assert.IsFalse (ae.StackTrace.Contains ("--- End"), "#1");
+				Assert.IsTrue (ae.StackTrace.Contains ("CreateFaultedAwaiter"), "#2");
+			}
+		}
+
+		static void CreateFaultedAwaiter (out TaskAwaiter<object> awaiter)
+		{
+			var faultedSource = new TaskCompletionSource<object>();
+			faultedSource.SetException(new Exception());
+			awaiter = faultedSource.Task.GetAwaiter ();
+			try {
+				awaiter.GetResult ();
+			} catch {
+			}
+
+			try {
+				awaiter.GetResult ();
+			} catch {
 			}
 		}
 
@@ -120,6 +138,21 @@ namespace MonoTests.System.Runtime.CompilerServices
 		[Test]
 		public void ContextTest ()
 		{
+			TaskAwaiter awaiter;
+
+			var task = new Task (() => { throw new ApplicationException (); });
+			awaiter = task.GetAwaiter ();
+			task.RunSynchronously (TaskScheduler.Current);
+
+
+			Assert.IsTrue (awaiter.IsCompleted);
+
+			try {
+				awaiter.GetResult ();
+				Assert.Fail ();
+			} catch (ApplicationException) {
+			}
+
 			var context = new MyContext ();
 
 			var old = SynchronizationContext.Current;
@@ -129,12 +162,13 @@ namespace MonoTests.System.Runtime.CompilerServices
 				var a = t.GetAwaiter ();
 				a.OnCompleted (delegate { });
 				t.Start ();
-				Assert.IsTrue (t.Wait (1000), "#1");
+				Assert.IsTrue (t.Wait (5000), "#1");
 			} finally {
 				SynchronizationContext.SetSynchronizationContext (old);
 			}
 
-			Assert.AreEqual (1, context.PostCounter, "#2");
+			Assert.IsTrue (context.mre.WaitOne (5000), "#2");
+			Assert.AreEqual (1, context.PostCounter, "#3");
 		}
 	}
 }

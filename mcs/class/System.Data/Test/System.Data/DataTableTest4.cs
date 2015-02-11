@@ -23,16 +23,14 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if NET_2_0
 using System;
 using System.Data;
 using System.Collections;
-using System.Data.Odbc;
 using System.IO;
 using System.Xml;
 using NUnit.Framework;
 
-namespace Monotests_System.Data
+namespace MonoTests.System.Data
 {
 	[TestFixture]
 	public class DataTableTest4
@@ -1601,7 +1599,7 @@ namespace Monotests_System.Data
 			DataSet ds = new DataSet ();
 			DataTable table = new DataTable ("ParentTable");
 			XmlReadMode mode = XmlReadMode.Auto;
-			table.Columns.Add (new DataColumn ("id", System.Type.GetType ("System.Int32")));
+			table.Columns.Add (new DataColumn ("id", Type.GetType ("System.Int32")));
 			ds.Tables.Add (table);
 
 			using (FileStream stream = new FileStream (tempFile, FileMode.Open)) {
@@ -1639,7 +1637,7 @@ namespace Monotests_System.Data
 			using (FileStream stream = new FileStream (tempFile, FileMode.Open)) {
 				DataSet ds = new DataSet ();
 				DataTable table = new DataTable ("Table1");
-				table.Columns.Add (new DataColumn ("id", System.Type.GetType ("System.Int32")));
+				table.Columns.Add (new DataColumn ("id", Type.GetType ("System.Int32")));
 				ds.Tables.Add (table);
 
 				try {
@@ -1853,7 +1851,7 @@ namespace Monotests_System.Data
 			DataTable table = new DataTable ("DummyTable");
 			//define the table schame partially with a column name which does not match with any
 			//table columns in the diffgram
-			table.Columns.Add (new DataColumn ("WrongColumnName", System.Type.GetType ("System.String")));
+			table.Columns.Add (new DataColumn ("WrongColumnName", Type.GetType ("System.String")));
 
 			XmlReadMode mode = XmlReadMode.Auto;
 
@@ -2014,8 +2012,8 @@ namespace Monotests_System.Data
 			Assert.AreEqual ("NewDataSet", table.DataSet.DataSetName, "#2");
 			Assert.AreEqual (2, table.Columns.Count, "#3");
 			Assert.AreEqual (2, table.Rows.Count, "#4");
-			Assert.AreEqual (typeof (System.Int32), table.Columns [0].DataType, "#5");
-			Assert.AreEqual (typeof (System.String), table.Columns [1].DataType, "#6");
+			Assert.AreEqual (typeof (Int32), table.Columns [0].DataType, "#5");
+			Assert.AreEqual (typeof (String), table.Columns [1].DataType, "#6");
 			Assert.AreEqual (1, table.Constraints.Count, "#7");
 			Assert.AreEqual (typeof (UniqueConstraint), table.Constraints [0].GetType (), "#8");
 			Assert.AreEqual (1, table.ChildRelations.Count, "#9");
@@ -2028,9 +2026,9 @@ namespace Monotests_System.Data
 			Assert.AreEqual ("NewDataSet", table1.DataSet.DataSetName, "#14");
 			Assert.AreEqual (3, table1.Columns.Count, "#15");
 			Assert.AreEqual (4, table1.Rows.Count, "#16");
-			Assert.AreEqual (typeof (System.Int32), table1.Columns [0].DataType, "#17");
-			Assert.AreEqual (typeof (System.String), table1.Columns [1].DataType, "#18");
-			Assert.AreEqual (typeof (System.Int32), table1.Columns [2].DataType, "#19");
+			Assert.AreEqual (typeof (Int32), table1.Columns [0].DataType, "#17");
+			Assert.AreEqual (typeof (String), table1.Columns [1].DataType, "#18");
+			Assert.AreEqual (typeof (Int32), table1.Columns [2].DataType, "#19");
 			Assert.AreEqual (2, table1.Constraints.Count, "#20");
 			Assert.AreEqual (typeof (UniqueConstraint), table1.Constraints [0].GetType (), "#21");
 			Assert.AreEqual (typeof (ForeignKeyConstraint), table1.Constraints [1].GetType (), "#22");
@@ -2046,8 +2044,8 @@ namespace Monotests_System.Data
 			Assert.AreEqual ("NewDataSet", table1.DataSet.DataSetName, "#29");
 			Assert.AreEqual (2, table1.Columns.Count, "#30");
 			Assert.AreEqual (8, table1.Rows.Count, "#31");
-			Assert.AreEqual (typeof (System.Int32), table1.Columns [0].DataType, "#32");
-			Assert.AreEqual (typeof (System.String), table1.Columns [1].DataType, "#33");
+			Assert.AreEqual (typeof (Int32), table1.Columns [0].DataType, "#32");
+			Assert.AreEqual (typeof (String), table1.Columns [1].DataType, "#33");
 			Assert.AreEqual (1, table1.Constraints.Count, "#34");
 			Assert.AreEqual (typeof (ForeignKeyConstraint), table1.Constraints [0].GetType (), "#35");
 			Assert.AreEqual (1, table1.ParentRelations.Count, "#36");
@@ -2058,4 +2056,3 @@ namespace Monotests_System.Data
 		}
 	}
 }
-#endif

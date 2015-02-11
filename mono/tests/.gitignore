@@ -3,6 +3,8 @@
 /*.stdout
 /*.stderr
 /*.aotlog
+/*.allout
+/*.zero
 /.deps
 /.libs
 /libtest.la
@@ -26,3 +28,8 @@
 /tests-config
 /TAGS
 /runtime-invoke.gen.cs
+/*.exe.dylib
+/*.exe.dylib.dSYM
+/testlist
+/testlist.sorted
+/reflection-load-dir

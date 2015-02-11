@@ -73,7 +73,6 @@ namespace Mono.CSharp
 		public readonly TypeSpec[] OperatorsUnaryMutator;
 
 		public readonly TypeSpec[] BinaryPromotionsTypes;
-		public readonly TypeSpec[] SwitchUserTypes;
 
 		readonly BuiltinTypeSpec[] types;
 
@@ -125,7 +124,6 @@ namespace Mono.CSharp
 			OperatorsUnaryMutator = UnaryMutator.CreatePredefinedOperatorsTable (this);
 
 			BinaryPromotionsTypes = ConstantFold.CreateBinaryPromotionsTypes (this);
-			SwitchUserTypes = Switch.CreateSwitchUserTypes (this);
 
 			types = new BuiltinTypeSpec[] {
 				Object, ValueType, Attribute,
@@ -186,7 +184,9 @@ namespace Mono.CSharp
 		public readonly PredefinedType IsVolatile;
 		public readonly PredefinedType IEnumeratorGeneric;
 		public readonly PredefinedType IListGeneric;
+		public readonly PredefinedType IReadOnlyListGeneric;
 		public readonly PredefinedType ICollectionGeneric;
+		public readonly PredefinedType IReadOnlyCollectionGeneric;
 		public readonly PredefinedType IEnumerableGeneric;
 		public readonly PredefinedType Nullable;
 		public readonly PredefinedType Activator;
@@ -198,6 +198,7 @@ namespace Mono.CSharp
 		public readonly PredefinedType SecurityAction;
 		public readonly PredefinedType Dictionary;
 		public readonly PredefinedType Hashtable;
+		public readonly TypeSpec[] SwitchUserTypes;
 
 		//
 		// C# 3.0
@@ -232,6 +233,11 @@ namespace Mono.CSharp
 		public readonly PredefinedType INotifyCompletion;
 		public readonly PredefinedType ICriticalNotifyCompletion;
 
+		// C# 6.0
+		public readonly PredefinedType IFormattable;
+		public readonly PredefinedType FormattableString;
+		public readonly PredefinedType FormattableStringFactory;
+
 		public PredefinedTypes (ModuleContainer module)
 		{
 			TypedReference = new PredefinedType (module, MemberKind.Struct, "System", "TypedReference");
@@ -246,7 +252,9 @@ namespace Mono.CSharp
 			IsVolatile = new PredefinedType (module, MemberKind.Class, "System.Runtime.CompilerServices", "IsVolatile");
 			IEnumeratorGeneric = new PredefinedType (module, MemberKind.Interface, "System.Collections.Generic", "IEnumerator", 1);
 			IListGeneric = new PredefinedType (module, MemberKind.Interface, "System.Collections.Generic", "IList", 1);
+			IReadOnlyListGeneric = new PredefinedType (module, MemberKind.Interface, "System.Collections.Generic", "IReadOnlyList", 1);
 			ICollectionGeneric = new PredefinedType (module, MemberKind.Interface, "System.Collections.Generic", "ICollection", 1);
+			IReadOnlyCollectionGeneric = new PredefinedType (module, MemberKind.Interface, "System.Collections.Generic", "IReadOnlyCollection", 1);
 			IEnumerableGeneric = new PredefinedType (module, MemberKind.Interface, "System.Collections.Generic", "IEnumerable", 1);
 			Nullable = new PredefinedType (module, MemberKind.Struct, "System", "Nullable", 1);
 			Activator = new PredefinedType (module, MemberKind.Class, "System", "Activator");
@@ -283,6 +291,10 @@ namespace Mono.CSharp
 			INotifyCompletion = new PredefinedType (module, MemberKind.Interface, "System.Runtime.CompilerServices", "INotifyCompletion");
 			ICriticalNotifyCompletion = new PredefinedType (module, MemberKind.Interface, "System.Runtime.CompilerServices", "ICriticalNotifyCompletion");
 
+			IFormattable = new PredefinedType (module, MemberKind.Interface, "System", "IFormattable");
+			FormattableString = new PredefinedType (module, MemberKind.Class, "System", "FormattableString");
+			FormattableStringFactory = new PredefinedType (module, MemberKind.Class, "System.Runtime.CompilerServices", "FormattableStringFactory");
+
 			//
 			// Define types which are used for comparison. It does not matter
 			// if they don't exist as no error report is needed
@@ -294,13 +306,19 @@ namespace Mono.CSharp
 				ArgIterator.TypeSpec.IsSpecialRuntimeType = true;
 
 			if (IEnumerableGeneric.Define ())
-				IEnumerableGeneric.TypeSpec.IsGenericIterateInterface = true;
+				IEnumerableGeneric.TypeSpec.IsArrayGenericInterface = true;
 
 			if (IListGeneric.Define ())
-				IListGeneric.TypeSpec.IsGenericIterateInterface = true;
+				IListGeneric.TypeSpec.IsArrayGenericInterface = true;
+
+			if (IReadOnlyListGeneric.Define ())
+				IReadOnlyListGeneric.TypeSpec.IsArrayGenericInterface = true;
 
 			if (ICollectionGeneric.Define ())
-				ICollectionGeneric.TypeSpec.IsGenericIterateInterface = true;
+				ICollectionGeneric.TypeSpec.IsArrayGenericInterface = true;
+
+			if (IReadOnlyCollectionGeneric.Define ())
+				IReadOnlyCollectionGeneric.TypeSpec.IsArrayGenericInterface = true;
 
 			if (Nullable.Define ())
 				Nullable.TypeSpec.IsNullableType = true;
@@ -311,6 +329,11 @@ namespace Mono.CSharp
 			Task.Define ();
 			if (TaskGeneric.Define ())
 				TaskGeneric.TypeSpec.IsGenericTask = true;
+
+			SwitchUserTypes = Switch.CreateSwitchUserTypes (module, Nullable.TypeSpec);
+
+			IFormattable.Define ();
+			FormattableString.Define ();
 		}
 	}
 
@@ -691,6 +714,7 @@ namespace Mono.CSharp
 		readonly MemberKind kind;
 		protected readonly ModuleContainer module;
 		protected TypeSpec type;
+		bool defined;
 
 		public PredefinedType (ModuleContainer module, MemberKind kind, string ns, string name, int arity)
 			: this (module, kind, ns, name)
@@ -753,7 +777,11 @@ namespace Mono.CSharp
 			if (type != null)
 				return true;
 
-			type = Resolve (module, kind, ns, name, arity, false, false);
+			if (!defined) {
+				defined = true;
+				type = Resolve (module, kind, ns, name, arity, false, false);
+			}
+
 			return type != null;
 		}
 
@@ -771,12 +799,13 @@ namespace Mono.CSharp
 			// fake namespaces when type is optional and does not exist (e.g. System.Linq).
 			//
 			Namespace type_ns = module.GlobalRootNamespace.GetNamespace (ns, required);
+
 			IList<TypeSpec> found = null;
 			if (type_ns != null)
 				found = type_ns.GetAllTypes (name);
 
 			if (found == null) {
-				if (reportErrors )
+				if (reportErrors)
 					module.Compiler.Report.Error (518, "The predefined type `{0}.{1}' is not defined or imported", ns, name);
 
 				return null;
@@ -829,15 +858,22 @@ namespace Mono.CSharp
 			}
 
 			if (best_match == null && reportErrors) {
-				Location loc;
-				if (found[0].MemberDefinition is MemberCore) {
-					loc = ((MemberCore) found[0].MemberDefinition).Location;
-				} else {
-					loc = Location.Null;
-					module.Compiler.Report.SymbolRelatedToPreviousError (found[0]);
-				}
+				var found_member = found[0];
 
-				module.Compiler.Report.Error (520, loc, "The predefined type `{0}.{1}' is not declared correctly", ns, name);
+				if (found_member.Kind == MemberKind.MissingType) {
+					// CSC: should be different error number
+					module.Compiler.Report.Error (518, "The predefined type `{0}.{1}' is defined in an assembly that is not referenced.", ns, name);
+				} else {
+					Location loc;
+					if (found_member.MemberDefinition is MemberCore) {
+						loc = ((MemberCore) found_member.MemberDefinition).Location;
+					} else {
+						loc = Location.Null;
+						module.Compiler.Report.SymbolRelatedToPreviousError (found_member);
+					}
+
+					module.Compiler.Report.Error (520, loc, "The predefined type `{0}.{1}' is not declared correctly", ns, name);
+				}
 			}
 
 			return best_match;
@@ -969,17 +1005,22 @@ namespace Mono.CSharp
 		}
 	}
 
-	partial class TypeManager {
-
-	/// <summary>
-	///   Returns the C# name of a type if possible, or the full type name otherwise
-	/// </summary>
-	static public string CSharpName (TypeSpec t)
+	public class AwaiterDefinition
 	{
-		return t.GetSignatureForError ();
+		public PropertySpec IsCompleted { get; set; }
+		public MethodSpec GetResult { get; set; }
+		public bool INotifyCompletion { get; set; }
+
+		public bool IsValidPattern {
+			get {
+				return IsCompleted != null && GetResult != null && IsCompleted.HasGet;
+			}
+		}
 	}
 
-	static public string CSharpName (IList<TypeSpec> types)
+	partial class TypeManager {
+
+	static public string CSharpName(IList<TypeSpec> types)
 	{
 		if (types.Count == 0)
 			return string.Empty;
@@ -989,7 +1030,7 @@ namespace Mono.CSharp
 			if (i > 0)
 				sb.Append (",");
 
-			sb.Append (CSharpName (types [i]));
+			sb.Append (types [i].GetSignatureForError ());
 		}
 		return sb.ToString ();
 	}
@@ -1077,7 +1118,7 @@ namespace Mono.CSharp
 		rc.Compiler.Report.SymbolRelatedToPreviousError (t);
 		rc.Compiler.Report.Error (208, loc,
 			"Cannot take the address of, get the size of, or declare a pointer to a managed type `{0}'",
-			CSharpName (t));
+			t.GetSignatureForError ());
 
 		return false;	
 	}

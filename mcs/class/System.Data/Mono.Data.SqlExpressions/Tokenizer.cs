@@ -136,10 +136,10 @@ namespace Mono.Data.SqlExpressions {
 
 			string str = sb.ToString ();
 
-			if (str.IndexOf(".") == -1)
-				return Int64.Parse (str);
-			else
-				return double.Parse (str);
+			if (str.IndexOf ('.') < 0)
+				return Int64.Parse (str, CultureInfo.InvariantCulture);
+
+			return double.Parse (str, CultureInfo.InvariantCulture);
 		}
 
 		private char ProcessEscapes(char c)
@@ -219,11 +219,7 @@ namespace Mono.Data.SqlExpressions {
 			ret = sb.ToString ();
 			if (String.Compare (ret,
 					    "not",
-#if NET_2_0
 					    StringComparison.OrdinalIgnoreCase
-#else
-					    true, CultureInfo.InvariantCulture
-#endif
 			    ) == 0) {
 				int savedPos = pos;
 				while (Char.IsWhiteSpace ((next = Next ()))) {
@@ -327,7 +323,7 @@ namespace Mono.Data.SqlExpressions {
 
 			case '#':
 				string date = ReadString ('#');
-				val = DateTime.Parse (date);
+				val = DateTime.Parse (date, CultureInfo.InvariantCulture);
 				return Token.DateLiteral;
 
 			case '\'':

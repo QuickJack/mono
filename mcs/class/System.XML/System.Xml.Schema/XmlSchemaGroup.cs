@@ -67,11 +67,7 @@ namespace System.Xml.Schema
 		}
 
 		[XmlIgnore]
-#if NET_2_0
 		public XmlQualifiedName QualifiedName 
-#else
-		internal XmlQualifiedName QualifiedName 
-#endif
 		{
 			get{ return qualifiedName;}
 		}
@@ -133,7 +129,7 @@ namespace System.Xml.Schema
 				Particle.parentIsGroupDefinition = true;
 
 				try {
-					Particle.CheckRecursion (0, h, schema);
+					Particle.CheckRecursion (new Stack (), h, schema);
 				} catch (XmlSchemaException ex) {
 					error (h, ex.Message, ex);
 					this.isCircularDefinition = true;

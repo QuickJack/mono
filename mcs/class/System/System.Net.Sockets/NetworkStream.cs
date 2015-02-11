@@ -51,8 +51,8 @@ namespace System.Net.Sockets
 		{
 		}
 
-		public NetworkStream (Socket socket, bool owns_socket)
-			: this (socket, FileAccess.ReadWrite, owns_socket)
+		public NetworkStream (Socket socket, bool ownsSocket)
+			: this (socket, FileAccess.ReadWrite, ownsSocket)
 		{
 		}
 
@@ -61,7 +61,7 @@ namespace System.Net.Sockets
 		{
 		}
 		
-		public NetworkStream (Socket socket, FileAccess access, bool owns_socket)
+		public NetworkStream (Socket socket, FileAccess access, bool ownsSocket)
 		{
 			if (socket == null)
 				throw new ArgumentNullException ("socket is null");
@@ -73,7 +73,7 @@ namespace System.Net.Sockets
 				throw new IOException ("Operation not allowed on a non-blocking socket.");
 			
 			this.socket = socket;
-			this.owns_socket = owns_socket;
+			this.owns_socket = ownsSocket;
 			this.access = access;
 
 			readable = CanRead;
@@ -143,9 +143,6 @@ namespace System.Net.Sockets
 		}
 
 #if !NET_2_1 || MOBILE
-#if TARGET_JVM
-		[MonoNotSupported ("Not supported since Socket.ReceiveTimeout is not supported")]
-#endif
 		public override int ReadTimeout
 		{
 			get {
@@ -179,9 +176,6 @@ namespace System.Net.Sockets
 		}
 
 #if !NET_2_1 || MOBILE
-#if TARGET_JVM
-		[MonoNotSupported ("Not supported since Socket.SendTimeout is not supported")]
-#endif
 		public override int WriteTimeout
 		{
 			get {
@@ -254,8 +248,8 @@ namespace System.Net.Sockets
 
 			try {
 				retval = s.BeginSend (buffer, offset, size, 0, callback, state);
-			} catch {
-				throw new IOException ("BeginWrite failure");
+			} catch (Exception e) {
+				throw new IOException ("BeginWrite failure", e);
 			}
 
 			return retval;
@@ -431,12 +425,6 @@ namespace System.Net.Sockets
 				throw new ObjectDisposedException (GetType().FullName);
 		}
 
-#if TARGET_JVM
-		public void ChangeToSSLSocket()
-		{
-			socket.ChangeToSSL();
-		}
-#endif
 
 	}
 }

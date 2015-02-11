@@ -44,6 +44,7 @@ namespace Mono.CSharp
 	using System.Text.RegularExpressions;
 	using System.Threading;
 	using System.Collections.Generic;
+	using System.Globalization;
 	
 	internal class CSharpCodeCompiler : CSharpCodeGenerator, ICodeCompiler
 	{
@@ -178,27 +179,6 @@ namespace Mono.CSharp
 
 			mcsOutput = new StringCollection ();
 			mcsOutMutex = new Mutex ();
-#if !NET_4_0
-			/*
-			 * !:. KLUDGE WARNING .:!
-			 *
-			 * When running the 2.0 test suite some assemblies will invoke mcs via
-			 * CodeDOM and the new mcs process will find the MONO_PATH variable in its
-			 * environment pointing to the net_2_0 library which will cause the runtime
-			 * to attempt to load the 2.0 corlib into 4.0 process and thus mcs will
-			 * fail. At the same time, we must not touch MONO_PATH when running outside
-			 * the test suite, thus the kludge.
-			 *
-			 * !:. KLUDGE WARNING .:!
-			 */
-			if (Environment.GetEnvironmentVariable ("MONO_TESTS_IN_PROGRESS") != null) {
-				string monoPath = Environment.GetEnvironmentVariable ("MONO_PATH");
-				if (!String.IsNullOrEmpty (monoPath)) {
-					monoPath = monoPath.Replace ("/class/lib/net_2_0", "/class/lib/net_4_0");
-					mcs.StartInfo.EnvironmentVariables ["MONO_PATH"] = monoPath;
-				}
-			}
-#endif
 /*		       
 			string monoPath = Environment.GetEnvironmentVariable ("MONO_PATH");
 			if (monoPath != null)
@@ -362,11 +342,7 @@ namespace Mono.CSharp
 				string langver;
 
 				if (!providerOptions.TryGetValue ("CompilerVersion", out langver))
-#if NET_4_0
 					langver = "3.5";
-#else
-					langver = "2.0";
-#endif
 
 				if (langver.Length >= 1 && langver [0] == 'v')
 					langver = langver.Substring (1);
@@ -382,19 +358,27 @@ namespace Mono.CSharp
 				}
 			}
 
-#if NET_4_5			
 			args.Append("/sdk:4.5");
-#elif NET_4_0
-			args.Append("/sdk:4");
-#else
-			args.Append("/sdk:2");
-#endif
 
 			args.Append (" -- ");
 			foreach (string source in fileNames)
 				args.AppendFormat("\"{0}\" ",source);
 			return args.ToString();
 		}
+
+		// Keep in sync with mcs/class/Microsoft.Build.Utilities/Microsoft.Build.Utilities/ToolTask.cs
+		const string ErrorRegexPattern = @"
+			^
+			(\s*(?<file>[^\(]+)                         # filename (optional)
+			 (\((?<line>\d*)(,(?<column>\d*[\+]*))?\))? # line+column (optional)
+			 :\s+)?
+			(?<level>\w+)                               # error|warning
+			\s+
+			(?<number>[^:]*\d)                          # CS1234
+			:
+			\s*
+			(?<message>.*)$";
+
 		private static CompilerError CreateErrorFromString(string error_string)
 		{
 			if (error_string.StartsWith ("BETA"))
@@ -404,8 +388,7 @@ namespace Mono.CSharp
 				return null;
 
 			CompilerError error=new CompilerError();
-			Regex reg = new Regex (@"^(\s*(?<file>.*)\((?<line>\d*)(,(?<column>\d*))?\)(:)?\s+)*(?<level>\w+)\s*(?<number>.*):\s(?<message>.*)",
-				RegexOptions.Compiled | RegexOptions.ExplicitCapture);
+			Regex reg = new Regex (ErrorRegexPattern, RegexOptions.Compiled | RegexOptions.ExplicitCapture | RegexOptions.IgnorePatternWhitespace);
 			Match match=reg.Match(error_string);
 			if (!match.Success) {
 				// We had some sort of runtime crash
@@ -419,7 +402,7 @@ namespace Mono.CSharp
 			if (String.Empty != match.Result("${line}"))
 				error.Line=Int32.Parse(match.Result("${line}"));
 			if (String.Empty != match.Result("${column}"))
-				error.Column=Int32.Parse(match.Result("${column}"));
+				error.Column=Int32.Parse(match.Result("${column}").Trim('+'));
 
 			string level = match.Result ("${level}");
 			if (level == "warning")

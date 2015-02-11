@@ -27,6 +27,8 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
+#if !MOBILE
+
 using NUnit.Framework;
 using System;
 using System.Diagnostics;
@@ -41,10 +43,8 @@ namespace MonoTests.System.Diagnostics {
 		static PerformanceCounterPermissionAccess[] AllAccess = {
 			PerformanceCounterPermissionAccess.None,
 			PerformanceCounterPermissionAccess.Browse,
-#if NET_2_0
 			PerformanceCounterPermissionAccess.Read,
 			PerformanceCounterPermissionAccess.Write,
-#endif
 			PerformanceCounterPermissionAccess.Instrument,
 			PerformanceCounterPermissionAccess.Administer,
 		};
@@ -88,9 +88,7 @@ namespace MonoTests.System.Diagnostics {
 		}
 
 		[Test]
-#if NET_2_0
 		[ExpectedException (typeof (ArgumentException))]
-#endif
 		public void PermissionState_Bad ()
 		{
 			PermissionState ps = (PermissionState)77;
@@ -106,11 +104,7 @@ namespace MonoTests.System.Diagnostics {
 		}
 
 		[Test]
-#if NET_2_0
 		[ExpectedException (typeof (ArgumentNullException))]
-#else
-		[ExpectedException (typeof (ArgumentException))]
-#endif
 		public void Constructor_MachineName_Null ()
 		{
 			PerformanceCounterPermission pcp = new PerformanceCounterPermission (PerformanceCounterPermissionAccess.None, null, String.Empty);
@@ -124,9 +118,7 @@ namespace MonoTests.System.Diagnostics {
 		}
 
 		[Test]
-#if NET_2_0
 		[ExpectedException (typeof (ArgumentException))]
-#endif
 		public void PerformanceCounterPermissionAccesss_Bad ()
 		{
 			PerformanceCounterPermissionAccess pcpa = (PerformanceCounterPermissionAccess)Int32.MinValue;
@@ -247,11 +239,7 @@ namespace MonoTests.System.Diagnostics {
 		public void IsSubset_Null ()
 		{
 			PerformanceCounterPermission pcp = new PerformanceCounterPermission (PermissionState.None);
-#if NET_2_0
 			Assert.IsTrue (pcp.IsSubsetOf (null), "null");
-#else
-			Assert.IsFalse (pcp.IsSubsetOf (null), "null");
-#endif
 		}
 
 		[Test]
@@ -370,12 +358,7 @@ namespace MonoTests.System.Diagnostics {
 		}
 
 		[Test]
-#if NET_2_0
 		[ExpectedException (typeof (ArgumentNullException))]
-#else
-		// Problem inherited from ResourcePermissionBase
-		[ExpectedException (typeof (NullReferenceException))]
-#endif
 		public void FromXml_Null ()
 		{
 			PerformanceCounterPermission pcp = new PerformanceCounterPermission (PermissionState.None);
@@ -383,9 +366,7 @@ namespace MonoTests.System.Diagnostics {
 		}
 
 		[Test]
-#if NET_2_0
 		[ExpectedException (typeof (ArgumentException))]
-#endif
 		public void FromXml_WrongTag ()
 		{
 			PerformanceCounterPermission pcp = new PerformanceCounterPermission (PermissionState.None);
@@ -397,9 +378,7 @@ namespace MonoTests.System.Diagnostics {
 		}
 
 		[Test]
-#if NET_2_0
 		[ExpectedException (typeof (ArgumentException))]
-#endif
 		public void FromXml_WrongTagCase ()
 		{
 			PerformanceCounterPermission pcp = new PerformanceCounterPermission (PermissionState.None);
@@ -459,3 +438,5 @@ namespace MonoTests.System.Diagnostics {
 		}
 	}
 }
+
+#endif

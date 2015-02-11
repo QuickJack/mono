@@ -194,6 +194,27 @@ struct _MonoString {
 #define mono_array_length_fast(array) ((array)->max_length)
 #define mono_array_addr_with_size_fast(array,size,index) ( ((char*)(array)->vector) + (size) * (index) )
 
+#define mono_array_addr_fast(array,type,index) ((type*)(void*) mono_array_addr_with_size_fast (array, sizeof (type), index))
+#define mono_array_get_fast(array,type,index) ( *(type*)mono_array_addr_fast ((array), type, (index)) ) 
+#define mono_array_set_fast(array,type,index,value)	\
+	do {	\
+		type *__p = (type *) mono_array_addr_fast ((array), type, (index));	\
+		*__p = (value);	\
+	} while (0)
+#define mono_array_setref_fast(array,index,value)	\
+	do {	\
+		void **__p = (void **) mono_array_addr_fast ((array), void*, (index));	\
+		mono_gc_wbarrier_set_arrayref ((array), __p, (MonoObject*)(value));	\
+		/* *__p = (value);*/	\
+	} while (0)
+#define mono_array_memcpy_refs_fast(dest,destidx,src,srcidx,count)	\
+	do {	\
+		void **__p = (void **) mono_array_addr_fast ((dest), void*, (destidx));	\
+		void **__s = mono_array_addr_fast ((src), void*, (srcidx));	\
+		mono_gc_wbarrier_arrayref_copy (__p, __s, (count));	\
+	} while (0)
+
+
 typedef struct {
 	MonoObject obj;
 	MonoObject *identity;
@@ -263,11 +284,6 @@ typedef struct {
 	MonoString *msg;
 	MonoString *type_name;
 } MonoTypeLoadException;
-
-typedef struct {
-	MonoException base;
-	MonoObject *wrapped_exception;
-} MonoRuntimeWrappedException;
 
 typedef struct {
 	MonoObject   object;
@@ -359,6 +375,7 @@ typedef struct {
 	MonoObject obj;
 	gint32 il_offset;
 	gint32 native_offset;
+	gint64 method_address;
 	MonoReflectionMethod *method;
 	MonoString *filename;
 	gint32 line;
@@ -398,7 +415,7 @@ struct _MonoInternalThread {
 	gpointer suspend_event;
 	gpointer suspended_event;
 	gpointer resume_event;
-	CRITICAL_SECTION *synch_cs;
+	mono_mutex_t *synch_cs;
 	MonoBoolean threadpool_thread;
 	MonoBoolean thread_dump_requested;
 	MonoBoolean thread_interrupt_requested;
@@ -414,13 +431,13 @@ struct _MonoInternalThread {
 	gpointer android_tid;
 	gpointer thread_pinning_ref;
 	gint32 ignore_next_signal;
+	MonoMethod *async_invoke_method;
 	/* 
 	 * These fields are used to avoid having to increment corlib versions
 	 * when a new field is added to this structure.
 	 * Please synchronize any changes with InternalThread in Thread.cs, i.e. add the
 	 * same field there.
 	 */
-	gpointer unused0;
 	gpointer unused1;
 	gpointer unused2;
 };
@@ -512,6 +529,37 @@ typedef struct {
 
 typedef struct {
 	MonoObject obj;
+	MonoString *NativeName;
+	MonoArray *ShortDatePatterns;
+	MonoArray *YearMonthPatterns;
+	MonoArray *LongDatePatterns;
+	MonoString *MonthDayPattern;
+
+	MonoArray *EraNames;
+	MonoArray *AbbreviatedEraNames;
+	MonoArray *AbbreviatedEnglishEraNames;
+	MonoArray *DayNames;
+	MonoArray *AbbreviatedDayNames;
+	MonoArray *SuperShortDayNames;
+	MonoArray *MonthNames;
+	MonoArray *AbbreviatedMonthNames;
+	MonoArray *GenitiveMonthNames;
+	MonoArray *GenitiveAbbreviatedMonthNames;
+} MonoCalendarData;
+
+typedef struct {
+	MonoObject obj;
+	MonoString *AMDesignator;
+	MonoString *PMDesignator;
+	MonoString *TimeSeparator;
+	MonoArray *LongTimePatterns;
+	MonoArray *ShortTimePatterns;
+	guint32 FirstDayOfWeek;
+	guint32 CalendarWeekRule;
+} MonoCultureData;
+
+typedef struct {
+	MonoObject obj;
 	MonoBoolean is_read_only;
 	gint32 lcid;
 	gint32 parent_lcid;
@@ -575,15 +623,18 @@ typedef struct {
 	void     (*set_cast_details) (MonoClass *from, MonoClass *to);
 	void     (*debug_log) (int level, MonoString *category, MonoString *message);
 	gboolean (*debug_log_is_enabled) (void);
+	gboolean (*tls_key_supported) (MonoTlsKey key);
 } MonoRuntimeCallbacks;
 
 typedef gboolean (*MonoInternalStackWalk) (MonoStackFrameInfo *frame, MonoContext *ctx, gpointer data);
+typedef gboolean (*MonoInternalExceptionFrameWalk) (MonoMethod *method, gpointer ip, size_t native_offset, gboolean managed, gpointer user_data);
 
 typedef struct {
 	void (*mono_walk_stack_with_ctx) (MonoInternalStackWalk func, MonoContext *ctx, MonoUnwindOptions options, void *user_data);
 	void (*mono_walk_stack_with_state) (MonoInternalStackWalk func, MonoThreadUnwindState *state, MonoUnwindOptions options, void *user_data);
 	void (*mono_raise_exception) (MonoException *ex);
 	void (*mono_raise_exception_with_ctx) (MonoException *ex, MonoContext *ctx);
+	gboolean (*mono_exception_walk_trace) (MonoException *ex, MonoInternalExceptionFrameWalk func, gpointer user_data);
 	gboolean (*mono_install_handler_block_guard) (MonoThreadUnwindState *unwind_state);
 } MonoRuntimeExceptionHandlingCallbacks;
 
@@ -613,10 +664,6 @@ mono_message_init	    (MonoDomain *domain, MonoMethodMessage *this_obj,
 			     MonoReflectionMethod *method, MonoArray *out_args) MONO_INTERNAL;
 
 MonoObject *
-mono_remoting_invoke	    (MonoObject *real_proxy, MonoMethodMessage *msg, 
-			     MonoObject **exc, MonoArray **out_args) MONO_INTERNAL;
-
-MonoObject *
 mono_message_invoke	    (MonoObject *target, MonoMethodMessage *msg, 
 			     MonoObject **exc, MonoArray **out_args) MONO_INTERNAL;
 
@@ -628,7 +675,7 @@ void
 mono_method_return_message_restore (MonoMethod *method, gpointer *params, MonoArray *out_args) MONO_INTERNAL;
 
 void
-mono_delegate_ctor_with_method (MonoObject *this, MonoObject *target, gpointer addr, MonoMethod *method) MONO_INTERNAL;
+mono_delegate_ctor_with_method (MonoObject *this_obj, MonoObject *target, gpointer addr, MonoMethod *method) MONO_INTERNAL;
 
 void
 mono_delegate_ctor	    (MonoObject *this_obj, MonoObject *target, gpointer addr) MONO_INTERNAL;
@@ -1371,6 +1418,7 @@ guint32       mono_image_create_method_token (MonoDynamicImage *assembly, MonoOb
 void          mono_image_module_basic_init (MonoReflectionModuleBuilder *module) MONO_INTERNAL;
 void          mono_image_register_token (MonoDynamicImage *assembly, guint32 token, MonoObject *obj) MONO_INTERNAL;
 void          mono_dynamic_image_free (MonoDynamicImage *image) MONO_INTERNAL;
+void          mono_dynamic_image_free_image (MonoDynamicImage *image) MONO_INTERNAL;
 void          mono_image_set_wrappers_type (MonoReflectionModuleBuilder *mb, MonoReflectionType *type) MONO_INTERNAL;
 void          mono_dynamic_image_release_gc_roots (MonoDynamicImage *image) MONO_INTERNAL;
 
@@ -1393,8 +1441,8 @@ void        mono_reflection_initialize_generic_parameter (MonoReflectionGenericP
 void        mono_reflection_create_unmanaged_type (MonoReflectionType *type) MONO_INTERNAL;
 void        mono_reflection_register_with_runtime (MonoReflectionType *type) MONO_INTERNAL;
 
-void        mono_reflection_create_custom_attr_data_args (MonoImage *image, MonoMethod *method, const guchar *data, guint32 len, MonoArray **typed_args, MonoArray **named_args, CattrNamedArg **named_arg_info) MONO_INTERNAL;
-MonoMethodSignature * mono_reflection_lookup_signature (MonoImage *image, MonoMethod *method, guint32 token) MONO_INTERNAL;
+void        mono_reflection_create_custom_attr_data_args (MonoImage *image, MonoMethod *method, const guchar *data, guint32 len, MonoArray **typed_args, MonoArray **named_args, CattrNamedArg **named_arg_info, MonoError *error) MONO_INTERNAL;
+MonoMethodSignature * mono_reflection_lookup_signature (MonoImage *image, MonoMethod *method, guint32 token, MonoError *error) MONO_INTERNAL;
 
 MonoArray* mono_param_get_objects_internal  (MonoDomain *domain, MonoMethod *method, MonoClass *refclass) MONO_INTERNAL;
 
@@ -1456,13 +1504,19 @@ void
 mono_array_full_copy (MonoArray *src, MonoArray *dest) MONO_INTERNAL;
 
 gboolean
-mono_array_calc_byte_len (MonoClass *class, uintptr_t len, uintptr_t *res) MONO_INTERNAL;
+mono_array_calc_byte_len (MonoClass *klass, uintptr_t len, uintptr_t *res) MONO_INTERNAL;
+
+#ifndef DISABLE_REMOTING
+MonoObject *
+mono_remoting_invoke	    (MonoObject *real_proxy, MonoMethodMessage *msg, 
+			     MonoObject **exc, MonoArray **out_args) MONO_INTERNAL;
 
 gpointer
 mono_remote_class_vtable (MonoDomain *domain, MonoRemoteClass *remote_class, MonoRealProxy *real_proxy) MONO_INTERNAL;
 
 void
 mono_upgrade_remote_class (MonoDomain *domain, MonoObject *tproxy, MonoClass *klass) MONO_INTERNAL;
+#endif
 
 gpointer
 mono_create_ftnptr (MonoDomain *domain, gpointer addr) MONO_INTERNAL;
@@ -1541,7 +1595,7 @@ void
 mono_runtime_unhandled_exception_policy_set (MonoRuntimeUnhandledExceptionPolicy policy) MONO_INTERNAL;
 
 MonoVTable *
-mono_class_try_get_vtable (MonoDomain *domain, MonoClass *class) MONO_INTERNAL;
+mono_class_try_get_vtable (MonoDomain *domain, MonoClass *klass) MONO_INTERNAL;
 
 MonoException *
 mono_runtime_class_init_full (MonoVTable *vtable, gboolean raise_exception) MONO_INTERNAL;
@@ -1550,16 +1604,16 @@ void
 mono_method_clear_object (MonoDomain *domain, MonoMethod *method) MONO_INTERNAL;
 
 void
-mono_class_compute_gc_descriptor (MonoClass *class) MONO_INTERNAL;
+mono_class_compute_gc_descriptor (MonoClass *klass) MONO_INTERNAL;
 
 gsize*
-mono_class_compute_bitmap (MonoClass *class, gsize *bitmap, int size, int offset, int *max_set, gboolean static_fields) MONO_INTERNAL;
+mono_class_compute_bitmap (MonoClass *klass, gsize *bitmap, int size, int offset, int *max_set, gboolean static_fields) MONO_INTERNAL;
 
 MonoObject*
 mono_object_xdomain_representation (MonoObject *obj, MonoDomain *target_domain, MonoObject **exc) MONO_INTERNAL;
 
 gboolean
-mono_class_is_reflection_method_or_constructor (MonoClass *class) MONO_INTERNAL;
+mono_class_is_reflection_method_or_constructor (MonoClass *klass) MONO_INTERNAL;
 
 MonoObject *
 mono_get_object_from_blob (MonoDomain *domain, MonoType *type, const char *blob) MONO_INTERNAL;
@@ -1580,7 +1634,7 @@ void
 mono_field_static_get_value_for_thread (MonoInternalThread *thread, MonoVTable *vt, MonoClassField *field, void *value) MONO_INTERNAL;
 
 /* exported, used by the debugger */
-void *
+MONO_API void *
 mono_vtable_get_static_field_data (MonoVTable *vt);
 
 char *
@@ -1600,6 +1654,9 @@ mono_exception_get_native_backtrace (MonoException *exc) MONO_INTERNAL;
 
 MonoString *
 ves_icall_Mono_Runtime_GetNativeStackTrace (MonoException *exc) MONO_INTERNAL;
+
+char *
+mono_exception_get_managed_backtrace (MonoException *exc) MONO_INTERNAL;
 
 #endif /* __MONO_OBJECT_INTERNALS_H__ */
 

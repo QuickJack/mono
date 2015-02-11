@@ -165,42 +165,42 @@ namespace System.Xml.Linq
 		
 		internal void OnAddingObject (object addedObject)
 		{
-			OnChanging (addedObject, new XObjectChangeEventArgs (XObjectChange.Add));
+			OnChanging (addedObject, XObjectChangeEventArgs.Add);
 		}
 
 		internal void OnAddedObject (object addedObject)
 		{
-			OnChanged (addedObject, new XObjectChangeEventArgs (XObjectChange.Add));
+			OnChanged (addedObject, XObjectChangeEventArgs.Add);
 		}
 
 		internal void OnNameChanging (object renamedObject)
 		{
-			OnChanging (renamedObject, new XObjectChangeEventArgs (System.Xml.Linq.XObjectChange.Name));
+			OnChanging (renamedObject, XObjectChangeEventArgs.Name);
 		}
 
 		internal void OnNameChanged (object renamedObject)
 		{
-			OnChanged (renamedObject, new XObjectChangeEventArgs (System.Xml.Linq.XObjectChange.Name));
+			OnChanged (renamedObject, XObjectChangeEventArgs.Name);
 		}
 		
 		internal void OnRemovingObject (object removedObject)
 		{
-			OnChanging (removedObject, new XObjectChangeEventArgs (XObjectChange.Remove));
+			OnChanging (removedObject, XObjectChangeEventArgs.Remove);
 		}
 
 		internal void OnRemovedObject (object removedObject)
 		{
-			OnChanged (removedObject, new XObjectChangeEventArgs (XObjectChange.Remove));
+			OnChanged (removedObject, XObjectChangeEventArgs.Remove);
 		}
 
 		internal void OnValueChanging (object changedObject)
 		{
-			OnChanging (changedObject, new XObjectChangeEventArgs (XObjectChange.Value));
+			OnChanging (changedObject, XObjectChangeEventArgs.Value);
 		}
 
 		internal void OnValueChanged (object changedObject)
 		{
-			OnChanged (changedObject, new XObjectChangeEventArgs (XObjectChange.Value));
+			OnChanged (changedObject, XObjectChangeEventArgs.Value);
 		}
 
 		
@@ -208,16 +208,16 @@ namespace System.Xml.Linq
 		{
 			if (Changing != null)
 				Changing (sender, args);
-			if (Parent != null)
-				Parent.OnChanging (sender, args);
+			if (Owner != null)
+				Owner.OnChanging (sender, args);
 		}
 
 		void OnChanged (object sender, XObjectChangeEventArgs args)
 		{
 			if (Changed != null)
 				Changed (sender, args);
-			if (Parent != null)
-				Parent.OnChanged (sender, args);
+			if (Owner != null)
+				Owner.OnChanged (sender, args);
 		}
 	}
 }

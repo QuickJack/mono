@@ -1,24 +1,25 @@
 ACLOCAL_AMFLAGS = -I m4
 
-MOONLIGHT_SUBDIRS = $(libgc_dir) eglib/src mono
+AM_CFLAGS = $(WERROR_CFLAGS)
+
 MONOTOUCH_SUBDIRS = $(libgc_dir) eglib/src mono
 
 if CROSS_COMPILING
-SUBDIRS = po $(libgc_dir) eglib mono $(ikvm_native_dir) data runtime scripts man samples msvc $(docs_dir)
+SUBDIRS = po $(libgc_dir) eglib mono $(ikvm_native_dir) support data runtime scripts man samples msvc $(docs_dir)
 # Keep in sync with SUBDIRS
 ## 'tools' is not normally built
-DIST_SUBDIRS = m4 po libgc eglib mono ikvm-native data runtime scripts man samples tools msvc docs
+DIST_SUBDIRS = m4 po $(libgc_dir) eglib mono ikvm-native support data runtime scripts man samples tools msvc docs
 else
 if ONLY_MONOTOUCH
 SUBDIRS = $(MONOTOUCH_SUBDIRS) runtime
 else
-if ONLY_MOONLIGHT
-SUBDIRS = $(MOONLIGHT_SUBDIRS) runtime
+if ONLY_XAMMAC
+SUBDIRS = $(libgc_dir) eglib/src mono runtime
 else
 SUBDIRS = po $(libgc_dir) eglib mono $(ikvm_native_dir) support data runtime scripts man samples msvc $(docs_dir)
 # Keep in sync with SUBDIRS
 ## 'tools' is not normally built
-DIST_SUBDIRS = m4 po libgc eglib mono ikvm-native support data runtime scripts man samples tools msvc docs
+DIST_SUBDIRS = m4 po $(libgc_dir) eglib mono ikvm-native support data runtime scripts man samples tools msvc docs
 endif
 endif
 endif
@@ -32,6 +33,7 @@ update_submodules:
 .PHONY: update_submodules
 
 EXTRA_DIST= \
+        README.md \
 	    LICENSE \
 	    autogen.sh \
 	    build-mingw32.sh \
@@ -48,7 +50,11 @@ GIT_DIR ?= $(srcdir)/.git
 dist-hook:
 	test -d $(distdir)/mcs || mkdir $(distdir)/mcs
 	d=`cd $(distdir)/mcs && pwd`; cd $(mcs_topdir) && $(MAKE) distdir=$$d dist-recursive
-	rm -rf `find $(top_distdir)/external -path '*\.git' -and -type d`
+	rm -rf `find $(top_distdir)/external -path '*\.git'`
+	rm -f `find $(top_distdir)/external -path '*\.exe'`
+	rm -f `find $(top_distdir)/external -path '*\.dll' -not -path '*/binary-reference-assemblies/v4\.0*'`
+	cp mcs/class/lib/basic/System.Configuration.dll mcs/class/lib/monolite/
+	cp mcs/class/lib/basic/System.Security.dll mcs/class/lib/monolite/
 # Disable this for now because it is very slow and causes wrench to timeout:
 #	test ! -d $(GIT_DIR) || ./scripts/commits-to-changelog.py --root=$(distdir) last-commit-with-compulsory-changelog-entry
 
@@ -91,31 +97,6 @@ mcs-do-compiler-tests:
 .PHONY: bootstrap-world
 bootstrap-world: compiler-tests
 	$(MAKE) install
-
-if MOONLIGHT
-moon-do-build: config.h
-	@list='$(MOONLIGHT_SUBDIRS)'; for subdir in $$list; do \
-	  case "x$$subdir" in \
-		xmono ) target="moon-do-build";; \
-		* ) target="all";; \
-	  esac; \
-	  echo "Making $$target in $$subdir"; \
-	  (cd $$subdir && $(MAKE) $(AM_MAKEFLAGS) $$target); \
-        done;
-	(cd runtime && $(MAKE) $(AM_MAKEFLAGS) moon-do-build)
-
-moon-do-clean:
-	@list='$(MOONLIGHT_SUBDIRS)'; for subdir in $$list; do \
-	  case "x$$subdir" in \
-		xmono ) target="moon-do-clean";; \
-		* ) target="clean";; \
-	  esac; \
-	  echo "Making $$target in $$subdir"; \
-	  (cd $$subdir && $(MAKE) $(AM_MAKEFLAGS) $$target); \
-        done;
-	(cd runtime && $(MAKE) $(AM_MAKEFLAGS) moon-do-clean)
-
-endif
 
 if INSTALL_MONOTOUCH
 monotouch-do-build: config.h
@@ -174,7 +155,6 @@ package-inputs:
 		cat msvc/scripts/inputs/$$2.input | sed -e 's/\\\\/\\/g' -e 's/\\/\\\\/g' | \
 		(echo "    <project dir=\"$$1\" library=\"$$2\">"; \
 		 read boot;   echo "      <boot>$$boot</boot>"; \
-		 read mcs;    echo "      <mcs>$$mcs</mcs>"; \
 		 read flags;  echo "      <flags>$$flags</flags>"; \
 		 read output; echo "      <output>$$output</output>"; \
 		 read built;  echo "      <built_sources>`echo $$built | sed 's/\\\/\\\\/g'`</built_sources>"; \
@@ -185,4 +165,10 @@ package-inputs:
 		 echo "    </project>") >> msvc/scripts/order.xml; \
 	done
 	echo "</root>" >> msvc/scripts/order.xml
+
+# Update llvm version in configure.ac to the output of $LLVM_DIR/bin/llvm-config --version
+update-llvm-version:
+	if test "x$$LLVM_DIR" = "x"; then echo "Set the make variable LLVM_DIR to the directory containing the LLVM installation."; exit 1; fi
+	REV=`$(LLVM_DIR)/bin/llvm-config --version` && sed -e "s,expected_llvm_version=.*,expected_llvm_version=\"$$REV\"," < configure.ac > tmp && mv tmp configure.ac && echo "Version set to $$REV."
+
 

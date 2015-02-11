@@ -33,7 +33,6 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-using System.Collections;
 using System.Globalization;
 using System.IO;
 using System.Reflection;
@@ -42,6 +41,7 @@ using System.Reflection.Emit;
 #endif
 using System.Threading;
 using System.Runtime.CompilerServices;
+using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Remoting;
 using System.Runtime.Remoting.Contexts;
@@ -60,17 +60,15 @@ using System.Text;
 namespace System {
 
 	[ComVisible (true)]
-#if !NET_2_1 || MOONLIGHT
+#if !MOBILE
 	[ComDefaultInterface (typeof (_AppDomain))]
 #endif
 	[ClassInterface(ClassInterfaceType.None)]
 	[StructLayout (LayoutKind.Sequential)]
-#if MOONLIGHT
-	public sealed class AppDomain : _AppDomain {
-#elif NET_2_1
-	public sealed class AppDomain : MarshalByRefObject, _AppDomain {
+#if MOBILE
+	public sealed partial class AppDomain : MarshalByRefObject {
 #else
-	public sealed class AppDomain : MarshalByRefObject, _AppDomain, IEvidenceFactory {
+	public sealed partial class AppDomain : MarshalByRefObject, _AppDomain, IEvidenceFactory {
 #endif
         #pragma warning disable 169
         #region Sync with object-internals.h
@@ -80,14 +78,14 @@ namespace System {
 		static string _process_guid;
 
 		[ThreadStatic]
-		static Hashtable type_resolve_in_progress;
+		static Dictionary<string, object> type_resolve_in_progress;
 
 		[ThreadStatic]
-		static Hashtable assembly_resolve_in_progress;
+		static Dictionary<string, object> assembly_resolve_in_progress;
 
 		[ThreadStatic]
-		static Hashtable assembly_resolve_in_progress_refonly;
-#if !MOONLIGHT
+		static Dictionary<string, object> assembly_resolve_in_progress_refonly;
+#if !MOBILE
 		// CAS
 		private Evidence _evidence;
 		private PermissionSet _granted;
@@ -97,7 +95,18 @@ namespace System {
 
 		[ThreadStatic]
 		private static IPrincipal _principal;
+#else
+		object _evidence;
+		object _granted;
+
+		// non-CAS
+		int _principalPolicy;
+
+		[ThreadStatic]
+		static object _principal;
 #endif
+
+
 		static AppDomain default_domain;
 
 		private AppDomain ()
@@ -127,7 +136,6 @@ namespace System {
 			get { throw new NotImplementedException (); }
 		}
 #endif
-#if !MOONLIGHT
 		public string BaseDirectory {
 			get {
 				string path = SetupInformationNoCopy.ApplicationBase;
@@ -176,7 +184,6 @@ namespace System {
 				return (SetupInformationNoCopy.ShadowCopyFiles == "true");
 			}
 		}
-#endif
 
 		[MethodImplAttribute (MethodImplOptions.InternalCall)]
 		private extern string getFriendlyName ();
@@ -186,9 +193,12 @@ namespace System {
 				return getFriendlyName ();
 			}
 		}
-#if !MOONLIGHT
+
 		public Evidence Evidence {
 			get {
+#if MONOTOUCH
+				return null;
+#else
 				// if the host (runtime) hasn't provided it's own evidence...
 				if (_evidence == null) {
 					// ... we will provide our own
@@ -208,14 +218,15 @@ namespace System {
 						}
 					}
 				}
-				return new Evidence (_evidence);	// return a copy
+				return new Evidence ((Evidence)_evidence);	// return a copy
+#endif
 			}
 		}
 
 		internal IPrincipal DefaultPrincipal {
 			get {
 				if (_principal == null) {
-					switch (_principalPolicy) {
+					switch ((PrincipalPolicy)_principalPolicy) {
 						case PrincipalPolicy.UnauthenticatedPrincipal:
 							_principal = new GenericPrincipal (
 								new GenericIdentity (String.Empty, String.Empty), null);
@@ -225,22 +236,19 @@ namespace System {
 							break;
 					}
 				}
-				return _principal; 
+				return (IPrincipal)_principal; 
 			}
 		}
 
 		// for AppDomain there is only an allowed (i.e. granted) set
 		// http://msdn.microsoft.com/library/en-us/cpguide/html/cpcondetermininggrantedpermissions.asp
 		internal PermissionSet GrantedPermissionSet {
-			get { return _granted; }
+			get { return (PermissionSet)_granted; }
 		}
-#endif
 
-#if NET_4_0
 		public PermissionSet PermissionSet {
-			get { return _granted ?? (_granted = new PermissionSet (PermissionState.Unrestricted)); }
+			get { return (PermissionSet)_granted ?? (PermissionSet)(_granted = new PermissionSet (PermissionState.Unrestricted)); }
 		}
-#endif
 
 		[MethodImplAttribute (MethodImplOptions.InternalCall)]
 		private static extern AppDomain getCurDomain ();
@@ -266,8 +274,6 @@ namespace System {
 				return default_domain;
 			}
 		}
-
-#if !MOONLIGHT
 
 		[Obsolete ("AppDomain.AppendPrivatePath has been deprecated. Please investigate the use of AppDomainSetup.PrivateBinPath instead.")]
 		[SecurityPermission (SecurityAction.LinkDemand, ControlAppDomain = true)]
@@ -317,7 +323,6 @@ namespace System {
 			return Activator.CreateComInstanceFrom (assemblyFile, typeName, hashValue ,hashAlgorithm);
 		}
 #endif
-#endif
 
 		public ObjectHandle CreateInstance (string assemblyName, string typeName)
 		{
@@ -335,9 +340,7 @@ namespace System {
 			return Activator.CreateInstance (assemblyName, typeName, activationAttributes);
 		}
 
-#if NET_4_0
 		[Obsolete ("Use an overload that does not take an Evidence parameter")]
-#endif
 		public ObjectHandle CreateInstance (string assemblyName, string typeName, bool ignoreCase, BindingFlags bindingAttr,
 		                                    Binder binder, object[] args, CultureInfo culture, object[] activationAttributes,
 		                                    Evidence securityAttributes)
@@ -361,9 +364,7 @@ namespace System {
 			return (oh != null) ? oh.Unwrap () : null;
 		}
 
-#if NET_4_0
 		[Obsolete ("Use an overload that does not take an Evidence parameter")]
-#endif
 		public object CreateInstanceAndUnwrap (string assemblyName, string typeName, bool ignoreCase,
 		                                       BindingFlags bindingAttr, Binder binder, object[] args, CultureInfo culture,
 		                                       object[] activationAttributes, Evidence securityAttributes)
@@ -373,7 +374,6 @@ namespace System {
 			return (oh != null) ? oh.Unwrap () : null;
 		}
 
-#if NET_4_0
 		public ObjectHandle CreateInstance (string assemblyName, string typeName, bool ignoreCase, BindingFlags bindingAttr,
 		                                    Binder binder, object[] args, CultureInfo culture, object[] activationAttributes)
 		{
@@ -412,7 +412,6 @@ namespace System {
 
 			return (oh != null) ? oh.Unwrap () : null;
 		}
-#endif
 
 		public ObjectHandle CreateInstanceFrom (string assemblyFile, string typeName)
 		{
@@ -430,9 +429,7 @@ namespace System {
 			return Activator.CreateInstanceFrom (assemblyFile, typeName, activationAttributes);
 		}
 
-#if NET_4_0
 		[Obsolete ("Use an overload that does not take an Evidence parameter")]
-#endif
 		public ObjectHandle CreateInstanceFrom (string assemblyFile, string typeName, bool ignoreCase,
 		                                        BindingFlags bindingAttr, Binder binder, object[] args, CultureInfo culture,
 		                                        object[] activationAttributes, Evidence securityAttributes)
@@ -456,9 +453,7 @@ namespace System {
 			return (oh != null) ? oh.Unwrap () : null;
 		}
 
-#if NET_4_0
 		[Obsolete ("Use an overload that does not take an Evidence parameter")]
-#endif
 		public object CreateInstanceFromAndUnwrap (string assemblyName, string typeName, bool ignoreCase,
 		                                           BindingFlags bindingAttr, Binder binder, object[] args,
 		                                           CultureInfo culture, object[] activationAttributes,
@@ -476,9 +471,7 @@ namespace System {
 			return DefineDynamicAssembly (name, access, null, null, null, null, null, false);
 		}
 
-#if NET_4_0
 		[Obsolete ("Declarative security for assembly level is no longer enforced")]
-#endif
 		public AssemblyBuilder DefineDynamicAssembly (AssemblyName name, AssemblyBuilderAccess access, Evidence evidence)
 		{
 			return DefineDynamicAssembly (name, access, null, evidence, null, null, null, false);
@@ -489,18 +482,14 @@ namespace System {
 			return DefineDynamicAssembly (name, access, dir, null, null, null, null, false);
 		}
 
-#if NET_4_0
 		[Obsolete ("Declarative security for assembly level is no longer enforced")]
-#endif
 		public AssemblyBuilder DefineDynamicAssembly (AssemblyName name, AssemblyBuilderAccess access, string dir,
 		                                              Evidence evidence)
 		{
 			return DefineDynamicAssembly (name, access, dir, evidence, null, null, null, false);
 		}
 
-#if NET_4_0
 		[Obsolete ("Declarative security for assembly level is no longer enforced")]
-#endif
 		public AssemblyBuilder DefineDynamicAssembly (AssemblyName name, AssemblyBuilderAccess access,
 		                                              PermissionSet requiredPermissions,
 		                                              PermissionSet optionalPermissions,
@@ -510,9 +499,7 @@ namespace System {
 				refusedPermissions, false);
 		}
 
-#if NET_4_0
 		[Obsolete ("Declarative security for assembly level is no longer enforced")]
-#endif
 		public AssemblyBuilder DefineDynamicAssembly (AssemblyName name, AssemblyBuilderAccess access, Evidence evidence,
 		                                              PermissionSet requiredPermissions,
 		                                              PermissionSet optionalPermissions,
@@ -522,9 +509,7 @@ namespace System {
 				refusedPermissions, false);
 		}
 
-#if NET_4_0
 		[Obsolete ("Declarative security for assembly level is no longer enforced")]
-#endif
 		public AssemblyBuilder DefineDynamicAssembly (AssemblyName name, AssemblyBuilderAccess access, string dir,
 		                                              PermissionSet requiredPermissions,
 		                                              PermissionSet optionalPermissions,
@@ -534,9 +519,7 @@ namespace System {
 				refusedPermissions, false);
 		}
 
-#if NET_4_0
 		[Obsolete ("Declarative security for assembly level is no longer enforced")]
-#endif
 		public AssemblyBuilder DefineDynamicAssembly (AssemblyName name, AssemblyBuilderAccess access, string dir,
 		                                              Evidence evidence,
 		                                              PermissionSet requiredPermissions,
@@ -547,9 +530,7 @@ namespace System {
 				refusedPermissions, false);
 		}
 
-#if NET_4_0
 		[Obsolete ("Declarative security for assembly level is no longer enforced")]
-#endif
 		public AssemblyBuilder DefineDynamicAssembly (AssemblyName name, AssemblyBuilderAccess access, string dir,
 		                                              Evidence evidence,
 		                                              PermissionSet requiredPermissions,
@@ -568,9 +549,7 @@ namespace System {
 		}
 
 		// NET 3.5 method
-#if NET_4_0
 		[Obsolete ("Declarative security for assembly level is no longer enforced")]
-#endif
 		public AssemblyBuilder DefineDynamicAssembly (AssemblyName name, AssemblyBuilderAccess access, string dir,
 		                                              Evidence evidence,
 		                                              PermissionSet requiredPermissions,
@@ -591,7 +570,6 @@ namespace System {
 			return DefineDynamicAssembly (name, access, null, null, null, null, null, false, assemblyAttributes);
 		}
 
-#if NET_4_0
 		public AssemblyBuilder DefineDynamicAssembly (AssemblyName name, AssemblyBuilderAccess access, string dir, bool isSynchronized, IEnumerable<CustomAttributeBuilder> assemblyAttributes)
 		{
 			return DefineDynamicAssembly (name, access, dir, null, null, null, null, isSynchronized, assemblyAttributes);
@@ -602,7 +580,6 @@ namespace System {
 		{
 			return DefineDynamicAssembly (name, access, assemblyAttributes);
 		}
-#endif
 
 		internal AssemblyBuilder DefineInternalDynamicAssembly (AssemblyName name, AssemblyBuilderAccess access)
 		{
@@ -625,26 +602,20 @@ namespace System {
 			return ExecuteAssembly (assemblyFile, (Evidence)null, null);
 		}
 
-#if NET_4_0
 		[Obsolete ("Use an overload that does not take an Evidence parameter")]
-#endif
 		public int ExecuteAssembly (string assemblyFile, Evidence assemblySecurity)
 		{
 			return ExecuteAssembly (assemblyFile, assemblySecurity, null);
 		}
 
-#if NET_4_0
 		[Obsolete ("Use an overload that does not take an Evidence parameter")]
-#endif
 		public int ExecuteAssembly (string assemblyFile, Evidence assemblySecurity, string[] args)
 		{
 			Assembly a = Assembly.LoadFrom (assemblyFile, assemblySecurity);
 			return ExecuteAssemblyInternal (a, args);
 		}
 
-#if NET_4_0
 		[Obsolete ("Use an overload that does not take an Evidence parameter")]
-#endif
 		public int ExecuteAssembly (string assemblyFile, Evidence assemblySecurity, string[] args, byte[] hashValue, AssemblyHashAlgorithm hashAlgorithm)
 		{
 			Assembly a = Assembly.LoadFrom (assemblyFile, assemblySecurity, hashValue, hashAlgorithm);
@@ -652,7 +623,6 @@ namespace System {
 		}
 
 
-#if NET_4_0
 		public int ExecuteAssembly (string assemblyFile, string[] args)
 		{
 			Assembly a = Assembly.LoadFrom (assemblyFile, null);
@@ -664,7 +634,6 @@ namespace System {
 			Assembly a = Assembly.LoadFrom (assemblyFile, null, hashValue, hashAlgorithm);
 			return ExecuteAssemblyInternal (a, args);
 		}
-#endif
 
 		int ExecuteAssemblyInternal (Assembly a, string[] args)
 		{
@@ -692,12 +661,10 @@ namespace System {
 			return base.GetType ();
 		}
 
-#if !MOONLIGHT
 		public override object InitializeLifetimeService ()
 		{
 			return null;
 		}
-#endif
 
 		[MethodImplAttribute (MethodImplOptions.InternalCall)]
 		internal extern Assembly LoadAssembly (string assemblyRef, Evidence securityEvidence, bool refOnly);
@@ -718,9 +685,7 @@ namespace System {
 			return result;
 		}
 
-#if NET_4_0
 		[Obsolete ("Use an overload that does not take an Evidence parameter")]
-#endif
 		public Assembly Load (AssemblyName assemblyRef, Evidence assemblySecurity)
 		{
 			if (assemblyRef == null)
@@ -777,9 +742,7 @@ namespace System {
 			return Load (assemblyString, null, false);
 		}
 
-#if NET_4_0
 		[Obsolete ("Use an overload that does not take an Evidence parameter")]
-#endif
 		public Assembly Load (string assemblyString, Evidence assemblySecurity)
 		{
 			return Load (assemblyString, assemblySecurity, false);
@@ -812,9 +775,7 @@ namespace System {
 		[MethodImplAttribute (MethodImplOptions.InternalCall)]
 		internal extern Assembly LoadAssemblyRaw (byte[] rawAssembly, byte[] rawSymbolStore, Evidence securityEvidence, bool refonly);
 
-#if NET_4_0
 		[Obsolete ("Use an overload that does not take an Evidence parameter")]
-#endif
 		public Assembly Load (byte[] rawAssembly, byte[] rawSymbolStore, Evidence securityEvidence)
 		{
 			return Load (rawAssembly, rawSymbolStore, securityEvidence, false);
@@ -829,10 +790,7 @@ namespace System {
 			assembly.FromByteArray = true;
 			return assembly;
 		}
-#if !MOONLIGHT
-#if NET_4_0
 		[Obsolete ("AppDomain policy levels are obsolete")]
-#endif
 		[SecurityPermission (SecurityAction.Demand, ControlPolicy = true)]
 		public void SetAppDomainPolicy (PolicyLevel domainPolicy)
 		{
@@ -845,7 +803,7 @@ namespace System {
 			if (IsFinalizingForUnload ())
 				throw new AppDomainUnloadedException ();
 
-			PolicyStatement ps = domainPolicy.Resolve (_evidence);
+			PolicyStatement ps = domainPolicy.Resolve ((Evidence)_evidence);
 			_granted = ps.PermissionSet;
 		}
 
@@ -862,7 +820,11 @@ namespace System {
 			if (IsFinalizingForUnload ())
 				throw new AppDomainUnloadedException ();
 
+#if MOBILE
+			_principalPolicy = (int)policy;
+#else
 			_principalPolicy = policy;
+#endif
 			_principal = null;
 		}
 
@@ -892,7 +854,7 @@ namespace System {
 
 			_principal = principal;
 		}
-#endif
+
 		[MethodImplAttribute (MethodImplOptions.InternalCall)]
 		private static extern AppDomain InternalSetDomainByID (int domain_id);
  
@@ -980,8 +942,6 @@ namespace System {
 			}
 			return _process_guid;
 		}
-
-#if !MOONLIGHT
 
 		public static AppDomain CreateDomain (string friendlyName)
 		{
@@ -1111,7 +1071,7 @@ namespace System {
 			if (info == null)
 				throw new ArgumentNullException ("info");
 
-			info.ApplicationTrust = new ApplicationTrust (grantSet, fullTrustAssemblies ?? new StrongName [0]);
+			info.ApplicationTrust = new ApplicationTrust (grantSet, fullTrustAssemblies ?? EmptyArray<StrongName>.Value);
 			return CreateDomain (friendlyName, securityInfo, info);		
 		}
 #endif
@@ -1130,8 +1090,7 @@ namespace System {
 
 			return info;
 		}
-#endif // !NET_2_1
-
+		
 		[MethodImplAttribute (MethodImplOptions.InternalCall)]
 		private static extern bool InternalIsFinalizingForUnload (int domain_id);
 
@@ -1191,14 +1150,7 @@ namespace System {
 
 		public override string ToString ()
 		{
-#if !MOONLIGHT
 			return getFriendlyName ();
-#else
-			StringBuilder sb = new StringBuilder ("Name:");
-			sb.AppendLine (FriendlyName);
-			sb.AppendLine ("There are no context policies.");
-			return sb.ToString ();
-#endif
 		}
 
 		private static void ValidateAssemblyName (string name)
@@ -1243,7 +1195,7 @@ namespace System {
 			AssemblyLoad (this, new AssemblyLoadEventArgs (assembly));
 		}
 
-		private Assembly DoAssemblyResolve (string name, bool refonly)
+		private Assembly DoAssemblyResolve (string name, Assembly requestingAssembly, bool refonly)
 		{
 			ResolveEventHandler del;
 #if !NET_2_1
@@ -1258,31 +1210,31 @@ namespace System {
 				return null;
 			
 			/* Prevent infinite recursion */
-			Hashtable ht;
+			Dictionary<string, object> ht;
 			if (refonly) {
 				ht = assembly_resolve_in_progress_refonly;
 				if (ht == null) {
-					ht = new Hashtable ();
+					ht = new Dictionary<string, object> ();
 					assembly_resolve_in_progress_refonly = ht;
 				}
 			} else {
 				ht = assembly_resolve_in_progress;
 				if (ht == null) {
-					ht = new Hashtable ();
+					ht = new Dictionary<string, object> ();
 					assembly_resolve_in_progress = ht;
 				}
 			}
 
-			string s = (string) ht [name];
-			if (s != null)
+			if (ht.ContainsKey (name))
 				return null;
-			ht [name] = name;
+
+			ht [name] = null;
 			try {
 				Delegate[] invocation_list = del.GetInvocationList ();
 
 				foreach (Delegate eh in invocation_list) {
 					ResolveEventHandler handler = (ResolveEventHandler) eh;
-					Assembly assembly = handler (this, new ResolveEventArgs (name));
+					Assembly assembly = handler (this, new ResolveEventArgs (name, requestingAssembly));
 					if (assembly != null)
 						return assembly;
 				}
@@ -1308,16 +1260,15 @@ namespace System {
 				name = (string) name_or_tb;
 
 			/* Prevent infinite recursion */
-			Hashtable ht = type_resolve_in_progress;
+			var ht = type_resolve_in_progress;
 			if (ht == null) {
-				ht = new Hashtable ();
-				type_resolve_in_progress = ht;
+				type_resolve_in_progress = ht = new Dictionary<string, object> ();
 			}
 
-			if (ht.Contains (name))
+			if (ht.ContainsKey (name))
 				return null;
-			else
-				ht [name] = name;
+
+			ht [name] = null;
 
 			try {
 				foreach (Delegate d in TypeResolve.GetInvocationList ()) {
@@ -1341,11 +1292,7 @@ namespace System {
 
 			foreach (Delegate eh in invocation_list) {
 				ResolveEventHandler handler = (ResolveEventHandler) eh;
-#if NET_4_0
 				Assembly assembly = handler (this, new ResolveEventArgs (name, requesting));
-#else
-				Assembly assembly = handler (this, new ResolveEventArgs (name));
-#endif
 				if (assembly != null)
 					return assembly;
 			}
@@ -1356,6 +1303,11 @@ namespace System {
 		{
 			if (DomainUnload != null)
 				DomainUnload(this, null);
+		}
+
+		internal void DoUnhandledException (UnhandledExceptionEventArgs args) {
+			if (UnhandledException != null)
+				UnhandledException (this, args);
 		}
 
 		internal byte[] GetMarshalledDomainObjRef ()
@@ -1409,7 +1361,8 @@ namespace System {
 		[method: SecurityPermission (SecurityAction.LinkDemand, ControlAppDomain = true)]
 		public event UnhandledExceptionEventHandler UnhandledException;
 
-#if NET_4_0
+		public event EventHandler<FirstChanceExceptionEventArgs> FirstChanceException;
+
 		[MonoTODO]
 		public bool IsHomogenous {
 			get { return true; }
@@ -1419,34 +1372,42 @@ namespace System {
 		public bool IsFullyTrusted {
 			get { return true; }
 		}
-#endif
 
         #pragma warning disable 649
+#if !MOBILE
 		private AppDomainManager _domain_manager;
+#else
+		object _domain_manager;
+#endif
         #pragma warning restore 649
 
 		// default is null
 		public AppDomainManager DomainManager {
-			get { return _domain_manager; }
+			get { return (AppDomainManager)_domain_manager; }
 		}
 
-#if (!MOONLIGHT)
-
+#if !MOBILE
 		public event ResolveEventHandler ReflectionOnlyAssemblyResolve;
+#endif
 
         #pragma warning disable 649
+#if MOBILE
+		private object _activation;
+		private object _applicationIdentity;
+#else
 		private ActivationContext _activation;
 		private ApplicationIdentity _applicationIdentity;
+#endif
         #pragma warning restore 649
 
 		// properties
 
 		public ActivationContext ActivationContext {
-			get { return _activation; }
+			get { return (ActivationContext)_activation; }
 		}
 
 		public ApplicationIdentity ApplicationIdentity {
-			get { return _applicationIdentity; }
+			get { return (ApplicationIdentity)_applicationIdentity; }
 		}
 
 		public int Id {
@@ -1485,17 +1446,13 @@ namespace System {
 			return ExecuteAssemblyByName (assemblyName, (Evidence)null, null);
 		}
 
-#if NET_4_0
 		[Obsolete ("Use an overload that does not take an Evidence parameter")]
-#endif
 		public int ExecuteAssemblyByName (string assemblyName, Evidence assemblySecurity)
 		{
 			return ExecuteAssemblyByName (assemblyName, assemblySecurity, null);
 		}
 
-#if NET_4_0
 		[Obsolete ("Use an overload that does not take an Evidence parameter")]
-#endif
 		public int ExecuteAssemblyByName (string assemblyName, Evidence assemblySecurity, params string[] args)
 		{
 			Assembly a = Assembly.Load (assemblyName, assemblySecurity);
@@ -1503,9 +1460,7 @@ namespace System {
 			return ExecuteAssemblyInternal (a, args);
 		}
 
-#if NET_4_0
 		[Obsolete ("Use an overload that does not take an Evidence parameter")]
-#endif
 		public int ExecuteAssemblyByName (AssemblyName assemblyName, Evidence assemblySecurity, params string[] args)
 		{
 			Assembly a = Assembly.Load (assemblyName, assemblySecurity);
@@ -1513,7 +1468,6 @@ namespace System {
 			return ExecuteAssemblyInternal (a, args);
 		}
 
-#if NET_4_0
 		public int ExecuteAssemblyByName (string assemblyName, params string[] args)
 		{
 			Assembly a = Assembly.Load (assemblyName, null);
@@ -1527,7 +1481,6 @@ namespace System {
 
 			return ExecuteAssemblyInternal (a, args);
 		}
-#endif
 
 		public bool IsDefaultAppDomain ()
 		{
@@ -1539,16 +1492,7 @@ namespace System {
 			return GetAssemblies (true);
 		}
 
-#else // MOONLIGHT
-
-		public int ExecuteAssemblyByName (string assemblyName)
-		{
-			// critical code in SL that we're not calling in ML
-			throw new NotImplementedException ();
-		}
-#endif
-
-#if !NET_2_1
+#if !MOBILE
 		void _AppDomain.GetIDsOfNames ([In] ref Guid riid, IntPtr rgszNames, uint cNames, uint lcid, IntPtr rgDispId)
 		{
 			throw new NotImplementedException ();
@@ -1571,7 +1515,6 @@ namespace System {
 		}
 #endif
 
-#if NET_4_0 || MOONLIGHT || MOBILE
 		List<string> compatibility_switch;
 
 		public bool? IsCompatibilitySwitchSet (string value)
@@ -1615,6 +1558,5 @@ namespace System {
 		public TimeSpan MonitoringTotalProcessorTime {
 			get { throw new NotImplementedException (); }
 		}
-#endif
 	}
 }

@@ -23,7 +23,6 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if NET_2_0
 using System;
 using System.Data;
 using System.Collections;
@@ -33,7 +32,7 @@ using System.Xml.Serialization;
 using System.Xml.Schema;
 using NUnit.Framework;
 
-namespace Monotests_System.Data
+namespace MonoTests.System.Data
 {
 	[TestFixture]	
 	public class XmlDataReaderTest
@@ -41,14 +40,9 @@ namespace Monotests_System.Data
 		[Test]
 		public void XmlLoadTest ()
 		{
-			try {
 				DataSet ds = new DataSet();
 				ds.ReadXmlSchema ("Test/System.Data/TestReadXmlSchema1.xml");
 				ds.ReadXml ("Test/System.Data/TestReadXml1.xml");
-				ds = null;
-			} catch {
-				Assert.Fail ("#1 Should not throw Exception");
-			}
 		}
 		
 		// Test for Bug#377146
@@ -108,7 +102,7 @@ namespace Monotests_System.Data
 			StringReader sr = new StringReader (xml);
 			XmlTextReader xr = new XmlTextReader (sr);
 			DataTable tbl = new DataTable("CustomTypesTable");
-			tbl.Columns.Add("Dummy", typeof(System.UInt32));
+			tbl.Columns.Add("Dummy", typeof(UInt32));
 			tbl.Columns.Add("FuncXml", typeof(CustomTypeXml));
 
 			DataSet ds = new DataSet("CustomTypesData");
@@ -257,5 +251,4 @@ namespace Monotests_System.Data
 		}	
 	}
 }
-#endif
 

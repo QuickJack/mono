@@ -46,18 +46,12 @@ namespace System.Xml.Schema
 		private XmlSchemaObject sourceObj;
 		private string sourceUri;
 
-#if NET_2_0
 		public XmlSchemaException ()
 			: this ("A schema error occured.", null)
 		{
 		}
-#endif
 
-#if NET_2_0
 		public
-#else
-		internal
-#endif
 		XmlSchemaException (string message)
 			: this (message, null)
 		{
@@ -73,12 +67,10 @@ namespace System.Xml.Schema
 			this.sourceObj = info.GetValue ("sourceObj", typeof (XmlSchemaObject)) as XmlSchemaObject;
 		}
 
-#if NET_2_0
 		public XmlSchemaException (string message, Exception innerException, int lineNumber, int linePosition)
 			: this (message, lineNumber, linePosition, null, null, innerException)
 		{
 		}
-#endif
 
 		internal XmlSchemaException (string message, int lineNumber, int linePosition,
 			XmlSchemaObject sourceObject, string sourceUri, Exception innerException)
@@ -157,7 +149,7 @@ namespace System.Xml.Schema
 
 		private static string GetMessage (string message, string sourceUri, int lineNumber, int linePosition, XmlSchemaObject sourceObj)
 		{
-			string msg = "XmlSchema error: " + message;
+			string msg = message;
 			if (lineNumber > 0)
 				msg += String.Format (CultureInfo.InvariantCulture, " XML {0} Line {1}, Position {2}.",
 					(sourceUri != null && sourceUri != "") ? "URI: " + sourceUri + " ." : "",

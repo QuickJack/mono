@@ -39,6 +39,9 @@ namespace MonoTests.System.Data.SqlClient {
 	// NOTE: Most tests are are located in the base class, DBDataPermission
 
 	[TestFixture]
+#if MOBILE
+	[Ignore ("CAS is not supported and parts will be linked away")]
+#endif
 	public class SqlClientPermissionTest {
 
 		private void Check (string msg, DBDataPermission dbdp, bool blank, bool unrestricted, int count)
@@ -52,11 +55,7 @@ namespace MonoTests.System.Data.SqlClient {
 		}
 
 		[Test]
-#if NET_2_0
 		[ExpectedException (typeof (ArgumentOutOfRangeException))]
-#else
-		[ExpectedException (typeof (ArgumentException))]
-#endif
 		public void PermissionState_Invalid ()
 		{
 			PermissionState ps = (PermissionState)Int32.MinValue;

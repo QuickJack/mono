@@ -26,8 +26,6 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if  !MOONLIGHT
-
 using Mono.Security.Cryptography;
 using System.Runtime.InteropServices;
 
@@ -79,11 +77,7 @@ namespace System.Security.Cryptography {
 		{
 		}
 
-#if NET_4_0
 		public void Dispose ()
-#else
-		void IDisposable.Dispose () 
-#endif
 		{
 			_st.Clear ();
 		}
@@ -1569,5 +1563,3 @@ namespace System.Security.Cryptography {
 		#endregion
 	}
 }
-
-#endif

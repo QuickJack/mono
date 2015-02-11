@@ -80,9 +80,6 @@ using System.Web.SessionState;
 using System.Web.UI;
 using System.Web.Util;
 
-#if TARGET_J2EE
-using Mainsoft.Web;
-#endif
 	
 namespace System.Web
 {
@@ -161,15 +158,7 @@ namespace System.Web
 
 		static string binDirectory;
 		
-#if TARGET_J2EE
-		const string initialization_exception_key = "System.Web.HttpApplication.initialization_exception";
-		static Exception initialization_exception {
-			get { return (Exception) AppDomain.CurrentDomain.GetData (initialization_exception_key); }
-			set { AppDomain.CurrentDomain.SetData (initialization_exception_key, value); }
-		}
-#else
 		static volatile Exception initialization_exception;
-#endif
 		bool removeConfigurationFromCache;
 		bool fullInitComplete = false;
 		
@@ -230,6 +219,10 @@ namespace System.Web
 					}
 				} catch (Exception e) {
 					initialization_exception = e;
+					Console.Error.WriteLine("Exception while initOnce: "+e.ToString());
+					// Once initialization_exception != null, we always respond with this exception
+					// You have to restart the HttpApplication to "unlock" it
+					Console.Error.WriteLine("Please restart your app to unlock it");
 				} finally {
 					if (mustNullContext)
 						context = null;
@@ -850,13 +843,11 @@ namespace System.Web
 		{
 		}
 
-#if NET_4_0
 		public virtual string GetOutputCacheProviderName (HttpContext context)
 		{
 			// LAMESPEC: doesn't throw ProviderException if context is null
 			return OutputCache.DefaultProviderName;
 		}
-#endif
 		
 		public virtual string GetVaryByCustomString (HttpContext context, string custom)
 		{
@@ -921,33 +912,10 @@ namespace System.Web
 		internal void Tick ()
 		{
 			try {
-#if TARGET_J2EE
-				if (context.Error is UnifyRequestException) {
-					Exception ex = context.Error.InnerException;
-					context.ClearError ();
-					vmw.common.TypeUtils.Throw (ex);
-				}
-				try {
-#endif		
 				if (pipeline.MoveNext ()){
 					if ((bool)pipeline.Current)
 						PipelineDone ();
 				}
-#if TARGET_J2EE
-				}
-				catch (Exception ex) {
-					if (ex is ThreadAbortException && 
-						((ThreadAbortException) ex).ExceptionState == FlagEnd.Value)
-						throw;
-					if (context.WorkerRequest is IHttpUnifyWorkerRequest) {
-						context.ClearError ();
-						context.AddError (new UnifyRequestException (ex));
-						return;
-					}
-					else
-						throw;
-				}
-#endif
 			} catch (ThreadAbortException taex) {
 				object obj = taex.ExceptionState;
 				Thread.ResetAbort ();
@@ -1198,11 +1166,9 @@ namespace System.Web
 			Delegate eventHandler;
 			if (stop_processing)
 				yield return true;
-#if NET_4_0
 			HttpRequest req = context.Request;
 			if (req != null)
 				req.Validate ();
-#endif
 			context.MapRequestHandlerDone = false;
 			StartTimer ("BeginRequest");
 			eventHandler = Events [BeginRequestEvent];
@@ -1277,10 +1243,6 @@ namespace System.Web
 				context.Handler = handler;
 				context.PushHandler (handler);
 			} catch (FileNotFoundException fnf){
-#if TARGET_JVM
-				Console.WriteLine ("$$$$$$$$$$:Sys.Web Pipeline");
-				Console.WriteLine (fnf.ToString ());
-#endif
 				if (context.Request.IsLocal)
 					ProcessError (HttpException.NewWithCode (404,
 										 String.Format ("File not found {0}", fnf.FileName),
@@ -1341,10 +1303,6 @@ namespace System.Web
 			StopTimer ();
 			
 				
-#if TARGET_J2EE
-		processHandler:
-			bool doProcessHandler = false;
-#endif
 			
 			IHttpHandler ctxHandler = context.Handler;
 			if (ctxHandler != null && handler != ctxHandler) {
@@ -1366,10 +1324,6 @@ namespace System.Web
 					} else {
 						must_yield = false;
 						handler.ProcessRequest (context);
-#if TARGET_J2EE
-						IHttpExtendedHandler extHandler=handler as IHttpExtendedHandler;
-						doProcessHandler = extHandler != null && !extHandler.IsCompleted;
-#endif
 					}
 				} else
 					throw new InvalidOperationException ("No handler for the current request.");
@@ -1380,12 +1334,6 @@ namespace System.Web
 				context.EndTimeoutPossible ();
 			}
 			StopTimer ();
-#if TARGET_J2EE
-			if (doProcessHandler) {
-				yield return false;
-				goto processHandler;
-			}
-#endif
 			if (must_yield)
 				yield return stop_processing;
 			else if (stop_processing)
@@ -1492,9 +1440,7 @@ namespace System.Web
 			autoCulture = cfg.IsAutoCulture;
 			appui_culture = cfg.GetUICulture ();
 			autoUICulture = cfg.IsAutoUICulture;
-#if !TARGET_J2EE
 			context.StartTimeoutTimer ();
-#endif
 			Thread th = Thread.CurrentThread;
 			if (app_culture != null) {
 				prev_app_culture = th.CurrentCulture;
@@ -1510,9 +1456,7 @@ namespace System.Web
 					th.CurrentUICulture = new_app_culture;
 			}
 
-#if !TARGET_JVM
 			prev_user = Thread.CurrentPrincipal;
-#endif
 		}
 
 		void PostDone ()
@@ -1523,20 +1467,16 @@ namespace System.Web
 			}
 
 			Thread th = Thread.CurrentThread;
-#if !TARGET_JVM
 			if (Thread.CurrentPrincipal != prev_user)
 				Thread.CurrentPrincipal = prev_user;
-#endif
 			if (prev_appui_culture != null && prev_appui_culture != th.CurrentUICulture)
 				th.CurrentUICulture = prev_appui_culture;
 			if (prev_app_culture != null && prev_app_culture != th.CurrentCulture)
 				th.CurrentCulture = prev_app_culture;
 
-#if !TARGET_J2EE
 			if (context == null)
 				context = HttpContext.Current;
 			context.StopTimeoutTimer ();
-#endif
 			context.Request.ReleaseResources ();
 			context.Response.ReleaseResources ();
 			context = null;
@@ -1557,6 +1497,7 @@ namespace System.Web
 			if (initialization_exception != null) {
 				Exception e = initialization_exception;
 				HttpException exc = HttpException.NewWithCode (String.Empty, e, WebEventCodes.RuntimeErrorRequestAbort);
+				context.Response.StatusCode = 500;
 				FinalErrorWrite (context.Response, exc.GetHtmlErrorMessage ());
 				PipelineDone ();
 				return;
@@ -1672,11 +1613,7 @@ namespace System.Web
 			cultures [0] = Thread.CurrentThread.CurrentCulture;
 			cultures [1] = Thread.CurrentThread.CurrentUICulture;
 			
-#if TARGET_JVM
-			if (true)
-#else
 			if (Thread.CurrentThread.IsThreadPoolThread)
-#endif
 				Start (null);
 			else
 				ThreadPool.QueueUserWorkItem (x => {
@@ -1692,10 +1629,6 @@ namespace System.Web
 
 		void IHttpAsyncHandler.EndProcessRequest (IAsyncResult result)
 		{
-#if TARGET_J2EE
-			if (result == null)
-				result = begin_iar;
-#endif
 			if (!result.IsCompleted)
 				result.AsyncWaitHandle.WaitOne ();
 			begin_iar = null;
@@ -1816,7 +1749,6 @@ namespace System.Web
 			if (type != null)
 				return type;
 
-#if !TARGET_JVM
 			Assembly [] assemblies = AppDomain.CurrentDomain.GetAssemblies ();
 			foreach (Assembly ass in assemblies) {
 				type = ass.GetType (typeName, false);
@@ -1845,7 +1777,6 @@ namespace System.Web
 			
 			if (type != null)
 				return type;
-#endif
 			if (throwOnMissing)
 				throw new TypeLoadException (String.Format ("Type '{0}' cannot be found", typeName), loadException);
 			

@@ -90,6 +90,20 @@ namespace MonoTests.System.Net.Http
 			}
 		}
 
+		class CannotSeekStream : MemoryStream
+		{
+			public CannotSeekStream ()
+				: base (new byte [11])
+			{
+			}
+
+			public override bool CanSeek {
+				get {
+					return false;
+				}
+			}
+		}
+
 		[Test]
 		public void Ctor_Invalid ()
 		{
@@ -146,7 +160,7 @@ namespace MonoTests.System.Net.Http
 		 * The .NET runtime hits the "#9" assertion.
 		 * The test succeeds with Mono.
 		 */
-		[Category ("NotWorking")]
+		[Category ("NotDotNet")]
 		public void CopyToAsync ()
 		{
 			var ms = new MemoryStream ();
@@ -208,6 +222,7 @@ namespace MonoTests.System.Net.Http
 			Assert.AreEqual (330, scm.Headers.ContentLength, "#2");
 
 			headers.Allow.Add ("a1");
+			headers.ContentDisposition = new ContentDispositionHeaderValue ("cd1");
 			headers.ContentEncoding.Add ("ce1");
 			headers.ContentLanguage.Add ("cl1");
 			headers.ContentLength = 23;
@@ -220,6 +235,12 @@ namespace MonoTests.System.Net.Http
 
 
 			headers.Add ("allow", "a2");
+			try {
+				headers.Add ("content-disposition", "cd2");
+				Assert.Fail ("content-disposition");
+			} catch (FormatException) {
+			}
+
 			headers.Add ("content-encoding", "ce3");
 			headers.Add ("content-language", "cl2");
 
@@ -293,6 +314,17 @@ namespace MonoTests.System.Net.Http
 			Assert.AreEqual (new MediaTypeHeaderValue ("multipart/*"), headers.ContentType);
 			Assert.AreEqual (new DateTimeOffset (DateTime.Today), headers.Expires);
 			Assert.AreEqual (new DateTimeOffset (DateTime.Today), headers.LastModified);
+			Assert.AreEqual (new ContentDispositionHeaderValue ("cd1"), headers.ContentDisposition);
+		}
+
+		[Test]
+		public void Headers_ToString ()
+		{
+			var sc = new StreamContent (new MemoryStream ());
+			var headers = sc.Headers;
+			headers.ContentMD5 = new byte[] { 3, 5 };
+
+			Assert.AreEqual ("Content-MD5: AwU=\r\n", headers.ToString (), "#1");
 		}
 
 		[Test]
@@ -306,6 +338,21 @@ namespace MonoTests.System.Net.Http
 				Assert.Fail ("#1");
 			} catch (InvalidOperationException) {
 			}
+		}
+
+		[Test]
+		public void Headers_Multi ()
+		{
+			var sc = new StreamContent (MemoryStream.Null);
+			var headers = sc.Headers;
+
+			headers.Add ("Allow", "");
+			headers.Add ("Allow", "a , b, c");
+
+			Assert.AreEqual (3, headers.Allow.Count, "#1a");
+			Assert.IsTrue (headers.Allow.SequenceEqual (
+				new[] { "a", "b", "c" }
+			), "#1b");
 		}
 
 		[Test]
@@ -331,7 +378,7 @@ namespace MonoTests.System.Net.Http
 				Assert.IsTrue (sc.LoadIntoBufferAsync (50).Wait (200));
 				Assert.Fail ("#1");
 			} catch (AggregateException e) {
-				Assert.IsInstanceOfType (typeof (HttpRequestException), e.InnerException, "#2");
+				Assert.IsTrue (e.InnerException is HttpRequestException, "#2");
 			}
 		}
 
@@ -391,6 +438,14 @@ namespace MonoTests.System.Net.Http
 			Assert.IsTrue (stream_read.CanSeek, "#2");
 			Assert.AreEqual (0, stream_read.Position, "#3");	
 			Assert.AreEqual (1, stream_read.Length, "#4");
+		}
+
+		[Test]
+		public void ContentLengthAfterLoad ()
+		{
+			var sc = new StreamContent (new CannotSeekStream ());
+			Assert.IsTrue (sc.LoadIntoBufferAsync ().Wait (3000), "#1");
+			Assert.AreEqual (11, sc.Headers.ContentLength, "#2");
 		}
 	}
 }

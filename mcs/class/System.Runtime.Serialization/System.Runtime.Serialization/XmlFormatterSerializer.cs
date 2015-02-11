@@ -25,7 +25,6 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
-#if NET_2_0
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -87,14 +86,12 @@ namespace System.Runtime.Serialization
 		{
 			if (graph == null)
 				writer.WriteAttributeString ("i", "nil", XmlSchema.InstanceNamespace, "true");
-#if !MOONLIGHT
 			else if (type == typeof (XmlElement))
 				((XmlElement) graph).WriteTo (Writer);
 			else if (type == typeof (XmlNode [])) {
 				foreach (var xn in (XmlNode []) graph)
 					xn.WriteTo (Writer);
 			}
-#endif
 			else {
 				QName resolvedQName = null;
 				if (resolver != null) {
@@ -137,7 +134,7 @@ namespace System.Runtime.Serialization
 					if (qname == QName.Empty) {
 						name = XmlConvert.EncodeLocalName (actualType.Name);
 						ns = KnownTypeCollection.DefaultClrNamespaceBase + actualType.Namespace;
-					} else if (qname.Namespace == KnownTypeCollection.MSSimpleNamespace)
+					} else if (XmlSchemaType.GetBuiltInSimpleType (new QName (qname.Name, XmlSchema.Namespace)) != null)
 						ns = XmlSchema.Namespace;
 					if (writer.LookupPrefix (ns) == null) // it goes first (extraneous, but it makes att order compatible)
 						writer.WriteXmlnsAttribute (null, ns);
@@ -214,4 +211,3 @@ namespace System.Runtime.Serialization
 		}
 	}
 }
-#endif

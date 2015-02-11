@@ -33,28 +33,14 @@ using System.Collections;
 
 namespace System.Xml.Serialization
 {
-#if NET_2_0
 	public
-#else
-	internal
-#endif
 	
 	abstract class XmlSerializerImplementation
 	{
 		public virtual XmlSerializationReader Reader {
 			get { throw new NotSupportedException (); }
 		}
-#if MOONLIGHT
-		public virtual IDictionary ReadMethods {
-			get { throw new NotSupportedException (); }
-		}
-		public virtual IDictionary TypedSerializers {
-			get { throw new NotSupportedException (); }
-		}
-		public virtual IDictionary WriteMethods {
-			get { throw new NotSupportedException (); }
-		}
-#else
+
 		public virtual Hashtable ReadMethods {
 			get { throw new NotSupportedException (); }
 		}
@@ -64,7 +50,7 @@ namespace System.Xml.Serialization
 		public virtual Hashtable WriteMethods {
 			get { throw new NotSupportedException (); }
 		}
-#endif
+
 		public virtual XmlSerializationWriter Writer {
 			get { throw new NotSupportedException (); }
 		}

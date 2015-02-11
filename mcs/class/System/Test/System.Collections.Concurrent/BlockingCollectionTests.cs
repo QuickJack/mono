@@ -27,6 +27,7 @@ using System;
 using System.Threading;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 
 using NUnit.Framework;
 
@@ -191,6 +192,94 @@ namespace MonoTests.System.Collections.Concurrent
 			bool success = queue.TryTake (out o, 500);
 			Assert.IsNull (o);
 			Assert.IsFalse (success);
+		}
+
+		[Test]
+		public void TakeAnyFromSecondCollection ()
+		{
+			var a = new BlockingCollection<string> ();
+			var b = new BlockingCollection<string> ();
+			var arr = new [] { a, b };
+			string res = null;
+
+			Task<int> t = Task.Factory.StartNew (() => BlockingCollection<string>.TakeFromAny (arr, out res));
+			a.Add ("foo");
+			Assert.AreEqual (0, t.Result, "#1");
+			Assert.AreEqual ("foo", res, "#2");
+
+			t = Task.Factory.StartNew (() => BlockingCollection<string>.TakeFromAny (arr, out res));
+			b.Add ("bar");
+			Assert.AreEqual (1, t.Result, "#3");
+			Assert.AreEqual ("bar", res, "#4");
+		}
+
+		[Test]
+		public void TakeAnyCancellable ()
+		{
+			var a = new BlockingCollection<string> ();
+			var b = new BlockingCollection<string> ();
+			var arr = new [] { a, b };
+			var cts = new CancellationTokenSource ();
+			string res = null;
+
+			Task<int> t = Task.Factory.StartNew (() => BlockingCollection<string>.TakeFromAny (arr, out res, cts.Token));
+			Thread.Sleep (100);
+			a.Add ("foo");
+			Assert.AreEqual (0, t.Result, "#1");
+			Assert.AreEqual ("foo", res, "#2");
+
+			t = Task.Factory.StartNew (() => BlockingCollection<string>.TakeFromAny (arr, out res, cts.Token));
+			Thread.Sleep (100);
+			b.Add ("bar");
+			Assert.AreEqual (1, t.Result, "#3");
+			Assert.AreEqual ("bar", res, "#4");
+
+			t = Task.Factory.StartNew (() => {
+				try {
+					return BlockingCollection<string>.TakeFromAny (arr, out res, cts.Token);
+				} catch (OperationCanceledException) {
+					res = "canceled";
+					return -10;
+				}
+			});
+
+			cts.Cancel ();
+			Assert.AreEqual (-10, t.Result, "#5");
+			Assert.AreEqual ("canceled", res, "#6");
+		}
+
+		[Test, ExpectedException (typeof(OperationCanceledException))]
+		public void BoundedAddLimit ()
+		{
+			const int elNumber = 5;
+
+			var c = new BlockingCollection <int> (elNumber);
+			var token = new CancellationTokenSource (100);
+
+			for (var i = 0; i < elNumber + 1; i++) {
+				c.Add (1, token.Token);
+			}
+		}
+
+		[Test]
+		public void AddAnyCancellable ()
+		{
+			const int elNumber = 5;
+			const int colNumber = 5;
+
+			var cols = new BlockingCollection <int> [colNumber];
+			for (var i = 0; i < colNumber; i++) {
+				cols[i] = new BlockingCollection <int> (elNumber);
+			}
+
+			var token = new CancellationTokenSource (100);
+			for (var i = 0; i < colNumber * elNumber; i++) {
+				BlockingCollection <int>.AddToAny (cols, 1, token.Token);
+			}
+
+			foreach (var col in cols) {
+				Assert.AreEqual (elNumber, col.Count);
+			}
 		}
 	}
 }

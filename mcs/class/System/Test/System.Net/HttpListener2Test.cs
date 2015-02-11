@@ -45,9 +45,6 @@ using NUnit.Framework;
 namespace MonoTests.System.Net {
 	
 	[TestFixture]
-#if TARGET_JVM	
-	[Ignore ("The class HttpListener is not supported")]
-#endif
 	public class HttpListener2Test {
 		
 		private HttpListener _listener = null;
@@ -144,7 +141,7 @@ namespace MonoTests.System.Net {
 			Send (ns, "GET / HTTP/1.1\r\n\r\n"); // No host
 			string response = Receive (ns, 512);
 			ns.Close ();
-			Assert.IsTrue (response.StartsWith ("HTTP/1.1 400"));
+			StringAssert.StartsWith ("HTTP/1.1 400", response);
 		}
 
 		[Test]
@@ -155,7 +152,7 @@ namespace MonoTests.System.Net {
 			Send (ns, "GET / HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n"); // no prefix
 			string response = Receive (ns, 512);
 			ns.Close ();
-			Assert.IsTrue (response.StartsWith ("HTTP/1.1 400"));
+			StringAssert.StartsWith ("HTTP/1.1 400", response);
 		}
 
 		[Test]
@@ -192,7 +189,7 @@ namespace MonoTests.System.Net {
 				string response = Receive (ns, 512);
 				ns.Close ();
 				listener.Close ();
-				Assert.AreEqual (true, response.StartsWith ("HTTP/1.1 400"), String.Format ("Failed on {0}", (int) b));
+				StringAssert.StartsWith ("HTTP/1.1 400", response, String.Format ("Failed on {0}", (int) b));
 			}
 		}
 
@@ -204,7 +201,7 @@ namespace MonoTests.System.Net {
 			Send (ns, "POST /test4/ HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n"); // length required
 			string response = Receive (ns, 512);
 			ns.Close ();
-			Assert.IsTrue (response.StartsWith ("HTTP/1.1 411"));
+			StringAssert.StartsWith ("HTTP/1.1 411", response);
 		}
 
 		[Test]
@@ -215,7 +212,7 @@ namespace MonoTests.System.Net {
 			Send (ns, "POST / HTTP/1.1\r\nHost: 127.0.0.1\r\nTransfer-Encoding: pepe\r\n\r\n"); // not implemented
 			string response = Receive (ns, 512);
 			ns.Close ();
-			Assert.IsTrue (response.StartsWith ("HTTP/1.1 501"));
+			StringAssert.StartsWith ("HTTP/1.1 501", response);
 		}
 
 		[Test]
@@ -227,7 +224,7 @@ namespace MonoTests.System.Net {
 			Send (ns, "POST /test6/ HTTP/1.1\r\nHost: 127.0.0.1\r\nTransfer-Encoding: identity\r\n\r\n");
 			string response = Receive (ns, 512);
 			ns.Close ();
-			Assert.IsTrue (response.StartsWith ("HTTP/1.1 501"));
+			StringAssert.StartsWith ("HTTP/1.1 501", response);
 		}
 
 		[Test]
@@ -241,8 +238,8 @@ namespace MonoTests.System.Net {
 			ctx.Response.Close ();
 			string response = Receive (ns, 1024);
 			ns.Close ();
-			Assert.IsTrue (response.StartsWith ("HTTP/1.1 200"));
-			Assert.IsTrue (-1 != response.IndexOf ("Transfer-Encoding: chunked"));
+			StringAssert.StartsWith ("HTTP/1.1 200", response);
+			StringAssert.Contains ("Transfer-Encoding: chunked", response);
 		}
 
 		[Test]
@@ -257,7 +254,7 @@ namespace MonoTests.System.Net {
 			ctx.Response.Close ();
 			string response = Receive (ns, 512);
 			ns.Close ();
-			Assert.IsTrue (response.StartsWith ("HTTP/1.1 200"));
+			StringAssert.StartsWith ("HTTP/1.1 200", response);
 			Assert.IsTrue (-1 == response.IndexOf ("Transfer-Encoding: chunked"));
 		}
 
@@ -272,7 +269,7 @@ namespace MonoTests.System.Net {
 			string response = ReceiveWithTimeout (ns, 512, 1000, out timeout);
 			ns.Close ();
 			Assert.IsFalse (timeout);
-			Assert.IsTrue (response.StartsWith ("HTTP/1.1 411"));
+			StringAssert.StartsWith ("HTTP/1.1 411", response);
 		}
 
 		[Test]
@@ -287,7 +284,7 @@ namespace MonoTests.System.Net {
 			string response = ReceiveWithTimeout (ns, 512, 1000, out timeout);
 			ns.Close ();
 			Assert.IsFalse (timeout);
-			Assert.IsTrue (response.StartsWith ("HTTP/1.1 411"));
+			StringAssert.StartsWith ("HTTP/1.1 411", response);
 		}
 
 		[Test]
@@ -300,7 +297,7 @@ namespace MonoTests.System.Net {
 			ns.GetSocket ().Shutdown (SocketShutdown.Send);
 			string input = Receive (ns, 512);
 			ns.Close ();
-			Assert.IsTrue (input.StartsWith ("HTTP/1.1 400"));
+			StringAssert.StartsWith ("HTTP/1.1 400", input);
 		}
 
 		[Test]
@@ -313,7 +310,7 @@ namespace MonoTests.System.Net {
 			ns.GetSocket ().Shutdown (SocketShutdown.Send);
 			string input = Receive (ns, 512);
 			ns.Close ();
-			Assert.IsTrue (input.StartsWith ("HTTP/1.1 400"));
+			StringAssert.StartsWith ("HTTP/1.1 400", input);
 		}
 
 		[Test]
@@ -326,7 +323,7 @@ namespace MonoTests.System.Net {
 			ns.GetSocket ().Shutdown (SocketShutdown.Send);
 			string input = Receive (ns, 512);
 			ns.Close ();
-			Assert.IsTrue (input.StartsWith ("HTTP/1.1 400"));
+			StringAssert.StartsWith ("HTTP/1.1 400", input);
 		}
 
 		HttpListenerRequest test14_request;
@@ -418,8 +415,8 @@ namespace MonoTests.System.Net {
 			ctx.Response.Close ();
 			string response = Receive (ns, 1024);
 			ns.Close ();
-			Assert.IsTrue (response.StartsWith ("HTTP/1.1 200"));
-			Assert.IsTrue (-1 != response.IndexOf ("Transfer-Encoding: chunked"));
+			StringAssert.StartsWith ("HTTP/1.1 200", response);
+			StringAssert.Contains ("Transfer-Encoding: chunked", response);
 		}
 
 		[Test]
@@ -723,13 +720,59 @@ namespace MonoTests.System.Net {
 		public void ClosePort ()
 		{
 			var h = new HttpListener ();
-			h.Prefixes.Add ("http://127.0.0.1:8080/");
+			h.Prefixes.Add ("http://127.0.0.1:30158/");
 			h.Start ();
 			h.BeginGetContext (null, null);
 			h.Stop ();
-			TcpListener t = new TcpListener (IPAddress.Parse ("127.0.0.1"), 8080);
+			TcpListener t = new TcpListener (IPAddress.Parse ("127.0.0.1"), 30158);
 			t.Start ();
 			t.Stop ();
+		}
+
+		//
+		// Bugs: #17204, #10818
+		//
+		// Sadly, on Unix, if there are different calls to bind
+		// like *:port and host:port that is not an error,
+		// it would only be an error if host:port is done twice, so
+		// the best we can hope for is that listening on a specific interface
+		// does not also listen to another interface.
+		//
+		[Test]
+		public void BindToSingleInterface ()
+		{
+			IPAddress [] machineAddress = null;
+
+			try {
+				machineAddress = Dns.GetHostAddresses (Dns.GetHostName ());
+			} catch (SocketException){
+				// The build hosts sometimes can not resolve the hostname
+				Assert.Ignore ("Hostname couldn't be resolved.");
+			}
+			
+			int port = 61234;
+			var h = new HttpListener ();
+			h.Prefixes.Add ("http://" + machineAddress [0] + ":" + port + "/");
+			h.Start ();
+
+			try {
+				var c = new TcpClient ("localhost", port);
+				Assert.Fail ("The TcpClient should have failed to connect since HttpListener is not listening on localhost");
+			} catch (SocketException){
+				// Pass
+			}
+			h.Stop ();
+		}
+
+		[Test]
+		public void BindToAllInterfaces ()
+		{
+			var h = new HttpListener ();
+			int port = 62234;
+			h.Prefixes.Add ("http://*:" + port + "/");
+			h.Start ();
+			var c = new TcpClient ("localhost", port);
+			h.Stop ();
 		}
 	}
 }

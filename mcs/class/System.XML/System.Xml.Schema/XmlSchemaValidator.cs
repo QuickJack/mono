@@ -36,7 +36,6 @@
 //	- There is no SourceUri provision.
 //
 
-#if NET_2_0
 
 using System;
 using System.Collections;
@@ -274,7 +273,7 @@ namespace System.Xml.Schema
 				if (attr.ValidatedDefaultValue != null || attr.ValidatedFixedValue != null)
 					defaultAttributes.Add (attr);
 
-			defaultAttributes.AddRange (defaultAttributes);
+			defaultAttributes.AddRange (this.defaultAttributes);
 		}
 
 		// State Controller
@@ -539,10 +538,10 @@ namespace System.Xml.Schema
 
 				if (skipValidationDepth < 0 || depth <= skipValidationDepth)
 					AssessCloseStartElementSchemaValidity (schemaInfo);
-				depth++;
 			} finally {
 				current_info = null;
 				occuredAtts.Clear ();
+				depth++;
 			}
 		}
 
@@ -976,7 +975,7 @@ namespace System.Xml.Schema
 
 		private void ValidateEndElementParticle ()
 		{
-			if (Context.State != null) {
+			if (xsiNilDepth < 0 && Context.State != null) {
 				if (!Context.EvaluateEndElement ()) {
 					HandleError ("Invalid end element. There are still required content items.");
 				}
@@ -1588,7 +1587,8 @@ namespace System.Xml.Schema
 			if (value == "true") {
 				if (element.ValidatedFixedValue != null)
 					HandleError ("Schema instance nil was specified, where the element declaration for " + element.QualifiedName + "has fixed value constraints.");
-				xsiNilDepth = depth;
+				if (xsiNilDepth < 0)
+					xsiNilDepth = depth;
 				if (info != null)
 					info.IsNil = true;
 			}
@@ -1681,4 +1681,3 @@ namespace System.Xml.Schema
 	}
 }
 
-#endif

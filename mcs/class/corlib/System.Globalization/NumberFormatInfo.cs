@@ -45,6 +45,7 @@
 // Other than that this is totally ECMA compliant.
 //
 
+using System.Diagnostics.Contracts;
 using System.Runtime.InteropServices;
 
 namespace System.Globalization {
@@ -100,17 +101,18 @@ namespace System.Globalization {
 #pragma warning restore 649
 		
 #pragma warning disable 169
-		string ansiCurrencySymbol;	// TODO, MS.NET serializes this.
+		internal string ansiCurrencySymbol;	// TODO, MS.NET serializes this.
 		int m_dataItem;	// Unused, but MS.NET serializes this.
 		bool m_useUserOverride; // Unused, but MS.NET serializes this.
 		bool validForParseAsNumber; // Unused, but MS.NET serializes this.
 		bool validForParseAsCurrency; // Unused, but MS.NET serializes this.
 #pragma warning restore 169
 		
+#if !MOBILE
 		string[] nativeDigits = invariantNativeDigits;
 		int digitSubstitution = 1; // DigitShapes.None.
-
 		static readonly string [] invariantNativeDigits = new string [] {"0", "1", "2", "3", "4", "5", "6", "7", "8", "9"};
+#endif
 
 		internal NumberFormatInfo (int lcid, bool read_only)
 		{
@@ -420,7 +422,7 @@ namespace System.Globalization {
 					("The current instance is read-only and a set operation was attempted");
 				
 				if (value.Length == 0) {
-					currencyGroupSizes = new int [0];
+					currencyGroupSizes = EmptyArray<int>.Value;
 					return;
 				}
 				
@@ -683,7 +685,7 @@ namespace System.Globalization {
 					("The current instance is read-only and a set operation was attempted");
 				
 				if (value.Length == 0) {
-					numberGroupSizes = new int [0];
+					numberGroupSizes = EmptyArray<int>.Value;
 					return;
 				}
 				// All elements except last need to be in range 1 - 9, last can be 0.
@@ -806,7 +808,7 @@ namespace System.Globalization {
 					throw new Exception ("HERE the value was modified");
 				
 				if (value.Length == 0) {
-					percentGroupSizes = new int [0];
+					percentGroupSizes = EmptyArray<int>.Value;
 					return;
 				}
 
@@ -960,12 +962,43 @@ namespace System.Globalization {
 		{
 			if (formatProvider != null) {
 				NumberFormatInfo nfi;
-				nfi = (NumberFormatInfo)formatProvider.GetFormat(typeof(NumberFormatInfo));
+				nfi = formatProvider.GetFormat (typeof (NumberFormatInfo)) as NumberFormatInfo;
 				if (nfi != null)
 					return nfi;
 			}
 			
 			return CurrentInfo;
 		}
+
+        // private const NumberStyles InvalidNumberStyles = unchecked((NumberStyles) 0xFFFFFC00);
+        private const NumberStyles InvalidNumberStyles = ~(NumberStyles.AllowLeadingWhite | NumberStyles.AllowTrailingWhite
+                                                           | NumberStyles.AllowLeadingSign | NumberStyles.AllowTrailingSign
+                                                           | NumberStyles.AllowParentheses | NumberStyles.AllowDecimalPoint
+                                                           | NumberStyles.AllowThousands | NumberStyles.AllowExponent
+                                                           | NumberStyles.AllowCurrencySymbol | NumberStyles.AllowHexSpecifier);
+
+        internal static void ValidateParseStyleInteger(NumberStyles style) {
+            // Check for undefined flags
+            if ((style & InvalidNumberStyles) != 0) {
+                throw new ArgumentException(Environment.GetResourceString("Argument_InvalidNumberStyles"), "style");
+            }
+            Contract.EndContractBlock();
+            if ((style & NumberStyles.AllowHexSpecifier) != 0) { // Check for hex number
+                if ((style & ~NumberStyles.HexNumber) != 0) {
+                    throw new ArgumentException(Environment.GetResourceString("Arg_InvalidHexStyle"));
+                }
+            }
+        }
+
+        internal static void ValidateParseStyleFloatingPoint(NumberStyles style) {
+            // Check for undefined flags
+            if ((style & InvalidNumberStyles) != 0) {
+                throw new ArgumentException(Environment.GetResourceString("Argument_InvalidNumberStyles"), "style");
+            }
+            Contract.EndContractBlock();
+            if ((style & NumberStyles.AllowHexSpecifier) != 0) { // Check for hex number
+                throw new ArgumentException(Environment.GetResourceString("Arg_HexStyleNotSupported"));
+            }
+        }
 	}
 }

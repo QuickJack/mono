@@ -27,6 +27,8 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
+#if !MOBILE
+
 using NUnit.Framework;
 
 using System;
@@ -36,7 +38,7 @@ using System.Security.Permissions;
 using System.Security.Policy;
 using System.Xml;
 
-using MonoTestsXml;
+using MonoTests.System.Xml;
 
 namespace MonoCasTests.System.Xml {
 
@@ -82,3 +84,5 @@ namespace MonoCasTests.System.Xml {
 		}
 	}
 }
+
+#endif

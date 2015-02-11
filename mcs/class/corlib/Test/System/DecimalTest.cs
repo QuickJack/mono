@@ -198,9 +198,7 @@ namespace MonoTests.System
 				new ToStringTest ("E", Decimal.MinValue, "-7.922816E+028"),
 				new ToStringTest ("E3", Decimal.MinValue, "-7.923E+028"),
 				new ToStringTest ("E28", Decimal.MinValue, "-7.9228162514264337593543950335E+028"),
-#if !TARGET_JVM // TargetJvmNotWorking
 				new ToStringTest ("E30", Decimal.MinValue, "-7.922816251426433759354395033500E+028"),
-#endif
 				new ToStringTest ("E0", Decimal.MinValue, "-8E+028"),
 				new ToStringTest ("N3", Decimal.MinValue, "-79,228,162,514,264,337,593,543,950,335.000"),
 				new ToStringTest ("N0", Decimal.MinValue, "-79,228,162,514,264,337,593,543,950,335"),
@@ -288,7 +286,6 @@ namespace MonoTests.System
 		}
 		
 		[Test]
-		[Category ("TargetJvmNotWorking")]
 		public void TestPercentPattern ()
 		{
 			NumberFormatInfo nfi2 = (NumberFormatInfo) NfiUser.Clone ();
@@ -335,11 +332,13 @@ namespace MonoTests.System
 				new ParseTest("-000000000000001922816251426433759354395033.300000000000000", -1922816251426433759354395033.3m),
 				new ParseTest("-7922816251426433759354395033.150000000000", -7922816251426433759354395033.2m),
 				new ParseTest("-7922816251426433759354395033.2400000000000", -7922816251426433759354395033.2m),
-				new ParseTest("-7922816251426433759354395033.2600000000000", -7922816251426433759354395033.3m)
+				new ParseTest("-7922816251426433759354395033.2600000000000", -7922816251426433759354395033.3m),
+				new ParseTest("987654321098765432109876543.25999", 987654321098765432109876543.3m, NumberStyles.Float),
+				new ParseTest("987654321098765432109876543.25199", 987654321098765432109876543.3m, NumberStyles.Float),
+				new ParseTest("2.22222222222222222222222222225", 2.2222222222222222222222222222m, NumberStyles.Float)
 		};
 
 		[Test]
-		[Category ("TargetJvmNotWorking")]
 		public void TestParse ()
 		{
 
@@ -1129,8 +1128,14 @@ namespace MonoTests.System
 			}
 		}
 */
+
 		[Test]
-		[Category ("TargetJvmNotWorking")]
+		public void ParseCultureSeparator ()
+		{
+			Assert.AreEqual (2.2m, decimal.Parse ("2.2", new CultureInfo("es-MX")));
+		}
+
+		[Test]
 		public void TryParse ()
 		{
 			Decimal r;
@@ -1550,6 +1555,61 @@ namespace MonoTests.System
 
 			d = Decimal.Parse ("0.");
 			Assert.AreEqual ("0", d.ToString (), "#11");
+		}
+
+		[Test] // bug #21764
+		public void RoundToString ()
+		{
+			Assert.AreEqual ("3", Math.Round (3M, 5).ToString (CultureInfo.InvariantCulture), "#1");
+			Assert.AreEqual ("3.01", Math.Round (3.01M, 5).ToString (CultureInfo.InvariantCulture), "#2");
+			Assert.AreEqual ("-3.01", Math.Round (-3.01M, 5).ToString (CultureInfo.InvariantCulture), "#3");
+			Assert.AreEqual ("128", Math.Round (127.5M, 0).ToString (CultureInfo.InvariantCulture), "#4");
+		}
+
+		[Test] // Bug Xamarin#14822
+		public void RoundToString_Bug14822 ()
+		{
+			decimal value = 1.600000m;
+			var roundedValue = Math.Round (value, 3);
+			Assert.AreEqual ("1.600", roundedValue.ToString (), "#1");
+		}
+
+		[Test] // Bug Xamarin#17538
+		public void BankerRounding ()
+		{
+			decimal dcm3 = 987654321098765432109876543.2m;
+			decimal dcm4 = 0.05m;
+			decimal dcm5 = dcm3 + dcm4;
+
+			Assert.AreEqual (987654321098765432109876543.2m, dcm5);
+		}
+
+		[Test] // Bug Xamarin #24411
+		public void DecimalDivision_24411  ()
+		{
+			decimal dd = 45m;
+			var x = dd / 100;
+			var bits = decimal.GetBits (x);
+			var flags = (uint) bits[3];
+			byte scale2 = (byte)(flags >> 16);
+			
+			Assert.AreEqual (2, scale2);
+
+			// The side effect is that 45m/100 should render as 0.45, not 0.4500000000000000000000000000
+			// Just for completeness:
+
+			Assert.AreEqual ("0.45", (45m/100).ToString ());
+		}
+
+		[Test] // Bug SUSE #655780
+		public void TrailingZerosBug ()
+		{
+			decimal d;
+			Assert.AreEqual ("0", (0m/5).ToString ());
+			Assert.AreEqual ("0.2", (1m/5).ToString ());
+			Assert.AreEqual ("0.4", (2m/5).ToString ());
+			Assert.AreEqual ("0.6", (3m/5).ToString ());
+			Assert.AreEqual ("0.8", (4m/5).ToString ());
 		}
 	}
 }

@@ -10,6 +10,9 @@
 #ifndef _WAPI_PROCESSES_H_
 #define _WAPI_PROCESSES_H_
 
+#ifdef HAVE_UNISTD_H
+#include <unistd.h>
+#endif
 #include <glib.h>
 
 #include <mono/io-layer/handles.h>
@@ -146,10 +149,6 @@ struct _WapiShellExecuteInfo
 #define CREATE_DEFAULT_ERROR_MODE 0x04000000
 #define CREATE_NO_WINDOW 0x08000000
 
-#ifndef HOST_WIN32
-#define CREATE_NO_DETACH 0x10000000
-#endif
-
 #ifdef NEW_STUFF
 #define CREATE_PRESERVE_CODE_AUTHZ_LEVEL find out the value for this one...
 #endif
@@ -192,8 +191,6 @@ extern gboolean CreateProcessWithLogonW (const gunichar2 *username,
 
 extern gpointer GetCurrentProcess (void);
 extern guint32 GetProcessId (gpointer handle);
-extern guint32 GetCurrentProcessId (void);
-extern gboolean EnumProcesses (guint32 *pids, guint32 len, guint32 *needed);
 extern gboolean CloseProcess (gpointer handle);
 extern gpointer OpenProcess (guint32 access, gboolean inherit, guint32 pid);
 extern gboolean GetExitCodeProcess (gpointer process, guint32 *code);
@@ -219,6 +216,9 @@ extern gboolean TerminateProcess (gpointer process, gint32 exitCode);
 extern guint32 GetPriorityClass (gpointer process);
 extern gboolean SetPriorityClass (gpointer process, guint32  priority_class);
 
+gchar* wapi_process_get_path (pid_t pid);
+
+void wapi_process_set_cli_launcher (char *path);
 
 G_END_DECLS
 

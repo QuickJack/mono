@@ -36,7 +36,6 @@ namespace MonoTests.System.Windows.Forms
 	[TestFixture]
 	public class ClipboardTest
 	{
-#if NET_2_0
 		[Test]
 		public void UnicodeTextTest ()
 		{
@@ -104,6 +103,7 @@ namespace MonoTests.System.Windows.Forms
 		}
 
 		[Test]
+		[Category ("NotWorking")] // Doesn't work under Xvfb.
 		public void DataRemainsOnClipboard_Xamarin4959 ()
 		{
 			// Compile an app that puts something on the clipboard
@@ -178,7 +178,6 @@ public static class MainClass
 				File.Delete (exeName);
 			}
 		}
-#endif
 	}
 }
 

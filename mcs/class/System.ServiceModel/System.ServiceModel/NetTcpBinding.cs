@@ -32,6 +32,7 @@ using System.ServiceModel.Channels;
 using System.ServiceModel.Description;
 using System.ServiceModel.Security;
 using System.ServiceModel.Security.Tokens;
+using System.ServiceModel.Configuration;
 using System.Text;
 using System.Xml;
 
@@ -62,6 +63,14 @@ namespace System.ServiceModel
 		{
 			security = new NetTcpSecurity (securityMode);
 			transport = new TcpTransportBindingElement ();
+		}
+
+		public NetTcpBinding (string configurationName)
+			: this ()
+		{
+			var bindingsSection = ConfigUtil.BindingsSection;
+			var el = bindingsSection.NetTcpBinding.Bindings [configurationName];
+			el.ApplyConfiguration (this);
 		}
 
 		internal NetTcpBinding (TcpTransportBindingElement transport,
@@ -120,6 +129,7 @@ namespace System.ServiceModel
 
 		public NetTcpSecurity Security {
 			get { return security; }
+			set { security = value; }
 		}
 
 		public EnvelopeVersion EnvelopeVersion {

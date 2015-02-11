@@ -24,14 +24,13 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-#if NET_4_5
-
 using System.Runtime.ConstrainedExecution;
 using System.Runtime.CompilerServices;
 
 namespace System.Threading
 {
-	public static class Volatile
+	public
+	static class Volatile
 	{
 		[MethodImplAttribute (MethodImplOptions.InternalCall)]
 		[ReliabilityContract (Consistency.WillNotCorruptState, Cer.Success)]
@@ -92,6 +91,10 @@ namespace System.Threading
 
 		[MethodImplAttribute (MethodImplOptions.InternalCall)]
 		[ReliabilityContract (Consistency.WillNotCorruptState, Cer.Success)]
+		public extern static T Read<T> (ref T location) where T : class;
+
+		[MethodImplAttribute (MethodImplOptions.InternalCall)]
+		[ReliabilityContract (Consistency.WillNotCorruptState, Cer.Success)]
 		public extern static void Write (ref bool location, bool value);
 
 		[MethodImplAttribute (MethodImplOptions.InternalCall)]
@@ -147,7 +150,8 @@ namespace System.Threading
 		[ReliabilityContract (Consistency.WillNotCorruptState, Cer.Success)]
 		public extern static void Write (ref float location, float value);
 
+		[MethodImplAttribute (MethodImplOptions.InternalCall)]
+		[ReliabilityContract (Consistency.WillNotCorruptState, Cer.Success)]
+		public extern static void Write<T>(ref T location, T value) where T : class;
 	}
 }
-
-#endif

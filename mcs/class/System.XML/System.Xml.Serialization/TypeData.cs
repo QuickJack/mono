@@ -32,20 +32,38 @@
 
 using System;
 using System.Collections;
-#if NET_2_0
 using System.Collections.Generic;
-#endif
 using System.Globalization;
 using System.Reflection;
 using System.Text;
 using System.Xml.Schema;
 
-#if MOONLIGHT
-using XmlSchemaPatternFacet = System.Object;
-#endif
-
 namespace System.Xml.Serialization
 {
+	[AttributeUsage (AttributeTargets.Class, AllowMultiple = false)]
+	internal class XmlTypeConvertorAttribute : Attribute
+	{
+		/*
+		 * Bug #12571:
+		 * 
+		 * System.Xml.Linq.XElement should be deserializable from an XmlElement.
+		 * 
+		 * Types can now register a custom deserializer by adding this custom attribute.
+		 * Method is the name of a private 'static method (static object)' method that will
+		 * be invoked to construct an instance of the object.
+		 * 
+		 */
+		public string Method {
+			get;
+			private set;
+		}
+
+		public XmlTypeConvertorAttribute (string method)
+		{
+			Method = method;
+		}
+	}
+
 	internal class TypeData
 	{
 		Type type;
@@ -60,6 +78,7 @@ namespace System.Xml.Serialization
 		TypeData listTypeData;
 		TypeData mappedType;
 		XmlSchemaPatternFacet facet;
+		MethodInfo typeConvertor;
 		bool hasPublicConstructor = true;
 		bool nullableOverride;
 
@@ -68,10 +87,8 @@ namespace System.Xml.Serialization
 
 		public TypeData (Type type, string elementName, bool isPrimitive, TypeData mappedType, XmlSchemaPatternFacet facet)
 		{
-#if NET_2_0
 			if (type.IsGenericTypeDefinition)
 				throw new InvalidOperationException ("Generic type definition cannot be used in serialization. Only specific generic types can be used.");
-#endif
 			this.mappedType = mappedType;
 			this.facet = facet;
 			this.type = type;
@@ -86,10 +103,8 @@ namespace System.Xml.Serialization
 					sType = SchemaTypes.Enum;
 				else if (typeof(IXmlSerializable).IsAssignableFrom (type))
 					sType = SchemaTypes.XmlSerializable;
-#if !MOONLIGHT
 				else if (typeof (System.Xml.XmlNode).IsAssignableFrom (type))
 					sType = SchemaTypes.XmlNode;
-#endif
 				else if (type.IsArray || typeof(IEnumerable).IsAssignableFrom (type))
 					sType = SchemaTypes.Array;
 				else
@@ -104,6 +119,8 @@ namespace System.Xml.Serialization
 			if (sType == SchemaTypes.Array || sType == SchemaTypes.Class) {
 				hasPublicConstructor = !type.IsInterface && (type.IsArray || type.GetConstructor (Type.EmptyTypes) != null || type.IsAbstract || type.IsValueType);
 			}
+
+			LookupTypeConvertor ();
 		}
 
 		internal TypeData (string typeName, string fullTypeName, string xmlType, SchemaTypes schemaType, TypeData listItemTypeData)
@@ -114,6 +131,21 @@ namespace System.Xml.Serialization
 			this.listItemTypeData = listItemTypeData;
 			this.sType = schemaType;
 			this.hasPublicConstructor = true;
+		}
+
+		void LookupTypeConvertor ()
+		{
+			// We only need this for System.Xml.Linq.
+			var convertor = type.GetCustomAttribute<XmlTypeConvertorAttribute> ();
+			if (convertor != null)
+				typeConvertor = type.GetMethod (convertor.Method, BindingFlags.Static | BindingFlags.NonPublic);
+		}
+
+		internal void ConvertForAssignment (ref object value)
+		{
+			// Has this object registered a custom type converter?
+			if (typeConvertor != null)
+				value = typeConvertor.Invoke (null, new object[] { value });
 		}
 
 		public string TypeName
@@ -179,7 +211,6 @@ namespace System.Xml.Serialization
 				sb.Append (']');
 				return sb.ToString ();
 			}
-#if NET_2_0
 			// Generic nested types return the complete list of type arguments,
 			// including type arguments for the declaring class. This requires
 			// some special handling
@@ -211,13 +242,12 @@ namespace System.Xml.Serialization
 					sb.Insert (0, type.Namespace + ".");
 				return sb.ToString ();
 			}
-#endif
 			if (type.DeclaringType != null) {
 				sb.Append (ToCSharpName (type.DeclaringType, full)).Append ('.');
 				sb.Append (type.Name);
 			}
 			else {
-				if (full && type.Namespace.Length > 0)
+				if (full && !string.IsNullOrEmpty(type.Namespace))
 					sb.Append (type.Namespace).Append ('.');
 				sb.Append (type.Name);
 			}
@@ -280,14 +310,10 @@ namespace System.Xml.Serialization
 			{
 				if (nullableOverride)
 					return true;
-#if NET_2_0
 				return !IsValueType ||
 					(type != null &&
 					 type.IsGenericType &&
 					 type.GetGenericTypeDefinition () == typeof (Nullable<>));
-#else
-				return !IsValueType;
-#endif
 			}
 
 			set
@@ -321,11 +347,7 @@ namespace System.Xml.Serialization
 					throw new InvalidOperationException (Type.FullName + " is not a collection");
 				else if (type.IsArray) 
 					listItemType = type.GetElementType ();
-#if NET_2_0
 				else if (typeof (ICollection).IsAssignableFrom (type) || (genericArgument = GetGenericListItemType (type)) != null)
-#else
-				else if (typeof (ICollection).IsAssignableFrom (type))
-#endif
 				{
 					if (typeof (IDictionary).IsAssignableFrom (type))
 						throw new NotSupportedException (string.Format (CultureInfo.InvariantCulture,
@@ -442,12 +464,9 @@ namespace System.Xml.Serialization
 			"namespace",
 			"object","bool","byte","float","uint","char","ulong","ushort",
 			"decimal","int","sbyte","short","double","long","string","void",
-#if NET_2_0
 			"partial", "yield", "where"
-#endif
 		};
 
-#if NET_2_0
 		internal static Type GetGenericListItemType (Type type)
 		{
 			if (type.IsGenericType && typeof(IEnumerable).IsAssignableFrom(type.GetGenericTypeDefinition ())) {
@@ -461,6 +480,5 @@ namespace System.Xml.Serialization
 					return t;
 			return null;
 		}
-#endif
 	}
 }

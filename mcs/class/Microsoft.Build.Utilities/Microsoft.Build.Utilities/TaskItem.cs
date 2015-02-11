@@ -25,7 +25,6 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#if NET_2_0
 
 using System;
 using System.Collections;
@@ -36,24 +35,37 @@ using Mono.XBuild.Utilities;
 
 namespace Microsoft.Build.Utilities
 {
-	public sealed class TaskItem : MarshalByRefObject, ITaskItem
+#if !MICROSOFT_BUILD_DLL
+	public
+#endif
+	sealed class TaskItem : MarshalByRefObject, ITaskItem
+		, ITaskItem2
 	{
-		IDictionary		metadata;
-		string			itemSpec;
+		IDictionary		escapedMetadata;
+		string			escapedItemSpec;
 
 		public TaskItem ()
 		{
-			this.itemSpec = String.Empty;
-			this.metadata = CollectionsUtil.CreateCaseInsensitiveHashtable ();
+			this.escapedItemSpec = String.Empty;
+			this.escapedMetadata = CollectionsUtil.CreateCaseInsensitiveHashtable ();
 		}
 
 		public TaskItem (ITaskItem sourceItem)
 		{
 			if (sourceItem == null)
 				throw new ArgumentNullException ("sourceItem");
-			
-			this.itemSpec = sourceItem.ItemSpec;
-			this.metadata = sourceItem.CloneCustomMetadata ();
+
+			var ti2 = sourceItem as ITaskItem2;
+			if (ti2 != null) {
+				escapedItemSpec = ti2.EvaluatedIncludeEscaped;
+				escapedMetadata = ti2.CloneCustomMetadataEscaped ();
+			} else
+			{
+				escapedItemSpec = MSBuildUtils.Escape (sourceItem.ItemSpec);
+				escapedMetadata = sourceItem.CloneCustomMetadata ();
+				foreach (string key in new ArrayList (escapedMetadata.Keys))
+					escapedMetadata [key] = MSBuildUtils.Escape ((string)escapedMetadata [key]);
+			}
 		}
 
 		public TaskItem (string itemSpec)
@@ -61,11 +73,8 @@ namespace Microsoft.Build.Utilities
 			if (itemSpec == null)
 				throw new ArgumentNullException ("itemSpec");
 			
-			this.itemSpec = itemSpec;
-			this.metadata = CollectionsUtil.CreateCaseInsensitiveHashtable ();
-
-			// FIXME: hack
-			this.itemSpec = itemSpec.Replace ('\\', Path.DirectorySeparatorChar);
+			escapedItemSpec = itemSpec;
+			escapedMetadata = CollectionsUtil.CreateCaseInsensitiveHashtable ();
 		}
 
 		public TaskItem (string itemSpec, IDictionary itemMetadata)
@@ -76,23 +85,33 @@ namespace Microsoft.Build.Utilities
 			if (itemMetadata == null)
 				throw new ArgumentNullException ("itemMetadata");
 			
-			this.itemSpec = itemSpec;
-			this.metadata = CollectionsUtil.CreateCaseInsensitiveHashtable (itemMetadata);
+			escapedItemSpec = itemSpec;
+			escapedMetadata = CollectionsUtil.CreateCaseInsensitiveHashtable (itemMetadata);
 		}
 
 		public IDictionary CloneCustomMetadata ()
 		{
 			IDictionary clonedMetadata = CollectionsUtil.CreateCaseInsensitiveHashtable ();
-			foreach (DictionaryEntry de in metadata)
-				clonedMetadata.Add (de.Key, de.Value);
+			foreach (DictionaryEntry de in escapedMetadata)
+				clonedMetadata.Add (de.Key, MSBuildUtils.Unescape ((string) de.Value));
 			return clonedMetadata;
+		}
+
+		IDictionary CloneCustomMetadataEscaped ()
+		{
+			return CollectionsUtil.CreateCaseInsensitiveHashtable (escapedMetadata);
+		}
+
+		IDictionary ITaskItem2.CloneCustomMetadataEscaped ()
+		{
+			return CloneCustomMetadataEscaped ();
 		}
 
 		public void CopyMetadataTo (ITaskItem destinationItem)
 		{
-			foreach (DictionaryEntry e in metadata) {
+			foreach (DictionaryEntry e in escapedMetadata) {
 				if (destinationItem.GetMetadata ((string)e.Key) == String.Empty) {
-					destinationItem.SetMetadata ((string)e.Key, (string)e.Value);
+					destinationItem.SetMetadata ((string)e.Key, MSBuildUtils.Unescape ((string)e.Value));
 				}
 			}
 		}
@@ -104,12 +123,19 @@ namespace Microsoft.Build.Utilities
 
 		public string GetMetadata (string metadataName)
 		{
+			return MSBuildUtils.Unescape (GetMetadataValue (metadataName));
+		}
+
+		string GetMetadataValue (string metadataName)
+		{
 			if (ReservedNameUtils.IsReservedMetadataName (metadataName))
-				return ReservedNameUtils.GetReservedMetadata (ItemSpec, metadataName, metadata);
-			else if (metadata.Contains (metadataName))
-				return (string) metadata [metadataName];
-			else
-				return String.Empty;
+				return ReservedNameUtils.GetReservedMetadata (ItemSpec, metadataName, escapedMetadata);
+			return ((string) escapedMetadata [metadataName]) ?? String.Empty;
+		}
+
+		string ITaskItem2.GetMetadataValueEscaped (string metadataName)
+		{
+			return GetMetadataValue (metadataName);
 		}
 
 		public override object InitializeLifetimeService ()
@@ -123,8 +149,7 @@ namespace Microsoft.Build.Utilities
 				throw new ArgumentNullException ("metadataName");
 			if (ReservedNameUtils.IsReservedMetadataName (metadataName))
 				throw new ArgumentException ("Can't remove reserved metadata");
-			if (metadata.Contains (metadataName))
-				metadata.Remove (metadataName);
+			escapedMetadata.Remove (metadataName);
 		}
 
 		public void SetMetadata (string metadataName, string metadataValue)
@@ -139,23 +164,30 @@ namespace Microsoft.Build.Utilities
 				ReservedNameUtils.IsReservedMetadataName (metadataName))
 				throw new ArgumentException ("Can't modify reserved metadata");
 				
-			if (metadata.Contains (metadataName))
-				metadata.Remove (metadataName);
-			metadata.Add (metadataName, metadataValue);
+			escapedMetadata [metadataName] = metadataValue;
 		}
 
+		void ITaskItem2.SetMetadataValueLiteral (string metadataName, string metadataValue)
+		{
+			SetMetadata (metadataName, MSBuildUtils.Escape (metadataValue));
+		}
 		public override string ToString ()
 		{
-			return itemSpec;
+			return escapedItemSpec;
 		}
 		
 		public string ItemSpec {
-			get { return itemSpec; }
-			set { itemSpec = value; }
+			get { return MSBuildUtils.Unescape (escapedItemSpec); }
+			set { escapedItemSpec = value; }
+		}
+
+		string ITaskItem2.EvaluatedIncludeEscaped {
+			get { return escapedItemSpec; }
+			set { escapedItemSpec = value; }
 		}
 
 		public int MetadataCount {
-			get { return metadata.Count + 11; }
+			get { return escapedMetadata.Count + 11; }
 		}
 
 		public ICollection MetadataNames {
@@ -164,13 +196,13 @@ namespace Microsoft.Build.Utilities
 				
 				foreach (string s in ReservedNameUtils.ReservedMetadataNames)
 					list.Add (s);
-				foreach (string s in metadata.Keys)
+				foreach (string s in escapedMetadata.Keys)
 					list.Add (s);
 
 				return list;
 			}
 		}
+
 	}
 }
 
-#endif

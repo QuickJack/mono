@@ -210,6 +210,14 @@ struct MyTypeImplicitOnly
 	}
 }
 
+struct StructWithUserConstructor
+{
+	public StructWithUserConstructor ()
+	{
+
+	}
+}
+
 class MemberAccessData
 {
 	public bool BoolValue;
@@ -254,6 +262,12 @@ enum MyEnumUlong : ulong
 	Value_1 = 1
 }
 
+enum EnumInt
+{
+	A,
+	B,
+	C
+}
 
 class NewTest<T>
 {
@@ -715,6 +729,13 @@ class Tester
 		AssertNodeType (e9, ExpressionType.Call);
 		e9.Compile ().Invoke (1);
 	}		
+
+	void CallTest_10 ()
+	{
+		Expression<Func<string>> e = () => $"{int.MaxValue}";
+		AssertNodeType (e, ExpressionType.Call);
+		Assert (int.MaxValue.ToString (), e.Compile ().Invoke ());
+	}
 
 	void CoalesceTest ()
 	{
@@ -1203,6 +1224,14 @@ class Tester
 		AssertNodeType (e, ExpressionType.Equal);
 		Assert (false, e.Compile ().Invoke (null, 0));
 		Assert (true, e.Compile ().Invoke (4, 4));
+	}
+
+	void EqualTest_16 ()
+	{
+		Expression<Func<EnumInt?, EnumInt, bool?>> e = (x, y) => x == y;
+		AssertNodeType (e, ExpressionType.Convert);
+		Assert (false, e.Compile () (null, 0));
+		Assert (true, e.Compile () (EnumInt.B, EnumInt.B));
 	}
 
 	void EqualTestDelegate ()
@@ -2176,6 +2205,17 @@ class Tester
 		Assert<MyEnum> (0, e.Compile ().Invoke ());
 	}
 
+	void NewTest_8 ()
+	{
+		Expression<Func<DateTime>> e = () => new DateTime ();
+		AssertNodeType (e, ExpressionType.New);
+		Assert (null, ((NewExpression)e.Body).Constructor, "default ctor");
+
+		Expression<Func<StructWithUserConstructor>> e2 = () => new StructWithUserConstructor ();
+		AssertNodeType (e2, ExpressionType.New);
+		Assert ("Void .ctor()", ((NewExpression)e2.Body).Constructor.ToString (), "user ctor");
+	}
+
 	void NotTest ()
 	{
 		Expression<Func<bool, bool>> e = (bool a) => !a;
@@ -2600,7 +2640,6 @@ class Tester
 		Assert (1, e9.Compile ().Invoke (MyEnum.Value_2, MyEnum.Value_1));
 	}
 
-	// CSC bug
 	void SubtractTest_10 ()
 	{
 		Expression<Func<MyEnum?, byte?, MyEnum?>> e10 = (a, b) => a - b;

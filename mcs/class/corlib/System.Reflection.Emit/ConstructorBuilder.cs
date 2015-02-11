@@ -120,20 +120,20 @@ namespace System.Reflection.Emit {
 			return GetParametersInternal ();
 		}
 
-		internal ParameterInfo [] GetParametersInternal ()
+		internal override ParameterInfo [] GetParametersInternal ()
 		{
 			if (parameters == null)
-				return new ParameterInfo [0];
+				return EmptyArray<ParameterInfo>.Value;
 
 			ParameterInfo [] retval = new ParameterInfo [parameters.Length];
 			for (int i = 0; i < parameters.Length; i++)
-				retval [i] = new ParameterInfo (pinfo == null ? null
+				retval [i] = ParameterInfo.New (pinfo == null ? null
 					: pinfo [i + 1], parameters [i], this, i + 1);
 
 			return retval;
 		}
 		
-		internal override int GetParameterCount ()
+		internal override int GetParametersCount ()
 		{
 			if (parameters == null)
 				return 0;
@@ -179,9 +179,7 @@ namespace System.Reflection.Emit {
 			}
 		}
 
-#if NET_4_0
 		[Obsolete]
-#endif
 		public Type ReturnType {
 			get {
 				return null;
@@ -232,7 +230,7 @@ namespace System.Reflection.Emit {
 
 		public ParameterBuilder DefineParameter (int iSequence, ParameterAttributes attributes, string strParamName)
 		{
-			if (iSequence < 1 || iSequence > GetParameterCount ())
+			if (iSequence < 1 || iSequence > GetParametersCount ())
 				throw new ArgumentOutOfRangeException ("iSequence");
 			if (type.is_created)
 				throw not_after_created ();
@@ -351,7 +349,7 @@ namespace System.Reflection.Emit {
 				throw new InvalidOperationException ("Method '" + Name + "' does not have a method body.");
 			}
 			if (ilgen != null)
-				ilgen.label_fixup ();
+				ilgen.label_fixup (this);
 		}
 		
 		internal void GenerateDebugInfo (ISymbolWriter symbolWriter)

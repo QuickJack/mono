@@ -57,6 +57,11 @@ namespace Microsoft.Build.Construction
                         get { return taskParameter ?? String.Empty; }
                         set { taskParameter = value; }
                 }
+                ElementLocation taskParameterLocation;
+                public ElementLocation TaskParameterLocation {
+                        get { return taskParameterLocation; }
+                        set { taskParameterLocation = value; }
+                }
                 internal override string XmlName {
                         get { return "Output"; }
                 }

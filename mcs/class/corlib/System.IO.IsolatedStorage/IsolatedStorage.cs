@@ -28,7 +28,6 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if !MOONLIGHT
 using System.Globalization;
 using System.Reflection;
 using System.Runtime.InteropServices;
@@ -82,9 +81,7 @@ namespace System.IO.IsolatedStorage {
 		}
 
 		[CLSCompliant (false)]
-#if NET_4_0 || MOBILE
 		[Obsolete]
-#endif
 		public virtual ulong CurrentSize {
 			get {
 				throw new InvalidOperationException (
@@ -105,9 +102,7 @@ namespace System.IO.IsolatedStorage {
 		}
 
 		[CLSCompliant (false)]
-#if NET_4_0 || MOBILE
 		[Obsolete]
-#endif
 		public virtual ulong MaximumSize {
 			get {
 				throw new InvalidOperationException (
@@ -119,7 +114,6 @@ namespace System.IO.IsolatedStorage {
 			get { return storage_scope; }
 		}
 
-#if NET_4_0 || MOBILE
 		[ComVisible (false)]
 		public virtual long AvailableFreeSpace {
 			get {
@@ -140,7 +134,6 @@ namespace System.IO.IsolatedStorage {
 				throw new InvalidOperationException ("This property is not defined for this store.");
 			}
 		}
-#endif
 
 		protected virtual char SeparatorExternal {
 			get { return System.IO.Path.DirectorySeparatorChar; }
@@ -183,14 +176,10 @@ namespace System.IO.IsolatedStorage {
 		}
 		public abstract void Remove ();
 
-#if NET_4_0 || MOBILE
 		[ComVisible (false)]
 		public virtual bool IncreaseQuotaTo (long newQuotaSize)
 		{
 			return false;
 		}
-#endif
 	}
 }
-/* MOONLIGHT */
-#endif 

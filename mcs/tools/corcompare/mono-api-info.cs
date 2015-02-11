@@ -545,6 +545,9 @@ namespace CorCompare
 			if (TypeHelper.IsDelegate(t))
 				return "delegate";
 
+			if (t.IsPointer)
+				return "pointer";
+
 			return "class";
 		}
 
@@ -907,6 +910,8 @@ namespace CorCompare
 				AddAttribute (p, "abstract", "true");
 			if (mbase.IsVirtual)
 				AddAttribute (p, "virtual", "true");
+			if (mbase.IsFinal && mbase.IsVirtual && mbase.IsReuseSlot)
+				AddAttribute (p, "sealed", "true");
 			if (mbase.IsStatic)
 				AddAttribute (p, "static", "true");
 
@@ -1231,6 +1236,9 @@ namespace CorCompare
 
 		static object GetFlaggedEnumValue (TypeDefinition type, object value)
 		{
+			if (value is ulong)
+				return GetFlaggedEnumValue (type, (ulong)value);
+
 			long flags = Convert.ToInt64 (value);
 			var signature = new StringBuilder ();
 
@@ -1241,6 +1249,33 @@ namespace CorCompare
 					continue;
 
 				long flag = Convert.ToInt64 (field.Constant);
+
+				if (flag == 0)
+					continue;
+
+				if ((flags & flag) == flag) {
+					if (signature.Length != 0)
+						signature.Append (", ");
+
+					signature.Append (field.Name);
+					flags -= flag;
+				}
+			}
+
+			return signature.ToString ();
+		}
+
+		static object GetFlaggedEnumValue (TypeDefinition type, ulong flags)
+		{
+			var signature = new StringBuilder ();
+
+			for (int i = type.Fields.Count - 1; i >= 0; i--) {
+				FieldDefinition field = type.Fields [i];
+
+				if (!field.HasConstant)
+					continue;
+
+				ulong flag = Convert.ToUInt64 (field.Constant);
 
 				if (flag == 0)
 					continue;

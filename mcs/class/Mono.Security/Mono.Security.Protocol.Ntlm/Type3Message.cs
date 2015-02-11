@@ -39,7 +39,12 @@ using System.Text;
 
 namespace Mono.Security.Protocol.Ntlm {
 
-	public class Type3Message : MessageBase {
+#if INSIDE_SYSTEM
+	internal
+#else
+	public
+#endif
+	class Type3Message : MessageBase {
 
 		private NtlmAuthLevel _level;
 		private byte[] _challenge;
@@ -112,12 +117,10 @@ namespace Mono.Security.Protocol.Ntlm {
 		}
 
 		// Default auth level
-
-		static NtlmAuthLevel _default = NtlmAuthLevel.LM_and_NTLM_and_try_NTLMv2_Session;
-
+		[Obsolete ("Use NtlmSettings.DefaultAuthLevel")]
 		public static NtlmAuthLevel DefaultAuthLevel {
-			get { return _default; }
-			set { _default = value; }
+			get { return NtlmSettings.DefaultAuthLevel; }
+			set { NtlmSettings.DefaultAuthLevel = value; }
 		}
 
 		public NtlmAuthLevel Level {

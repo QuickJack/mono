@@ -105,6 +105,141 @@ namespace Mono.CSharp
 		}
 #endif
 
+		public sealed class PatternMatchingHelper : CompilerGeneratedContainer
+		{
+			public PatternMatchingHelper (ModuleContainer module)
+				: base (module, new MemberName ("<PatternMatchingHelper>", Location.Null),
+					Modifiers.STATIC | Modifiers.INTERNAL | Modifiers.DEBUGGER_HIDDEN)
+			{
+			}
+
+			public Method NumberMatcher { get; private set; }
+
+			protected override bool DoDefineMembers ()
+			{
+				if (!base.DoDefineMembers ())
+					return false;
+
+				NumberMatcher = GenerateNumberMatcher ();
+				return true;
+			}
+
+			Method GenerateNumberMatcher ()
+			{
+				var loc = Location;
+				var parameters = ParametersCompiled.CreateFullyResolved (
+					new [] {
+						new Parameter (new TypeExpression (Compiler.BuiltinTypes.Object, loc), "obj", 0, null, loc),
+						new Parameter (new TypeExpression (Compiler.BuiltinTypes.Object, loc), "value", 0, null, loc),
+						new Parameter (new TypeExpression (Compiler.BuiltinTypes.Bool, loc), "enumType", 0, null, loc),
+					},
+					new [] {
+						Compiler.BuiltinTypes.Object,
+						Compiler.BuiltinTypes.Object,
+						Compiler.BuiltinTypes.Bool
+					});
+
+				var m = new Method (this, new TypeExpression (Compiler.BuiltinTypes.Bool, loc),
+					Modifiers.PUBLIC | Modifiers.STATIC | Modifiers.DEBUGGER_HIDDEN, new MemberName ("NumberMatcher", loc),
+					parameters, null);
+
+				parameters [0].Resolve (m, 0);
+				parameters [1].Resolve (m, 1);
+				parameters [2].Resolve (m, 2);
+
+				ToplevelBlock top_block = new ToplevelBlock (Compiler, parameters, loc);
+				m.Block = top_block;
+
+				//
+				// if (enumType)
+				//		return Equals (obj, value);
+				//
+				var equals_args = new Arguments (2);
+				equals_args.Add (new Argument (top_block.GetParameterReference (0, loc)));
+				equals_args.Add (new Argument (top_block.GetParameterReference (1, loc)));
+
+				var if_type = new If (
+					              top_block.GetParameterReference (2, loc),
+					              new Return (new Invocation (new SimpleName ("Equals", loc), equals_args), loc),
+					              loc);
+
+				top_block.AddStatement (if_type);
+
+				//
+				// if (obj is Enum || obj == null)
+				//		return false;
+				//
+
+				var if_enum = new If (
+					              new Binary (Binary.Operator.LogicalOr,
+						              new Is (top_block.GetParameterReference (0, loc), new TypeExpression (Compiler.BuiltinTypes.Enum, loc), loc),
+						              new Binary (Binary.Operator.Equality, top_block.GetParameterReference (0, loc), new NullLiteral (loc))),
+					              new Return (new BoolLiteral (Compiler.BuiltinTypes, false, loc), loc),
+					              loc);
+
+				top_block.AddStatement (if_enum);
+
+
+				var system_convert = new MemberAccess (new QualifiedAliasMember ("global", "System", loc), "Convert", loc);
+				var expl_block = new ExplicitBlock (top_block, loc, loc);
+
+				//
+				// var converted = System.Convert.ChangeType (obj, System.Convert.GetTypeCode (value));
+				//
+				var lv_converted = LocalVariable.CreateCompilerGenerated (Compiler.BuiltinTypes.Object, top_block, loc);
+
+				var arguments_gettypecode = new Arguments (1);
+				arguments_gettypecode.Add (new Argument (top_block.GetParameterReference (1, loc)));
+
+				var gettypecode = new Invocation (new MemberAccess (system_convert, "GetTypeCode", loc), arguments_gettypecode);
+
+				var arguments_changetype = new Arguments (1);
+				arguments_changetype.Add (new Argument (top_block.GetParameterReference (0, loc)));
+				arguments_changetype.Add (new Argument (gettypecode));
+
+				var changetype = new Invocation (new MemberAccess (system_convert, "ChangeType", loc), arguments_changetype);
+
+				expl_block.AddStatement (new StatementExpression (new SimpleAssign (new LocalVariableReference (lv_converted, loc), changetype, loc)));
+
+
+				//
+				// return converted.Equals (value)
+				//
+				var equals_arguments = new Arguments (1);
+				equals_arguments.Add (new Argument (top_block.GetParameterReference (1, loc)));
+				var equals_invocation = new Invocation (new MemberAccess (new LocalVariableReference (lv_converted, loc), "Equals"), equals_arguments);
+				expl_block.AddStatement (new Return (equals_invocation, loc));
+
+				var catch_block = new ExplicitBlock (top_block, loc, loc);
+				catch_block.AddStatement (new Return (new BoolLiteral (Compiler.BuiltinTypes, false, loc), loc));
+				top_block.AddStatement (new TryCatch (expl_block, new List<Catch> () {
+					new Catch (catch_block, loc)
+				}, loc, false));
+
+				m.Define ();
+				m.PrepareEmit ();
+				AddMember (m);
+
+				return m;
+			}
+		}
+
+		PatternMatchingHelper pmh;
+
+		public PatternMatchingHelper CreatePatterMatchingHelper ()
+		{
+			if (pmh == null) {
+				pmh = new PatternMatchingHelper (this);
+
+				pmh.CreateContainer ();
+				pmh.DefineContainer ();
+				pmh.Define ();
+				AddCompilerGeneratedClass (pmh);
+			}
+
+			return pmh;
+		}
+
 		public CharSet? DefaultCharSet;
 		public TypeAttributes DefaultCharSetType = TypeAttributes.AnsiClass;
 
@@ -113,6 +248,7 @@ namespace Mono.CSharp
 		readonly Dictionary<TypeSpec, PointerContainer> pointer_types;
 		readonly Dictionary<TypeSpec, ReferenceContainer> reference_types;
 		readonly Dictionary<TypeSpec, MethodSpec> attrs_cache;
+		readonly Dictionary<TypeSpec, AwaiterDefinition> awaiters;
 
 		AssemblyDefinition assembly;
 		readonly CompilerContext context;
@@ -126,6 +262,9 @@ namespace Mono.CSharp
 		PredefinedAttributes predefined_attributes;
 		PredefinedTypes predefined_types;
 		PredefinedMembers predefined_members;
+
+		public Binary.PredefinedOperator[] OperatorsBinaryEqualityLifted;
+		public Binary.PredefinedOperator[] OperatorsBinaryLifted;
 
 		static readonly string[] attribute_targets = new string[] { "assembly", "module" };
 
@@ -144,6 +283,7 @@ namespace Mono.CSharp
 			pointer_types = new Dictionary<TypeSpec, PointerContainer> ();
 			reference_types = new Dictionary<TypeSpec, ReferenceContainer> ();
 			attrs_cache = new Dictionary<TypeSpec, MethodSpec> ();
+			awaiters = new Dictionary<TypeSpec, AwaiterDefinition> ();
 		}
 
 		#region Properties
@@ -182,9 +322,6 @@ namespace Mono.CSharp
 		}
 
 		public int CounterAnonymousTypes { get; set; }
-		public int CounterAnonymousMethods { get; set; }
-		public int CounterAnonymousContainers { get; set; }
-		public int CounterSwitchTypes { get; set; }
 
 		public AssemblyDefinition DeclaringAssembly {
 			get {
@@ -309,7 +446,7 @@ namespace Mono.CSharp
 
 		public override void AddTypeContainer (TypeContainer tc)
 		{
-			containers.Add (tc);
+			AddTypeContainerMember (tc);
 		}
 
 		public override void ApplyAttributeBuilder (Attribute a, MethodSpec ctor, byte[] cdata, PredefinedAttributes pa)
@@ -424,7 +561,7 @@ namespace Mono.CSharp
 			if (OptAttributes != null)
 				OptAttributes.Emit ();
 
-			if (Compiler.Settings.Unsafe) {
+			if (Compiler.Settings.Unsafe && !assembly.IsSatelliteAssembly) {
 				var pa = PredefinedAttributes.UnverifiableCode;
 				if (pa.IsDefined)
 					pa.EmitAttribute (builder);
@@ -472,6 +609,43 @@ namespace Mono.CSharp
 			return null;
 		}
 
+		//
+		// Return container with awaiter definition. It never returns null
+		// but all container member can be null for easier error reporting
+		//
+		public AwaiterDefinition GetAwaiter (TypeSpec type)
+		{
+			AwaiterDefinition awaiter;
+			if (awaiters.TryGetValue (type, out awaiter))
+				return awaiter;
+
+			awaiter = new AwaiterDefinition ();
+
+			//
+			// Predefined: bool IsCompleted { get; } 
+			//
+			awaiter.IsCompleted = MemberCache.FindMember (type, MemberFilter.Property ("IsCompleted", Compiler.BuiltinTypes.Bool),
+				BindingRestriction.InstanceOnly) as PropertySpec;
+
+			//
+			// Predefined: GetResult ()
+			//
+			// The method return type is also result type of await expression
+			//
+			awaiter.GetResult = MemberCache.FindMember (type, MemberFilter.Method ("GetResult", 0,
+				ParametersCompiled.EmptyReadOnlyParameters, null),
+				BindingRestriction.InstanceOnly) as MethodSpec;
+
+			//
+			// Predefined: INotifyCompletion.OnCompleted (System.Action)
+			//
+			var nc = PredefinedTypes.INotifyCompletion;
+			awaiter.INotifyCompletion = !nc.Define () || type.ImplementsInterface (nc.TypeSpec, false);
+
+			awaiters.Add (type, awaiter);
+			return awaiter;
+		}
+
 		public override void GetCompletionStartingWith (string prefix, List<string> results)
 		{
 			var names = Evaluator.GetVarNames ();
@@ -490,11 +664,37 @@ namespace Mono.CSharp
 			return "<module>";
 		}
 
+		public Binary.PredefinedOperator[] GetPredefinedEnumAritmeticOperators (TypeSpec enumType, bool nullable)
+		{
+			TypeSpec underlying;
+			Binary.Operator mask = 0;
+
+			if (nullable) {
+				underlying = Nullable.NullableInfo.GetEnumUnderlyingType (this, enumType);
+				mask = Binary.Operator.NullableMask;
+			} else {
+				underlying = EnumSpec.GetUnderlyingType (enumType);
+			}
+
+			var operators = new[] {
+				new Binary.PredefinedOperator (enumType, underlying,
+					mask | Binary.Operator.AdditionMask | Binary.Operator.SubtractionMask | Binary.Operator.DecomposedMask, enumType),
+				new Binary.PredefinedOperator (underlying, enumType,
+					mask | Binary.Operator.AdditionMask | Binary.Operator.SubtractionMask | Binary.Operator.DecomposedMask, enumType),
+				new Binary.PredefinedOperator (enumType, mask | Binary.Operator.SubtractionMask, underlying)
+			};
+
+			return operators;
+		}
+
 		public void InitializePredefinedTypes ()
 		{
 			predefined_attributes = new PredefinedAttributes (this);
 			predefined_types = new PredefinedTypes (this);
 			predefined_members = new PredefinedMembers (this);
+
+			OperatorsBinaryEqualityLifted = Binary.CreateEqualityLiftedOperatorsTable (this);
+			OperatorsBinaryLifted = Binary.CreateStandardLiftedOperatorsTable (this);
 		}
 
 		public override bool IsClsComplianceRequired ()

@@ -132,7 +132,7 @@ namespace MonoTests.System.Diagnostics
 		{
 			if (RunningOnUnix)
 				// on unix, all characters are allowed
-				return;
+				Assert.Ignore ("Running on Unix.");
 
 			string systemDir = Environment.GetFolderPath (Environment.SpecialFolder.System);
 			string exe = "\"" + Path.Combine (systemDir, "calc.exe") + "\"";
@@ -593,7 +593,6 @@ namespace MonoTests.System.Diagnostics
 			}
 		}
 
-#if NET_2_0		
 		[Test]
 		public void Start_UseShellExecuteWithEmptyUserName ()
 		{
@@ -629,7 +628,6 @@ namespace MonoTests.System.Diagnostics
 			} catch (Win32Exception) {
 			}
 		}
-#endif
 		
 		[Test] // Start (string, string)
 		public void Start4_FileName_Null ()
@@ -675,11 +673,12 @@ namespace MonoTests.System.Diagnostics
 
 		[Test]
 		[NUnit.Framework.Category ("NotDotNet")]
+		[NUnit.Framework.Category ("MobileNotWorking")]
 		public void TestRedirectedOutputIsAsync ()
 		{
 			// Test requires cygwin, so we just bail out for now.
 			if (Path.DirectorySeparatorChar == '\\')
-				return;
+				Assert.Ignore ("Test requires cygwin.");
 			
 			Process p = new Process ();
 			p.StartInfo = new ProcessStartInfo ("/bin/sh", "-c \"sleep 2; echo hello\"");
@@ -721,12 +720,12 @@ namespace MonoTests.System.Diagnostics
 			}
 		}
 
-		int bytesRead = -1;
+		public int bytesRead = -1;
 
-#if NET_2_0
 // Not technically a 2.0 only test, but I use lambdas, so I need gmcs
 
 		[Test]
+		[NUnit.Framework.Category ("MobileNotWorking")]
 		// This was for bug #459450
 		public void TestEventRaising ()
 		{
@@ -796,6 +795,7 @@ namespace MonoTests.System.Diagnostics
 		}
 		
 		[Test]
+		[NUnit.Framework.Category ("MobileNotWorking")]
 		public void ProcessName_AfterExit ()
 		{
 			Process p = new Process ();
@@ -824,6 +824,21 @@ namespace MonoTests.System.Diagnostics
 			
 			Assert.IsNull (e.InnerException, "IOE inner exception should be null");
 		}
-#endif
+
+		[Test]
+		public void Handle_ThrowsOnNotStarted ()
+		{
+			Process p = new Process ();
+			try {
+				var x = p.Handle;
+				Assert.Fail ("Handle should throw for unstated procs, but returned " + x);
+			} catch (InvalidOperationException) {
+			}
+		}
+
+		[Test]
+		public void HasExitedCurrent () {
+			Assert.IsFalse (Process.GetCurrentProcess ().HasExited);
+		}
 	}
 }

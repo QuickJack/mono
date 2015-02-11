@@ -33,9 +33,7 @@ using System.IO;
 using System.Net;
 using System.Xml.Schema;
 
-#if !MOONLIGHT
 using XsValidationFlags = System.Xml.Schema.XmlSchemaValidationFlags;
-#endif
 
 namespace System.Xml
 {
@@ -51,39 +49,29 @@ namespace System.Xml
 		private int linePositionOffset;
 		private bool prohibitDtd;
 		private XmlNameTable nameTable;
-#if !MOONLIGHT
 		private XmlSchemaSet schemas;
 		private bool schemasNeedsInitialization;
 		private XsValidationFlags validationFlags;
 		private ValidationType validationType;
-#endif
 		private XmlResolver xmlResolver;
-#if NET_4_0 || NET_2_1
 		private DtdProcessing dtdProcessing;
-#endif
 		private long maxCharactersFromEntities;
 		private long maxCharactersInDocument;
 
-#if NET_4_5
 		private bool isReadOnly;
 		private bool isAsync;
-#endif
 
 		public XmlReaderSettings ()
 		{
 			Reset ();
 		}
 
-#if !MOONLIGHT
 		public event ValidationEventHandler ValidationEventHandler;
-#endif
 
 		public XmlReaderSettings Clone ()
 		{
 			var clone = (XmlReaderSettings) MemberwiseClone ();
-#if NET_4_5
 			clone.isReadOnly = false;
-#endif
 			return clone;
 		}
 
@@ -98,9 +86,6 @@ namespace System.Xml
 			lineNumberOffset = 0;
 			linePositionOffset = 0;
 			prohibitDtd = true;
-#if MOONLIGHT
-			xmlResolver = new XmlXapResolver ();
-#else
 			schemas = null;
 			schemasNeedsInitialization = true;
 			validationFlags =
@@ -108,10 +93,7 @@ namespace System.Xml
 				XsValidationFlags.AllowXmlAttributes;
 			validationType = ValidationType.None;
 			xmlResolver = new XmlUrlResolver ();
-#endif
-#if NET_4_5
 			isAsync = false;
-#endif
 		}
 
 		public bool CheckCharacters {
@@ -128,7 +110,6 @@ namespace System.Xml
 			get { return conformance; }
 			set { conformance = value; }
 		}
-#if NET_4_0 || NET_2_1
 		public DtdProcessing DtdProcessing {
 			get { return dtdProcessing; }
 			set {
@@ -136,7 +117,6 @@ namespace System.Xml
 				prohibitDtd = (value == DtdProcessing.Prohibit);
 			}
 		}
-#endif
 		public long MaxCharactersFromEntities {
 			get { return maxCharactersFromEntities; }
 			set { maxCharactersFromEntities = value; }
@@ -173,9 +153,7 @@ namespace System.Xml
 			set { linePositionOffset = value; }
 		}
 
-#if NET_4_0
 		[ObsoleteAttribute("Use DtdProcessing property instead")]
-#endif
 		public bool ProhibitDtd {
 			get { return prohibitDtd; }
 			set { prohibitDtd = value; }
@@ -189,7 +167,6 @@ namespace System.Xml
 			set { nameTable = value; }
 		}
 
-#if !MOONLIGHT
 		public XmlSchemaSet Schemas {
 			get {
 				if (schemasNeedsInitialization) {
@@ -226,14 +203,12 @@ namespace System.Xml
 			get { return validationType; }
 			set { validationType = value; }
 		}
-#endif
 
 		public XmlResolver XmlResolver {
 			internal get { return xmlResolver; }
 			set { xmlResolver = value; }
 		}
 
-#if NET_4_5
 		internal void SetReadOnly ()
 		{
 			isReadOnly = true;
@@ -256,6 +231,5 @@ namespace System.Xml
 				isAsync = value;
 			}
 		}
-#endif
 	}
 }

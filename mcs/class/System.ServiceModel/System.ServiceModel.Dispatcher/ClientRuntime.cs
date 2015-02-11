@@ -84,11 +84,7 @@ namespace System.ServiceModel.Dispatcher
 		public DispatchRuntime CallbackDispatchRuntime { get; internal set; }
 #endif
 
-#if MOONLIGHT
-		public IList<IClientMessageInspector> MessageInspectors {
-#else
 		public SynchronizedCollection<IClientMessageInspector> MessageInspectors {
-#endif
 			get { return inspectors; }
 		}
 
@@ -101,6 +97,16 @@ namespace System.ServiceModel.Dispatcher
 			get { return operations; }
 		}
 #endif
+
+		[MonoTODO]
+		public ICollection<ClientOperation> ClientOperations {
+			get { throw new NotImplementedException (); }
+		}
+
+		[MonoTODO]
+		public ICollection<IClientMessageInspector> ClientMessageInspectors {
+			get { throw new NotImplementedException (); }
+		}
 
 		public bool ManualAddressing {
 			get { return manual_addressing; }

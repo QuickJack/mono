@@ -32,12 +32,8 @@ using System.Runtime.Serialization;
 
 namespace System.Net 
 {
-#if MOONLIGHT
-	internal abstract class WebResponse : MarshalByRefObject, ISerializable, IDisposable {
-#else
 	[Serializable]
 	public abstract class WebResponse : MarshalByRefObject, ISerializable, IDisposable {
-#endif
 		// Constructors
 		
 		protected WebResponse () { }
@@ -89,12 +85,14 @@ namespace System.Net
 		public virtual Uri ResponseUri {		
 			get { throw new NotSupportedException (); }
 		}		
-#if NET_4_5 || MOBILE
-		[MonoTODO ("for portable library support")]
+
 		public virtual bool SupportsHeaders {
-			get { throw new NotImplementedException (); }
+			get {
+				// The managed stack always returns this as true, it is only
+				// the Silverlight stack that does not support this.
+				return true;
+			}
 		}
-#endif
 		// Methods
 		
 		public virtual void Close()
@@ -106,15 +104,15 @@ namespace System.Net
 		{
 			throw new NotSupportedException ();
 		}
-#if TARGET_JVM //enable overrides for extenders
-		public virtual void Dispose()
-#elif NET_4_0 || MOBILE
 		public void Dispose ()
-#else
-		void IDisposable.Dispose()
-#endif
 		{
-			Close ();
+			Dispose (true);
+		}
+		
+		protected virtual void Dispose (bool disposing)
+		{
+			if (disposing)
+				Close ();
 		}
 
 		void ISerializable.GetObjectData

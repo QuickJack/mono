@@ -173,7 +173,13 @@
  * #define NO_ERRNO if strtod should not assign errno = ERANGE when
  *	the result overflows to +-Infinity or underflows to 0.
  */
-#if defined(TARGET_X86) || defined(mips) && defined(MIPSEL) || defined (__arm__)
+#if defined __BIG_ENDIAN__ || defined _BIG_ENDIAN
+#   define IEEE_MC68k
+#elif defined __LITTLE_ENDIAN__ || defined _LITTLE_ENDIAN
+#   define IEEE_8087
+#else
+
+#if defined(TARGET_X86) || defined(mips) && defined(MIPSEL) || defined (__arm__) || defined(__aarch64__)
 
 #   define IEEE_8087
 
@@ -194,7 +200,10 @@
 #   define IEEE_MC68k
 
 #else
+#warning byte order unknown, assuming big endian
 #define IEEE_MC68k
+#endif
+
 #endif
 
 #define Long gint32
@@ -2444,6 +2453,7 @@ mono_strtod
 	return sign ? -dval(rv) : dval(rv);
 	}
 
+#if 0
  static int
 quorem
 #ifdef KR_headers
@@ -2561,11 +2571,13 @@ quorem
 		}
 	return q;
 	}
+#endif
 
 #ifndef MULTIPLE_THREADS
  static char *dtoa_result;
 #endif
 
+#if 0
  static char *
 #ifdef KR_headers
 rv_alloc(i) int i;
@@ -2629,7 +2641,6 @@ freedtoa(char *s)
 #endif
 	}
 
-#if 0
 /* dtoa for IEEE arithmetic (dmg): convert double to ASCII string.
  *
  * Inspired by "How to Print Floating-Point Numbers Accurately" by

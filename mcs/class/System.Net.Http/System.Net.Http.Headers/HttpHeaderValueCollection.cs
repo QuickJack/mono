@@ -61,6 +61,11 @@ namespace System.Net.Http.Headers
 			list.Add (item);
 		}
 
+		internal void AddRange (List<T> values)
+		{
+			list.AddRange (values);
+		}
+
 		public void Clear ()
 		{
 			list.Clear ();
@@ -92,7 +97,7 @@ namespace System.Net.Http.Headers
 			// what .NET does when one of the values is invalid
 			// But it better represents what is actually hold by
 			// the collection
-			return string.Join (", ", list);
+			return string.Join (headerInfo.Separator, list);
 		}
 
 		public bool TryParseAdd (string input)

@@ -43,6 +43,7 @@ MPH_UNIX_SOURCE =				\
 	sys-stat.c				\
 	sys-statvfs.c				\
 	sys-time.c				\
+	sys-uio.c				\
 	sys-utsname.c   \
 	sys-wait.c				\
 	sys-xattr.c				\
@@ -141,6 +142,7 @@ refresh:
 	--autoconf-header="<sys/statvfs.h>"                   \
 	--autoconf-header="<sys/xattr.h>"                     \
 	--autoconf-header="<sys/mman.h>"                      \
+	--autoconf-header="<sys/uio.h>"                       \
 	--autoconf-header="<unistd.h>"                        \
 	--impl-header="<fcntl.h>"                             \
 	--impl-header="<signal.h>"                            \
@@ -157,7 +159,7 @@ refresh:
 	--rename-member=st_mtime=st_mtime_                    \
 	--rename-namespace=Mono.Unix.Native=Mono.Posix        \
 	--library=MonoPosixHelper                             \
-	$(mcs_topdir)/class/lib/net_2_0/Mono.Posix.dll map
+	$(mcs_topdir)/class/lib/net_4_5/Mono.Posix.dll map
 
 # Useful if mono is compiled with --enable-shared=no
 patch-libtool:

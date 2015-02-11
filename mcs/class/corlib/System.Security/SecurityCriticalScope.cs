@@ -28,6 +28,7 @@
 
 namespace System.Security {
 
+	[Obsolete]
 	public enum SecurityCriticalScope {
 		Explicit,
 		Everything

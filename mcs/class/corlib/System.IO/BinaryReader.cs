@@ -62,7 +62,6 @@ namespace System.IO {
 		{
 		}
 		
-#if NET_4_5
 		readonly bool leave_open;
 		
 		public BinaryReader(Stream input, Encoding encoding)
@@ -71,11 +70,6 @@ namespace System.IO {
 		}
 		
 		public BinaryReader(Stream input, Encoding encoding, bool leaveOpen)
-#else
-		const bool leave_open = false;
-		
-		public BinaryReader(Stream input, Encoding encoding)
-#endif
 		{
 			if (input == null || encoding == null) 
 				throw new ArgumentNullException(Locale.GetText ("Input or Encoding is a null reference."));
@@ -84,9 +78,7 @@ namespace System.IO {
 
 			m_stream = input;
 			m_encoding = encoding;
-#if NET_4_5
 			leave_open = leaveOpen;
-#endif
 			decoder = encoding.GetDecoder ();
 			
 			// internal buffer size is documented to be between 16 and the value
@@ -117,11 +109,7 @@ namespace System.IO {
 			charBuffer = null;
 		}
 
-#if NET_4_0 || NET_2_1
 		public void Dispose ()
-#else
-		void IDisposable.Dispose() 
-#endif
 		{
 			Dispose (true);
 		}
@@ -368,26 +356,36 @@ namespace System.IO {
 			return((char)ch);
 		}
 
-		public virtual char[] ReadChars(int count) {
+		public virtual char[] ReadChars (int count)
+		{
 			if (count < 0) {
 				throw new ArgumentOutOfRangeException("count is less than 0");
 			}
 
+			if (m_stream == null) {
+				if (m_disposed)
+					throw new ObjectDisposedException ("BinaryReader", "Cannot read from a closed BinaryReader.");
+
+				throw new IOException("Stream is invalid");
+			}
+
 			if (count == 0)
-				return new char [0];
+				return EmptyArray<char>.Value;
 					
 			char[] full = new char[count];
-			int chars = Read(full, 0, count);
+			int bytes_read;
+			int chars = ReadCharBytes (full, 0, count, out bytes_read);			
 			
-			if (chars == 0) {
+			if (chars == 0)
 				throw new EndOfStreamException();
-			} else if (chars != full.Length) {
-				char[] ret = new char[chars];
-				Array.Copy(full, 0, ret, 0, chars);
-				return ret;
-			} else {
-				return full;
+
+			if (chars != count) {
+				var new_buffer = new char[chars];
+				Buffer.BlockCopyInternal (full, 0, new_buffer, 0, 2 * chars);
+				return new_buffer;
 			}
+
+			return full;
 		}
 
 		unsafe public virtual decimal ReadDecimal() {
@@ -507,11 +505,11 @@ namespace System.IO {
 			do {
 				int readLen = Math.Min (MaxBufferSize, len);
 				
-				int n = m_stream.Read (charByteBuffer, 0, readLen);
-				if (n == 0)
+				readLen = m_stream.Read (charByteBuffer, 0, readLen);
+				if (readLen == 0)
 					throw new EndOfStreamException();
 				
-				int cch = decoder.GetChars (charByteBuffer, 0, n, charBuffer, 0);
+				int cch = decoder.GetChars (charByteBuffer, 0, readLen, charBuffer, 0);
 
 				if (sb == null && readLen == len) // ok, we got out the easy way, dont bother with the sb
 					return new String (charBuffer, 0, cch);

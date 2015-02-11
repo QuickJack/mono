@@ -6,7 +6,6 @@
 //
 // (C) 2005 John Luke
 //
-#if NET_2_0
 using NUnit.Framework;
 using System;
 using System.Net.Mime;
@@ -71,7 +70,7 @@ namespace MonoTests.System.Net.Mime
 		}
 
 		[Test]
-		public void GetHashCode ()
+		public void GetHashCodeTest ()
 		{
 			Assert.IsTrue (ct.GetHashCode () == new ContentType ().GetHashCode ());
 		}
@@ -171,4 +170,3 @@ namespace MonoTests.System.Net.Mime
 		}
 	}
 }
-#endif

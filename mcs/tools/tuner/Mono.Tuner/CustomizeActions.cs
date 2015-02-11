@@ -35,6 +35,10 @@ namespace Mono.Tuner {
 
 		protected virtual bool IsPreservedAttribute (CustomAttribute attribute)
 		{
+			// [assembly: Preserve (type)] does not preserve all the code in the assembly, in fact it might
+			// not preserve anything in _this_ assembly, but something in a separate assembly (reference)
+			if (attribute.HasConstructorArguments)
+				return false;
 			return (attribute.AttributeType.Name == "PreserveAttribute");
 		}
 
@@ -43,8 +47,15 @@ namespace Mono.Tuner {
 			return (attribute.AttributeType.Name == "LinkerSafeAttribute");
 		}
 
+		const ModuleAttributes Supported = ModuleAttributes.ILOnly | ModuleAttributes.Required32Bit | 
+			ModuleAttributes.Preferred32Bit | ModuleAttributes.StrongNameSigned;
+
 		protected virtual bool IsSkipped (AssemblyDefinition assembly)
 		{
+			// Cecil can't save back mixed-mode assemblies - so we can't link them
+			if ((assembly.MainModule.Attributes & ~Supported) != 0)
+				return true;
+
 			if (assembly.HasCustomAttributes) {
 				foreach (var ca in assembly.CustomAttributes) {
 					if (IsPreservedAttribute (ca))

@@ -33,12 +33,10 @@ namespace System.ServiceModel
 {
 	public sealed class NetTcpSecurity
 	{
-#if NET_4_0
 		public NetTcpSecurity ()
 			: this (SecurityMode.Transport)
 		{
 		}
-#endif
 
 		internal NetTcpSecurity (SecurityMode mode)
 		{
@@ -53,6 +51,7 @@ namespace System.ServiceModel
 
 		public MessageSecurityOverTcp Message {
 			get { return message; }
+			set { message = value; }
 		}
 
 		public SecurityMode Mode {
@@ -62,6 +61,7 @@ namespace System.ServiceModel
 
 		public TcpTransportSecurity Transport {
 			get { return transport; }
+			set { transport = value; }
 		}
 	}
 }

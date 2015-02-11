@@ -18,8 +18,11 @@ namespace MonoTests.System.Runtime.InteropServices
 	[TestFixture]
 	public class GCHandleTest
 	{
+		// Expected warning, the tests that reference this handle are testing for the default values of the object
+		#pragma warning disable 649
 		static GCHandle handle;
-
+		#pragma warning restore 649
+		
 		[Test]
 		public void DefaultZeroValue_Allocated ()
 		{
@@ -125,7 +128,7 @@ namespace MonoTests.System.Runtime.InteropServices
 				gch.Free ();
 			}
 		}
-
+#if !MONOTOUCH
 		[Test]
 		public void WeakHandleWorksOnNonRootDomain ()
 		{
@@ -192,6 +195,7 @@ namespace MonoTests.System.Runtime.InteropServices
 			private readonly string _assemblyFile;
 			private readonly string _assemblyName;
 		}
+#endif
 	}
 
 }

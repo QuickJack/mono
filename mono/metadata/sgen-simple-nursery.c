@@ -27,17 +27,12 @@
 
 #include "metadata/sgen-gc.h"
 #include "metadata/sgen-protocol.h"
+#include "metadata/sgen-layout-stats.h"
 
 static inline char*
 alloc_for_promotion (MonoVTable *vtable, char *obj, size_t objsize, gboolean has_references)
 {
 	return major_collector.alloc_object (vtable, objsize, has_references);
-}
-
-static inline char*
-par_alloc_for_promotion (MonoVTable *vtable, char *obj, size_t objsize, gboolean has_references)
-{
-	return major_collector.par_alloc_object (vtable, objsize, has_references);
 }
 
 static SgenFragment*
@@ -57,7 +52,7 @@ build_fragments_finish (SgenFragmentAllocator *allocator)
 }
 
 static void
-prepare_to_space (char *to_space_bitmap, int space_bitmap_size)
+prepare_to_space (char *to_space_bitmap, size_t space_bitmap_size)
 {
 }
 
@@ -78,7 +73,6 @@ init_nursery (SgenFragmentAllocator *allocator, char *start, char *end)
 #define SGEN_SIMPLE_NURSERY
 
 #define SERIAL_COPY_OBJECT simple_nursery_serial_copy_object
-#define PARALLEL_COPY_OBJECT simple_nursery_parallel_copy_object
 #define SERIAL_COPY_OBJECT_FROM_OBJ simple_nursery_serial_copy_object_from_obj
 
 #include "sgen-minor-copy-object.h"
@@ -90,7 +84,6 @@ sgen_simple_nursery_init (SgenMinorCollector *collector)
 	collector->is_split = FALSE;
 
 	collector->alloc_for_promotion = alloc_for_promotion;
-	collector->par_alloc_for_promotion = par_alloc_for_promotion;
 
 	collector->prepare_to_space = prepare_to_space;
 	collector->clear_fragments = clear_fragments;

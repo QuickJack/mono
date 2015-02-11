@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Runtime.CompilerServices;
+using System.Threading.Tasks;
 
 struct Foo {
-	public int i, j;
+	public int i, j, k, l, m, n;
 }
 
 struct GFoo<T> {
@@ -17,7 +19,7 @@ struct GFoo<T> {
 }
 
 struct GFoo2<T> {
-	public T t, t2;
+	public T t, t2, t3;
 }
 
 class GFoo3<T> {
@@ -38,13 +40,25 @@ class GFoo3<T> {
 // The tests use arrays to pass/receive values to keep the calling convention of the methods stable, which is a current limitation of the runtime support for gsharedvt.
 //
 
+//
+// Interfaces are used to prevent the AOT compiler from discovering instantiations, thus forcing the usage of the gsharedvt
+// versions of methods. Unused vtype type arguments are used to test gsharedvt methods with ref type arguments, i.e.
+// when calling foo<T,T2> as foo<object,bool>, the gsharedvt version is used, but with a ref type argument.
+//
+
 // FIXME: Add mixed ref/noref tests, i.e. Dictionary<string, int>
 
+#if MOBILE
+public class GSharedTests
+#else
 public class Tests
+#endif
 {
+#if !MOBILE
 	public static int Main (String[] args) {
 		return TestDriver.RunTests (typeof (Tests), args);
 	}
+#endif
 
 	[MethodImplAttribute (MethodImplOptions.NoInlining)]
 	static void gshared<T> (T [] array, int i, int j) {
@@ -173,6 +187,9 @@ public class Tests
 	}
 
 	public static int test_0_vt_unbox_any () {
+		int[] iarr = new int [16];
+		unbox_any<int> (iarr, new object [] { 12 });
+
 		Foo[] arr = new Foo [2];
 
 		object[] arr2 = new object [16];
@@ -180,6 +197,39 @@ public class Tests
 		unbox_any<Foo> (arr, arr2);
 		if (arr [0].i != 1 || arr [0].j != 2)
 			return 2;
+		return 0;
+	}
+
+	interface IFaceUnbox {
+		T Unbox<T, T2> (T t, T2 t2, object o);
+	}
+
+	class ClassUnbox : IFaceUnbox {
+		public T Unbox<T, T2> (T t, T2 t2, object o) {
+			return (T)o;
+		}
+	}
+
+	// unbox.any on a ref type in a gsharedvt method
+	public static int test_0_ref_gsharedvt_aot_unbox_any () {
+		IFaceUnbox iface = new ClassUnbox ();
+		string s = iface.Unbox<string, int> ("A", 2, "A");
+		if (s != "A")
+			return 1;
+		return 0;
+	}
+
+	public static int test_0_unbox_any_enum () {
+		IFaceUnbox iface = new ClassUnbox ();
+		AnEnum res = iface.Unbox<AnEnum, int> (AnEnum.One, 0, 1);
+		if (res != AnEnum.Two)
+			return 1;
+		res = iface.Unbox<AnEnum, int> (AnEnum.One, 0, AnEnum.Two);
+		if (res != AnEnum.Two)
+			return 2;
+		int res2 = iface.Unbox<int, AnEnum> (0, AnEnum.One, AnEnum.Two);
+		if (res2 != 1)
+			return 3;
 		return 0;
 	}
 
@@ -343,6 +393,16 @@ public class Tests
 		return t;
 	}
 
+	interface IFaceGSharedVtIn {
+		T return_t<T> (T t);
+	}
+
+	class ClassGSharedVtIn : IFaceGSharedVtIn {
+		public T return_t<T> (T t) {
+			return t;
+		}
+	}
+
 	public static int test_0_gsharedvt_in () {
 		// Check that the non-generic argument is passed at the correct stack position
 		int r = args_simple<bool> (true, 42);
@@ -386,9 +446,14 @@ public class Tests
 		var v2 = return_t<GFoo2<int>> (v);
 		if (v2.t != 55 || v2.t2 != 32)
 			return 6;
-		i = new Tests ().return_this_t<int> (42);
-		if (i != 42)
+		IFaceGSharedVtIn o = new ClassGSharedVtIn ();
+		var v3 = new GFoo2<long> () { t = 55, t2 = 32 };
+		var v4 = o.return_t<GFoo2<long>> (v3);
+		if (v4.t != 55 || v4.t2 != 32)
 			return 7;
+		i = new GSharedTests ().return_this_t<int> (42);
+		if (i != 42)
+			return 8;
 		return 0;
 	}
 
@@ -448,9 +513,10 @@ public class Tests
 	// Tests for transitioning out of gsharedvt code
 	//
 
+	// T1=Nullable<..> is not currently supported by gsharedvt
+
 	[MethodImplAttribute (MethodImplOptions.NoInlining)]
-	static T return_t_nogshared<T> (T t) {
-		// This is not currently supported by gsharedvt
+	static T return_t_nogshared<T,T1> (T t) {
 		object o = t;
 		T t2 = (T)o;
 		//Console.WriteLine ("X: " + t);
@@ -458,16 +524,14 @@ public class Tests
 	}
 
 	[MethodImplAttribute (MethodImplOptions.NoInlining)]
-	static int return_int_nogshared<T> (T t) {
-		// This is not currently supported by gsharedvt
+	static int return_int_nogshared<T,T1> (T t) {
 		object o = t;
 		T t2 = (T)o;
 		return 2;
 	}
 
 	[MethodImplAttribute (MethodImplOptions.NoInlining)]
-	static A return_vtype_nogshared<T> (T t) {
-		// This is not currently supported by gsharedvt
+	static A return_vtype_nogshared<T,T1> (T t) {
 		object o = t;
 		T t2 = (T)o;
 		return new A () { a = 1, b = 2, c = 3 };
@@ -475,23 +539,24 @@ public class Tests
 
 	[MethodImplAttribute (MethodImplOptions.NoInlining)]
 	static T return2_t_out<T> (T t) {
-		return return_t_nogshared (t);
+		return return_t_nogshared<T, int?> (t);
 	}
 
 	[MethodImplAttribute (MethodImplOptions.NoInlining)]
 	static int return2_int_out<T> (T t) {
-		return return_int_nogshared (t);
+		return return_int_nogshared<T, int?> (t);
 	}
 
 	[MethodImplAttribute (MethodImplOptions.NoInlining)]
 	static A return2_vtype_out<T> (T t) {
-		return return_vtype_nogshared (t);
+		return return_vtype_nogshared<T, int?> (t);
 	}
 
 	struct A {
 		public int a, b, c;
 	}
 
+	[Category ("!FULLAOT")]
 	public static int test_0_gsharedvt_out () {
 		if (return2_t_out (2) != 2)
 			return 1;
@@ -631,6 +696,10 @@ public class Tests
 		return 0;
 	}
 
+	interface IFaceKVP {
+		T do_kvp<T> (T a);
+	}
+
 	static KeyValuePair<T1, T2> make_kvp<T1, T2> (T1 t1, T2 t2) {
 		return new KeyValuePair<T1, T2> (t1, t2);
 	}
@@ -638,16 +707,18 @@ public class Tests
 	static T2 use_kvp<T1, T2> (KeyValuePair<T1, T2> kvp) {
 		return kvp.Value;
 	}
-		
-	[MethodImplAttribute (MethodImplOptions.NoInlining)]
-	static T do_kvp<T> (T a) {
-		var t = make_kvp (a, a);
-		// argument is an instance of a vtype instantiated with gsharedvt type arguments
-		return use_kvp (t);
+
+	class ClassKVP : IFaceKVP {
+		public T do_kvp<T> (T a) {
+			var t = make_kvp (a, a);
+			// argument is an instance of a vtype instantiated with gsharedvt type arguments
+			return use_kvp (t);
+		}
 	}
 
 	public static int test_0_gsharedvt_ginstvt_constructed_arg () {
-		if (do_kvp<long> (1) != 1)
+		IFaceKVP c = new ClassKVP ();
+		if (c.do_kvp<long> (1) != 1)
 			return 1;
 		return 0;
 	}
@@ -873,20 +944,151 @@ public class Tests
 		return 0;
 	}
 
+	public interface IFace1<T> {
+		void m1 ();
+		void m2 ();
+		void m3 ();
+		void m4 ();
+		void m5 ();
+	}
+
+	public class ClassIFace<T> : IFace1<T> {
+		public void m1 () {
+		}
+		public void m2 () {
+		}
+		public void m3 () {
+		}
+		public void m4 () {
+		}
+		public void m5 () {
+		}
+	}
+
+	interface IFaceIFaceCall {
+		void call<T, T2> (IFace1<object> iface);
+	}
+
+	class MakeIFaceCall : IFaceIFaceCall {
+		public void call<T, T2> (IFace1<object> iface) {
+			iface.m1 ();
+		}
+	}
+
+	// Check normal interface calls from gsharedvt call to fully instantiated methods
+	public static int test_0_instatiated_iface_call () {
+		ClassIFace<object> c1 = new ClassIFace<object> ();
+
+		IFaceIFaceCall c = new MakeIFaceCall ();
+
+		c.call<object, int> (c1);
+		return 0;
+	}
+
 	[MethodImplAttribute (MethodImplOptions.NoInlining)]
 	static string to_string<T, T2>(T t, T2 t2) {
 		return t.ToString ();
 	}
 
+	enum AnEnum {
+		One,
+		Two
+	};
+
 	public static int test_0_constrained_tostring () {
 		if (to_string<int, int> (1, 1) != "1")
 			return 1;
+		if (to_string<AnEnum, int> (AnEnum.One, 1) != "One")
+			return 2;
 		if (to_string<string, int> ("A", 1) != "A")
+			return 3;
+		return 0;
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	static int get_hash<T, T2>(T t, T2 t2) {
+		return t.GetHashCode ();
+	}
+
+	public static int test_0_constrained_get_hash () {
+		if (get_hash<int, int> (1, 1) != 1.GetHashCode ())
+			return 1;
+		if (get_hash<double, int> (1.0, 1) != 1.0.GetHashCode ())
+			return 2;
+		if (get_hash<AnEnum, int> (AnEnum.One, 1) != AnEnum.One.GetHashCode ())
+			return 3;
+		if (get_hash<string, int> ("A", 1) != "A".GetHashCode ())
+			return 4;
+		return 0;
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	static bool equals<T, T2>(T t, T2 t2) {
+		return t.Equals (t);
+	}
+
+	public static int test_0_constrained_equals () {
+		if (equals<int, int> (1, 1) != true)
+			return 1;
+		if (equals<double, int> (1.0, 1) != true)
+			return 2;
+		if (equals<AnEnum, int> (AnEnum.One, 1) != true)
+			return 3;
+		if (equals<string, int> ("A", 1) != true)
+			return 4;
+		return 0;
+	}
+
+	interface IGetType {
+		Type gettype<T, T2>(T t, T2 t2);
+	}
+
+	public class CGetType : IGetType {
+		[MethodImplAttribute (MethodImplOptions.NoInlining)]
+		public Type gettype<T, T2>(T t, T2 t2) {
+			return t.GetType ();
+		}
+	}
+
+	public static int test_0_constrained_gettype () {
+		IGetType c = new CGetType ();
+		if (c.gettype<int, int> (1, 1) != typeof (int))
+			return 1;
+		if (c.gettype<string, int> ("A", 1) != typeof (string))
 			return 2;
 		return 0;
 	}
 
-	struct Pair<T1, T2> {
+	interface IConstrainedCalls {
+		Pair<int, int> vtype_ret<T, T2>(T t, T2 t2) where T: IReturnVType;
+	}
+
+	public interface IReturnVType {
+		Pair<int, int> return_vtype ();
+	}
+
+	public class CConstrainedCalls : IConstrainedCalls {
+		[MethodImplAttribute (MethodImplOptions.NoInlining)]
+		public Pair<int, int> vtype_ret<T, T2>(T t, T2 t2) where T : IReturnVType {
+			return t.return_vtype ();
+		}
+	}
+
+	class ReturnVType : IReturnVType {
+		public Pair<int, int> return_vtype () {
+			return new Pair<int, int> () { First = 1, Second = 2 };
+		}
+	}
+
+	public static int test_0_constrained_vtype_ret () {
+		IConstrainedCalls c = new CConstrainedCalls ();
+		var r = c.vtype_ret<ReturnVType, int> (new ReturnVType (), 1);
+		if (r.First != 1 || r.Second != 2)
+			return 1;
+		return 0;
+	}
+
+	public struct Pair<T1, T2> {
 		public T1 First;
 		public T2 Second;
 	}
@@ -896,6 +1098,7 @@ public class Tests
 		return action(null, state);
 	}
 
+	[Category ("!FULLAOT")]
 	public static int test_0_delegate_wrappers () {
 		Func<object, Pair<int, int>, Pair<int, int>> del1 = delegate (object o, Pair<int, int> p) { return p; };
 		Func<object, Pair<int, int>, Pair<int, int>> del2 = delegate (object o, Pair<int, int> p) { return p; };
@@ -935,4 +1138,461 @@ public class Tests
 			return 1;
 		return 0;		
 	}
+
+		interface BIFace {
+			object AMethod ();
+		}
+
+		class Base<TAbsolute, T2> : BIFace {
+
+			public TAbsolute Clock { get; set; }
+
+			public virtual object AMethod () {
+				return Clock;
+			}
+		}
+
+		class BClass : Base<long, long> {
+		}
+
+	public static int test_0_regress_1 () {
+		BIFace c = new BClass ();
+		object o = c.AMethod ();
+		if (!(o is long) || ((long)o != 0))
+			return 1;
+		return 0;
+	}
+
+	interface IFace3 {
+		T unbox_any<T> (object o);
+	}
+
+	class Class3 : IFace3 {
+		public virtual T unbox_any<T> (object o) {
+			return (T)o;
+		}
+	}
+
+	public static int test_0_unbox_any () {
+		IFace3 o = new Class3 ();
+		if (o.unbox_any<int> (16) != 16)
+			return 1;
+		if (o.unbox_any<long> ((long)32) != 32)
+			return 2;
+		if (o.unbox_any<double> (2.0) != 2.0)
+			return 3;
+		try {
+			o.unbox_any<int> (2.0);
+			return 4;
+		} catch (Exception) {
+		}
+		return 0;
+	}
+
+	interface IFace4 {
+		TSource Catch<TSource, TException>(TSource t)  where TException : Exception;
+	}
+
+	class Class4 : IFace4 {
+		[MethodImplAttribute (MethodImplOptions.NoInlining)]
+			public TSource Catch<TSource, TException>(TSource t)  where TException : Exception {
+			return t;
+		}
+	}
+
+	// Check that mixed instantiations are correctly created/found in AOT
+	public static int test_0_constraints () {
+		IFace4 o = new Class4 ();
+		o.Catch<int, Exception> (1);
+		return 0;
+	}
+
+	internal static Type Process<TSource, TElement> (TSource[] arr, Action<TElement, TElement> call) {
+		arr [0] = default (TSource);
+		return typeof (TSource);
+	}
+
+	interface IFace5 {
+		Type foo<T> ();
+	}
+
+	class Class5 : IFace5 {
+		public Type foo<T> () {
+			return Process<KeyValuePair<long, T>, T> (new KeyValuePair<long, T> [10], null);
+		}
+	}
+
+	public static int test_0_rgctx_call_from_gshared_code () {
+		var c = new Class5 ();
+		if (c.foo<string> () != typeof (KeyValuePair<long, string>))
+			return 1;
+		return 0;
+	}
+
+	public class Enumbers<T> {
+		public object Enumerate (List<KeyValuePair<T, string>> alist)
+		{
+			return alist.ToArray ();
+		}
+	}
+
+	public static int test_0_checkthis_gshared_call () {
+		Enumbers<string> e = new Enumbers<string> ();
+		try {
+			e.Enumerate (null);
+			return 1;
+		}
+		catch (NullReferenceException) {
+		}
+		return 0;
+	}
+
+	interface IFace6 {
+		T[] Del<T> (T t);
+	}
+
+	class Class6 : IFace6 {
+		public T[] Del<T> (T t) {
+			var res = new T [5];
+			Func<T, T, T, T, T> func = delegate(T t1, T t2, T t3, T t4) { res [0] = t1; res [1] = t2; res [2] = t3; res [3] = t4; return t1; };
+			var v = func.BeginInvoke(t, t, t, t, null, null);
+			res [4] = func.EndInvoke (v);
+			return res;
+		}
+	}
+
+	// FIXME: The runtime-invoke wrapper used by BeginInvoke is not found
+	[Category ("!FULLAOT")]
+	public static int test_0_begin_end_invoke () {
+		IFace6 o = new Class6 ();
+		var arr1 = o.Del (1);
+		if (arr1 [0] != 1 || arr1 [1] != 1 || arr1 [2] != 1 || arr1 [3] != 1 || arr1 [4] != 1)
+			return 1;
+		var arr2 = o.Del (2.0);
+		if (arr2 [0] != 2.0 || arr2 [1] != 2.0 || arr2 [2] != 2.0 || arr2 [3] != 2.0 || arr2 [4] != 2.0)
+			return 2;
+		return 0;
+	}
+
+	public class TAbstractTableItem<TC> {
+		[MethodImplAttribute (MethodImplOptions.NoInlining)]
+		public static void SetProperty<TV> () {    }
+
+		[MethodImplAttribute (MethodImplOptions.NoInlining)]
+		public static void Test () {
+			SetProperty<bool> ();
+		}
+	}
+
+	public static int test_0_gsharedvt_method_on_shared_class () {
+       TAbstractTableItem<object>.Test ();
+	   return 0;
+	}
+
+	interface IFaceBox {
+		object box<T> (T t);
+	}
+
+	class ClassBox : IFaceBox {
+		public object box<T> (T t) {
+			object o = t;
+			return o;
+		}
+	}
+
+	public static int test_0_nullable_box () {
+		IFaceBox c = new ClassBox ();
+		int i = 5;
+		object o = c.box<int?> (i);
+		if ((int)o != i)
+			return 1;
+		if (c.box<int?> (null) != null)
+			return 2;
+		long l = Int64.MaxValue - 1;
+		o = c.box<long?> (l);
+		if ((long)o != l)
+			return 3;
+		if (c.box<long?> (null) != null)
+			return 4;
+		string s = "A";
+		if (c.box<string> (s) != (object)s)
+			return 5;
+		return 0;
+	}
+
+	interface IFaceUnbox2 {
+		T unbox<T> (object o);
+	}
+
+	class ClassUnbox2 : IFaceUnbox2 {
+		public T unbox<T> (object o) {
+			return (T)o;
+		}
+	}
+
+	public static int test_0_nullable_unbox () {	
+		IFaceUnbox2 c = new ClassUnbox2 ();
+		int? i = c.unbox<int?> (5);
+		if (i != 5)
+			return 1;
+		int? j = c.unbox<int?> (null);
+		if (j != null)
+			return 2;
+		return 0;
+	}
+
+	interface IConstrained {
+		void foo ();
+		void foo_ref_arg (string s);
+	}
+
+	interface IConstrained<T3> {
+		void foo_gsharedvt_arg (T3 s);
+		T3 foo_gsharedvt_ret (T3 s);
+	}
+
+	static object constrained_res;
+
+	struct ConsStruct : IConstrained {
+		public int i;
+
+		public void foo () {
+			constrained_res = i;
+		}
+
+		public void foo_ref_arg (string s) {
+			constrained_res = s == "A" ? 42 : 0;
+		}
+	}
+
+	class ConsClass : IConstrained {
+		public int i;
+
+		public void foo () {
+			constrained_res = i;
+		}
+
+		public void foo_ref_arg (string s) {
+			constrained_res = s == "A" ? 43 : 0;
+		}
+	}
+
+	struct ConsStruct<T> : IConstrained<T> {
+		public void foo_gsharedvt_arg (T s) {
+			constrained_res = s;
+		}
+
+		public T foo_gsharedvt_ret (T s) {
+			return s;
+		}
+	}
+
+	struct ConsStructThrow : IConstrained {
+		public void foo () {
+			throw new Exception ();
+		}
+
+		public void foo_ref_arg (string s) {
+		}
+	}
+
+	interface IFaceConstrained {
+		void constrained_void_iface_call<T, T2>(T t, T2 t2) where T2 : IConstrained;
+		void constrained_void_iface_call_ref_arg<T, T2>(T t, T2 t2) where T2 : IConstrained;
+		void constrained_void_iface_call_gsharedvt_arg<T, T2, T3>(T t, T2 t2, T3 t3) where T2 : IConstrained<T>;
+		T constrained_iface_call_gsharedvt_ret<T, T2, T3>(T t, T2 t2, T3 t3) where T2 : IConstrained<T>;
+		T2 constrained_normal_call<T, T2>(T t, T2 t2) where T2 : VClass;
+	}
+
+	class ClassConstrained : IFaceConstrained {
+		[MethodImplAttribute (MethodImplOptions.NoInlining)]
+		public void constrained_void_iface_call<T, T2>(T t, T2 t2) where T2 : IConstrained {
+			t2.foo ();
+		}
+
+		[MethodImplAttribute (MethodImplOptions.NoInlining)]
+		public void constrained_void_iface_call_ref_arg<T, T2>(T t, T2 t2) where T2 : IConstrained {
+			t2.foo_ref_arg ("A");
+		}
+
+		[MethodImplAttribute (MethodImplOptions.NoInlining)]
+		public void constrained_void_iface_call_gsharedvt_arg<T, T2, T3>(T t, T2 t2, T3 t3) where T2 : IConstrained<T> {
+			t2.foo_gsharedvt_arg (t);
+		}
+
+		[MethodImplAttribute (MethodImplOptions.NoInlining)]
+		public T constrained_iface_call_gsharedvt_ret<T, T2, T3>(T t, T2 t2, T3 t3) where T2 : IConstrained<T> {
+			return t2.foo_gsharedvt_ret (t);
+		}
+
+		[MethodImplAttribute (MethodImplOptions.NoInlining)]
+		public T2 constrained_normal_call<T, T2>(T t, T2 t2) where T2 : VClass {
+			/* This becomes a constrained call even through 't2' is forced to be a reference type by the constraint */
+			return (T2)t2.foo (5);
+		}
+	}
+
+	class VClass {
+		public virtual VClass foo (int i) {
+			return this;
+		}
+	}
+
+	public static int test_0_constrained_void_iface_call () {
+		IFaceConstrained c = new ClassConstrained ();
+		var s = new ConsStruct () { i = 42 };
+		constrained_res = null;
+		c.constrained_void_iface_call<int, ConsStruct> (1, s);
+		if (!(constrained_res is int) || ((int)constrained_res) != 42)
+			return 1;
+		constrained_res = null;
+		c.constrained_void_iface_call_ref_arg<int, ConsStruct> (1, s);
+		if (!(constrained_res is int) || ((int)constrained_res) != 42)
+			return 2;
+		var s2 = new ConsClass () { i = 43 };
+		constrained_res = null;
+		c.constrained_void_iface_call<int, ConsClass> (1, s2);
+		if (!(constrained_res is int) || ((int)constrained_res) != 43)
+			return 3;
+		constrained_res = null;
+		c.constrained_void_iface_call_ref_arg<int, ConsClass> (1, s2);
+		if (!(constrained_res is int) || ((int)constrained_res) != 43)
+			return 4;
+		return 0;
+	}
+
+	public static int test_0_constrained_eh () {
+		var s2 = new ConsStructThrow () { };
+		try {
+			IFaceConstrained c = new ClassConstrained ();
+			c.constrained_void_iface_call<int, ConsStructThrow> (1, s2);
+			return 1;
+		} catch (Exception) {
+			return 0;
+		}
+	}
+
+	public static int test_0_constrained_void_iface_call_gsharedvt_arg () {
+		// This tests constrained calls through interfaces with one gsharedvt arg, like IComparable<T>.CompareTo ()
+		IFaceConstrained c = new ClassConstrained ();
+
+		var s = new ConsStruct<int> ();
+		constrained_res = null;
+		c.constrained_void_iface_call_gsharedvt_arg<int, ConsStruct<int>, int> (42, s, 55);
+		if (!(constrained_res is int) || ((int)constrained_res) != 42)
+			return 1;
+
+		var s2 = new ConsStruct<string> ();
+		constrained_res = null;
+		c.constrained_void_iface_call_gsharedvt_arg<string, ConsStruct<string>, int> ("A", s2, 55);
+		if (!(constrained_res is string) || ((string)constrained_res) != "A")
+			return 2;
+
+		return 0;
+	}
+
+	public static int test_0_constrained_iface_call_gsharedvt_ret () {
+		IFaceConstrained c = new ClassConstrained ();
+
+		var s = new ConsStruct<int> ();
+		int ires = c.constrained_iface_call_gsharedvt_ret<int, ConsStruct<int>, int> (42, s, 55);
+		if (ires != 42)
+			return 1;
+
+		var s2 = new ConsStruct<string> ();
+		string sres = c.constrained_iface_call_gsharedvt_ret<string, ConsStruct<string>, int> ("A", s2, 55);
+		if (sres != "A")
+			return 2;
+
+		return 0;
+	}
+
+	public static int test_0_constrained_normal_call () {
+		IFaceConstrained c = new ClassConstrained ();
+
+		var o = new VClass ();
+		var res = c.constrained_normal_call<int, VClass> (1, o);
+		return res == o ? 0 : 1;
+	}
+
+	public static async Task<T> FooAsync<T> (int i, int j) {
+		Task<int> t = new Task<int> (delegate () { return 42; });
+		var response = await t;
+		return default(T);
+	}
+
+	[MethodImplAttribute (MethodImplOptions.NoInlining)]
+	public static void call_async<T> (int i, int j) {
+		Task<T> t = FooAsync<T> (1, 2);
+		// FIXME: This doesn't work
+		//t.RunSynchronously ();
+	}
+
+	// In AOT mode, the async infrastructure depends on gsharedvt methods
+	public static int test_0_async_call_from_generic () {
+		call_async<string> (1, 2);
+		return 0;
+	}
+
+	public static int test_0_array_helper_gsharedvt () {
+		var arr = new AnEnum [16];
+		var c = new ReadOnlyCollection<AnEnum> (arr);
+		return c.Contains (AnEnum.Two) == false ? 0 : 1;
+	}
+
+	interface IFaceCallPatching {
+		bool caller<T, T2> ();
+	}
+
+	class CallPatching2<T> {
+		T t;
+		public object o;
+
+		[MethodImplAttribute (MethodImplOptions.NoInlining)]
+		public bool callee () {
+			return (string)o == "ABC";
+		}
+	}
+
+	class CallPatching : IFaceCallPatching {
+		public bool caller<T, T2> () {
+			var c = new CallPatching2<T> ();
+			c.o = "ABC";
+			return c.callee ();
+		}
+	}
+
+	//
+	// This tests that generic calls made from gsharedvt methods are not patched normally.
+	// If they are, the first call to 'caller' would patch in the gshared version of
+	// 'callee', causing the second call to fail because the gshared version of callee
+	// wouldn't work with CallPatching2<bool> since it has a different object layout.
+	//
+	public static int test_0_call_patching () {
+		IFaceCallPatching c = new CallPatching ();
+		c.caller<object, bool> ();
+		if (!c.caller<bool, bool> ())
+			return 1;
+		return 0;
+	}
 }
+
+// #13191
+public class MobileServiceCollection<TTable, TCol>
+{
+	public async Task<int> LoadMoreItemsAsync(int count = 0) {
+		await Task.Delay (1000);
+		int results = await ProcessQueryAsync ();
+		return results;
+	}
+
+	protected async virtual Task<int> ProcessQueryAsync() {
+		await Task.Delay (1000);
+		throw new Exception ();
+	}
+}
+
+#if !MOBILE
+public class GSharedTests : Tests {
+}
+#endif

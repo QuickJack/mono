@@ -26,7 +26,6 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if NET_2_0
 
 using NUnit.Framework;
 
@@ -99,8 +98,11 @@ namespace MonoTests.System {
 		{
 			Assert.IsTrue (converter.CanConvertFrom (typeof (string)), "string");
 			Assert.IsTrue (converter.CanConvertFrom (typeof (Uri)), "Uri");
+#if MOBILE
+			Assert.IsFalse (converter.CanConvertFrom (typeof (InstanceDescriptor)), "InstanceDescriptor");
+#else
 			Assert.IsTrue (converter.CanConvertFrom (typeof (InstanceDescriptor)), "InstanceDescriptor");
-
+#endif
 			Assert.IsFalse (converter.CanConvertFrom (typeof (object)), "object");
 			Assert.IsFalse (converter.CanConvertFrom (typeof (int)), "int");
 			Assert.IsFalse (converter.CanConvertFrom (typeof (char)), "char");
@@ -119,8 +121,11 @@ namespace MonoTests.System {
 		{
 			Assert.IsTrue (converter.CanConvertFrom (null, typeof (string)), "string");
 			Assert.IsTrue (converter.CanConvertFrom (null, typeof (Uri)), "Uri");
+#if MOBILE
+			Assert.IsFalse (converter.CanConvertFrom (null, typeof (InstanceDescriptor)), "InstanceDescriptor");
+#else
 			Assert.IsTrue (converter.CanConvertFrom (null, typeof (InstanceDescriptor)), "InstanceDescriptor");
-
+#endif
 			Assert.IsFalse (converter.CanConvertFrom (null, typeof (object)), "object");
 			Assert.IsFalse (converter.CanConvertFrom (null, typeof (int)), "int");
 			Assert.IsFalse (converter.CanConvertFrom (null, typeof (char)), "char");
@@ -132,8 +137,11 @@ namespace MonoTests.System {
 		{
 			Assert.IsTrue (converter.CanConvertFrom (context, typeof (string)), "string");
 			Assert.IsTrue (converter.CanConvertFrom (context, typeof (Uri)), "Uri");
+#if MOBILE
+			Assert.IsFalse (converter.CanConvertFrom (context, typeof (InstanceDescriptor)), "InstanceDescriptor");
+#else
 			Assert.IsTrue (converter.CanConvertFrom (context, typeof (InstanceDescriptor)), "InstanceDescriptor");
-
+#endif
 			Assert.IsFalse (converter.CanConvertFrom (context, typeof (object)), "object");
 			Assert.IsFalse (converter.CanConvertFrom (context, typeof (int)), "int");
 			Assert.IsFalse (converter.CanConvertFrom (context, typeof (char)), "char");
@@ -147,8 +155,11 @@ namespace MonoTests.System {
 
 			Assert.IsTrue (converter.CanConvertTo (typeof (string)), "string");
 			Assert.IsTrue (converter.CanConvertTo (typeof (Uri)), "Uri");
+#if MOBILE
+			Assert.IsFalse (converter.CanConvertTo (typeof (InstanceDescriptor)), "InstanceDescriptor");
+#else
 			Assert.IsTrue (converter.CanConvertTo (typeof (InstanceDescriptor)), "InstanceDescriptor");
-
+#endif
 			Assert.IsFalse (converter.CanConvertTo (typeof (object)), "object");
 			Assert.IsFalse (converter.CanConvertTo (typeof (int)), "int");
 			Assert.IsFalse (converter.CanConvertTo (typeof (char)), "char");
@@ -162,8 +173,11 @@ namespace MonoTests.System {
 
 			Assert.IsTrue (converter.CanConvertTo (null, typeof (string)), "string");
 			Assert.IsTrue (converter.CanConvertTo (null, typeof (Uri)), "Uri");
+#if MOBILE
+			Assert.IsFalse (converter.CanConvertTo (null, typeof (InstanceDescriptor)), "InstanceDescriptor");
+#else
 			Assert.IsTrue (converter.CanConvertTo (null, typeof (InstanceDescriptor)), "InstanceDescriptor");
-
+#endif
 			Assert.IsFalse (converter.CanConvertTo (null, typeof (object)), "object");
 			Assert.IsFalse (converter.CanConvertTo (null, typeof (int)), "int");
 			Assert.IsFalse (converter.CanConvertTo (null, typeof (char)), "char");
@@ -175,8 +189,11 @@ namespace MonoTests.System {
 		{
 			Assert.IsTrue (converter.CanConvertTo (context, typeof (string)), "string");
 			Assert.IsTrue (converter.CanConvertTo (context, typeof (Uri)), "Uri");
+#if MOBILE
+			Assert.IsFalse (converter.CanConvertTo (context, typeof (InstanceDescriptor)), "InstanceDescriptor");
+#else
 			Assert.IsTrue (converter.CanConvertTo (context, typeof (InstanceDescriptor)), "InstanceDescriptor");
-
+#endif
 			Assert.IsFalse (converter.CanConvertTo (context, typeof (object)), "object");
 			Assert.IsFalse (converter.CanConvertTo (context, typeof (int)), "int");
 			Assert.IsFalse (converter.CanConvertTo (context, typeof (char)), "char");
@@ -192,11 +209,16 @@ namespace MonoTests.System {
 			o = converter.ConvertFrom (uri);
 			Assert.AreEqual (url, (o as Uri).AbsoluteUri, "uri");
 
+#if MOBILE
+			o = converter.ConvertFrom ("");
+			Assert.IsNull (o, "null");
+#else
 			o = converter.ConvertFrom (converter.ConvertTo (uri, typeof (InstanceDescriptor)));
 			Assert.AreEqual (url, (o as Uri).AbsoluteUri, "uri");
 
 			o = converter.ConvertFrom ("");
 			Assert.IsNotNull (o, "not null");
+#endif
 		}
 
 		[Test]
@@ -232,8 +254,10 @@ namespace MonoTests.System {
 			o = converter.ConvertFrom (context, CultureInfo.InvariantCulture, uri);
 			Assert.AreEqual (url, (o as Uri).AbsoluteUri, "uri");
 
+#if !MOBILE
 			o = converter.ConvertFrom (context, null, converter.ConvertTo (uri, typeof (InstanceDescriptor)));
 			Assert.AreEqual (url, (o as Uri).AbsoluteUri, "uri");
+#endif
 		}
 
 		[Test]
@@ -246,14 +270,28 @@ namespace MonoTests.System {
 		[Test]
 		public void ConvertTo ()
 		{
-			object o = converter.ConvertTo (url, typeof (string));
-			Assert.AreEqual (url, (o as String), "string-string");
+			object o;
+			o = converter.ConvertTo (uri, typeof (Uri));
+			Assert.AreEqual (uri, (o as Uri), "uri-uri");
 
 			o = converter.ConvertTo (uri, typeof (string));
 			Assert.AreEqual (url, (o as String), "uri-string");
 
-			o = converter.ConvertTo (uri, typeof (Uri));
-			Assert.AreEqual (uri, (o as Uri), "uri-uri");
+#if MOBILE
+			try {
+				converter.ConvertTo (url, typeof (string));
+				Assert.Fail ("string-string");
+			} catch (NotSupportedException) {
+			}
+
+			try {
+				converter.ConvertTo (uri, typeof (InstanceDescriptor));
+				Assert.Fail ("uri-InstanceDescriptor");
+			} catch (NotSupportedException) {
+			}
+#else
+			o = converter.ConvertTo (url, typeof (string));
+			Assert.AreEqual (url, (o as String), "string-string");
 
 			o = converter.ConvertTo (uri, typeof (InstanceDescriptor));
 			Assert.IsTrue (o is InstanceDescriptor, "uri-InstanceDescriptor");
@@ -262,7 +300,7 @@ namespace MonoTests.System {
 
 			o = converter.ConvertTo (descriptor, typeof (string));
 			Assert.AreEqual ("System.ComponentModel.Design.Serialization.InstanceDescriptor", (o as string), "InstanceDescriptor-string");
-
+#endif
 			// InstanceDescriptor to Uri or to InstanceDescriptor aren't supported either
 		}
 
@@ -283,23 +321,40 @@ namespace MonoTests.System {
 		[Test]
 		public void ConvertTo_Bad ()
 		{
+#if MOBILE
+			try {
+				converter.ConvertTo (new object (), typeof (string));
+				Assert.Fail ("object");
+			} catch (NotSupportedException) {
+			}
+#else
 			Assert.AreEqual ("System.Object", converter.ConvertTo (new object (), typeof (string)), "object");
 			Assert.AreEqual ("4", converter.ConvertTo (4, typeof (string)), "int");
 			Assert.AreEqual ("c", converter.ConvertTo ('c', typeof (string)), "char");
 			Assert.AreEqual (String.Empty, converter.ConvertTo (null, typeof (string)), "null");
+#endif
 		}
 
 		[Test]
 		public void ConvertTo_TypeDescriptorContext ()
 		{
-			object o = converter.ConvertTo (context, CultureInfo.InvariantCulture, url, typeof (string));
-			Assert.AreEqual (url, (o as String), "string-string");
+			object o;
 
 			o = converter.ConvertTo (context, null, uri, typeof (string));
 			Assert.AreEqual (url, (o as String), "uri-string");
 
 			o = converter.ConvertTo (context, CultureInfo.InvariantCulture, uri, typeof (Uri));
 			Assert.AreEqual (uri, (o as Uri), "uri-uri");
+
+#if MOBILE
+			try {
+				o = converter.ConvertTo (context, CultureInfo.InvariantCulture, url, typeof (string));
+				Assert.AreEqual (url, (o as String), "string-string");
+			} catch (NotSupportedException) {
+			}
+#else
+			o = converter.ConvertTo (context, CultureInfo.InvariantCulture, url, typeof (string));
+			Assert.AreEqual (url, (o as String), "string-string");
 
 			o = converter.ConvertTo (context, CultureInfo.CurrentCulture, uri, typeof (InstanceDescriptor));
 			Assert.IsTrue (o is InstanceDescriptor, "uri-InstanceDescriptor");
@@ -308,7 +363,7 @@ namespace MonoTests.System {
 
 			o = converter.ConvertTo (context, CultureInfo.InvariantCulture, descriptor, typeof (string));
 			Assert.AreEqual ("System.ComponentModel.Design.Serialization.InstanceDescriptor", (o as string), "InstanceDescriptor-string");
-
+#endif
 			// InstanceDescriptor to Uri or to InstanceDescriptor aren't supported either
 		}
 
@@ -329,10 +384,18 @@ namespace MonoTests.System {
 		[Test]
 		public void ConvertTo_TypeDescriptorContext_Bad ()
 		{
+#if MOBILE
+			try {
+				converter.ConvertTo (context, null, new object (), typeof (string));
+				Assert.Fail ("object");
+			} catch (NotSupportedException) {
+			}
+#else
 			Assert.AreEqual ("System.Object", converter.ConvertTo (context, null, new object (), typeof (string)), "object");
 			Assert.AreEqual ("4", converter.ConvertTo (context, CultureInfo.CurrentCulture, 4, typeof (string)), "int");
 			Assert.AreEqual ("c", converter.ConvertTo (context, CultureInfo.InvariantCulture, 'c', typeof (string)), "char");
 			Assert.AreEqual (String.Empty, converter.ConvertTo (null, null, null, typeof (string)), "null");
+#endif
 		}
 
 		[Test]
@@ -357,4 +420,3 @@ namespace MonoTests.System {
 	}
 }
 
-#endif

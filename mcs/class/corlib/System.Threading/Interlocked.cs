@@ -40,10 +40,13 @@ namespace System.Threading
 {
 	public static class Interlocked 
 	{
-
 		[ReliabilityContractAttribute (Consistency.WillNotCorruptState, Cer.Success)]
 		[MethodImplAttribute(MethodImplOptions.InternalCall)]
 		public extern static int CompareExchange(ref int location1, int value, int comparand);
+
+		[ReliabilityContractAttribute (Consistency.WillNotCorruptState, Cer.Success)]
+		[MethodImplAttribute(MethodImplOptions.InternalCall)]
+		internal extern static int CompareExchange(ref int location1, int value, int comparand, ref bool succeeded);
 
 		[ReliabilityContractAttribute (Consistency.WillNotCorruptState, Cer.Success)]
 		[MethodImplAttribute(MethodImplOptions.InternalCall)]
@@ -118,5 +121,9 @@ namespace System.Threading
 		[ReliabilityContractAttribute (Consistency.WillNotCorruptState, Cer.Success)]		
 		[MethodImplAttribute(MethodImplOptions.InternalCall)]
 		public extern static long Add(ref long location1, long value);
+
+		public static void MemoryBarrier () {
+			Thread.MemoryBarrier ();
+		}
 	}
 }

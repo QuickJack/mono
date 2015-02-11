@@ -25,7 +25,6 @@
 // OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
-#if NET_2_0
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -104,19 +103,16 @@ namespace System.Runtime.Serialization
 			get { return references; }
 		}
 
-#if !MOONLIGHT
 		XmlDocument document;
 		
 		XmlDocument XmlDocument {
 			get { return (document = document ?? new XmlDocument ()); }
 		}
-#endif
 
 		// This method handles z:Ref, xsi:nil and primitive types, and then delegates to DeserializeByMap() for anything else.
 
 		public object Deserialize (Type type, XmlReader reader)
 		{
-#if !MOONLIGHT
 			if (type == typeof (XmlElement))
 				return XmlDocument.ReadNode (reader);
 			else if (type == typeof (XmlNode [])) {
@@ -127,7 +123,6 @@ namespace System.Runtime.Serialization
 				reader.ReadEndElement ();
 				return l.ToArray ();
 			}
-#endif
 			QName graph_qname = null;
 			
 			if (type.IsGenericType && type.GetGenericTypeDefinition () == typeof (Nullable<>)) {
@@ -265,7 +260,7 @@ namespace System.Runtime.Serialization
 			if (name.StartsWith ("ArrayOf", StringComparison.Ordinal)) {
 				name = name.Substring (7); // strip "ArrayOf"
 				if (ns == KnownTypeCollection.MSArraysNamespace)
-					return GetTypeFromNamePair (name, String.Empty).MakeArrayType ();
+					return GetTypeFromNamePair (name, KnownTypeCollection.MSSimpleNamespace).MakeArrayType ();
 				makeArray = true;
 			}
 
@@ -275,15 +270,7 @@ namespace System.Runtime.Serialization
 			foreach (var ass in AppDomain.CurrentDomain.GetAssemblies ()) {
 				Type [] types;
 
-#if MOONLIGHT
-				try  {
-					types = ass.GetTypes ();
-				} catch (System.Reflection.ReflectionTypeLoadException rtle) {
-					types = rtle.Types;
-				}
-#else
 				types = ass.GetTypes ();
-#endif
 				if (types == null)
 					continue;
 
@@ -315,4 +302,3 @@ namespace System.Runtime.Serialization
 		}
 	}
 }
-#endif

@@ -34,9 +34,7 @@
 using System.Threading;
 using System.Runtime.Remoting.Messaging;
 using System.Runtime.InteropServices;
-#if NET_4_5
 using System.Threading.Tasks;
-#endif
 
 namespace System.IO
 {
@@ -153,7 +151,7 @@ namespace System.IO
 		{
 			byte[] buffer = new byte [1];
 
-			if (Read (buffer, 0, 1) == 1)
+			if (Read (buffer, 0, 1) > 0)
 				return buffer [0];
 			
 			return -1;
@@ -240,7 +238,6 @@ namespace System.IO
 			}
 		}
 
-#if MOONLIGHT || NET_4_0 || MOBILE
 		public void CopyTo (Stream destination)
 		{
 			CopyTo (destination, 16*1024);
@@ -263,15 +260,11 @@ namespace System.IO
 				destination.Write (buffer, 0, nread);
 		}
 
-#if NET_4_5
 		[ObsoleteAttribute("Do not call or override this method")]
-#endif
 		protected virtual void ObjectInvariant ()
 		{
 		}
-#endif
 		
-#if NET_4_5
 
 		public Task CopyToAsync (Stream destination)
 		{
@@ -303,7 +296,7 @@ namespace System.IO
 		async Task CopyToAsync (Stream destination, byte[] buffer, CancellationToken cancellationToken)
 		{
 			int nread;
-			while ((nread = await ReadAsync (buffer, 0, buffer.Length).ConfigureAwait (false)) != 0)
+			while ((nread = await ReadAsync (buffer, 0, buffer.Length, cancellationToken).ConfigureAwait (false)) != 0)
 				await destination.WriteAsync (buffer, 0, nread, cancellationToken).ConfigureAwait (false);
 		}
 
@@ -342,7 +335,6 @@ namespace System.IO
 		{
 			return Task.Factory.FromAsync (BeginWrite, EndWrite, buffer, offset, count, null);
 		}
-#endif
 	}
 
 	class NullStream : Stream
@@ -468,6 +460,12 @@ namespace System.IO
 				lock (slock)
 					source.Position = value;
 			}
+		}
+
+		public override void Close ()
+		{
+			lock (slock)
+				source.Close ();
 		}
 
 		public override void Flush ()

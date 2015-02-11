@@ -23,11 +23,18 @@ else
 EXTENSION_include = $(wildcard $(PROFILE)_opt_$(LIBRARY).sources)
 endif
 
+
+ifdef EXTENSION_MODULE
+EXTENSION_exclude = $(wildcard $(topdir)/../../mono-extensions/mcs/$(thisdir)/$(PROFILE)_$(LIBRARY).exclude.sources)
+else
+EXTENSION_exclude = $(wildcard $(PROFILE)_opt_$(LIBRARY).exclude.sources)
+endif
+
 # Note, gensources.sh can create a $(sourcefile).makefrag if it sees any '#include's
 # We don't include it in the dependencies since it isn't always created
 $(sourcefile): $(PROFILE_sources) $(PROFILE_excludes) $(topdir)/build/gensources.sh $(EXTENSION_include)
 	@echo Creating the per profile list $@ ...
-	$(SHELL) $(topdir)/build/gensources.sh $@ '$(PROFILE_sources)' '$(PROFILE_excludes)' '$(EXTENSION_include)'
+	$(SHELL) $(topdir)/build/gensources.sh $@ '$(PROFILE_sources)' '$(PROFILE_excludes)' '$(EXTENSION_include)' '$(EXTENSION_exclude)'
 endif
 
 PLATFORM_excludes := $(wildcard $(LIBRARY).$(PLATFORM)-excludes)
@@ -53,15 +60,29 @@ else
 lib_dir = lib
 endif
 
-the_libdir = $(topdir)/class/$(lib_dir)/$(PROFILE)/
-ifdef LIBRARY_NEEDS_POSTPROCESSING
-build_libdir = fixup/$(PROFILE)/
+ifdef LIBRARY_SUBDIR
+the_libdir_base = $(topdir)/class/$(lib_dir)/$(PROFILE)/$(LIBRARY_SUBDIR)/
 else
+the_libdir_base = $(topdir)/class/$(lib_dir)/$(PROFILE)/
+endif
+
+#
+# The bare directory contains the plain versions of System and System.Xml
+#
+bare_libdir = $(the_libdir_base)bare
+
+#
+# The secxml directory contains the System version that depends on 
+# System.Xml and Mono.Security
+#
+secxml_libdir = $(the_libdir_base)secxml
+
+the_libdir = $(the_libdir_base)$(intermediate)
+
 ifdef LIBRARY_USE_INTERMEDIATE_FILE
 build_libdir = $(the_libdir)tmp/
 else
 build_libdir = $(the_libdir)
-endif
 endif
 
 the_lib   = $(the_libdir)$(LIBRARY_NAME)
@@ -99,14 +120,11 @@ endif
 
 csproj-local: csproj-library csproj-test
 
-# to overcome the issues with circular dependencies, we'll create csprojs with a counter increment. 
-# This is more amenable for use in VS solutions to reference projects rather than transient dll files in the build process.
-csproj-library:
-	config_file=`basename $(LIBRARY) .dll`-$(PROFILE).input; \
- 	for counter in 1 2 3 4 5 ; do if test -f $(topdir)/../msvc/scripts/inputs/$$config_file ; then config_file=`basename $(LIBRARY) .dll`-$(PROFILE)-$$counter.input; fi ; done ;\
+intermediate_clean=$(subst /,-,$(intermediate))
+csproj-library: 
+	config_file=`basename $(LIBRARY) .dll`-$(intermediate_clean)$(PROFILE).input; \
 	echo $(thisdir):$$config_file >> $(topdir)/../msvc/scripts/order; \
 	(echo $(is_boot); \
-	echo $(MCS);	\
 	echo $(USE_MCS_FLAGS) $(LIBRARY_FLAGS) $(LIB_MCS_FLAGS); \
 	echo $(LIBRARY_NAME); \
 	echo $(BUILT_SOURCES_cmdline); \
@@ -198,12 +216,12 @@ csproj-test:
 	config_file=`basename $(LIBRARY) .dll`-tests-$(PROFILE).input; \
 	echo $(thisdir):$$config_file >> $(topdir)/../msvc/scripts/order; \
 	(echo false; \
-	echo $(MCS);	\
 	echo $(USE_MCS_FLAGS) -r:$(the_assembly) $(TEST_MCS_FLAGS); \
 	echo $(test_lib); \
 	echo $(BUILT_SOURCES_cmdline); \
 	echo $(test_lib); \
 	echo $(FRAMEWORK_VERSION); \
+	echo $(PROFILE); \
 	echo $(test_response)) > $(topdir)/../msvc/scripts/inputs/$$config_file
 
 endif
@@ -220,13 +238,6 @@ dist-local: dist-default
 	  esac ; done ; \
 	for d in . $$subs ; do \
 	  case $$d in .) : ;; *) test ! -f $$d/ChangeLog || cp -p $$d/ChangeLog $(distdir)/$$d ;; esac ; done
-
-ifdef LIBRARY_NEEDS_POSTPROCESSING
-dist-local: dist-fixup
-FIXUP_PROFILES = default net_2_0
-dist-fixup:
-	$(MKINSTALLDIRS) $(distdir)/fixup $(FIXUP_PROFILES:%=$(distdir)/fixup/%)
-endif
 
 ifndef LIBRARY_COMPILE
 LIBRARY_COMPILE = $(CSCOMPILE)
@@ -318,9 +329,8 @@ $(makefrag) $(test_response) $(test_makefrag) $(btest_response) $(btest_makefrag
 ## Documentation stuff
 
 Q_MDOC_UP=$(if $(V),,@echo "MDOC-UP [$(PROFILE)] $(notdir $(@))";)
-# net_2_0 is needed because monodoc is only compiled in that profile
 MDOC_UP  =$(Q_MDOC_UP) \
-		MONO_PATH="$(topdir)/class/lib/$(DEFAULT_PROFILE)$(PLATFORM_PATH_SEPARATOR)$(topdir)/class/lib/net_2_0$(PLATFORM_PATH_SEPARATOR)$$MONO_PATH" $(RUNTIME) $(topdir)/class/lib/$(DEFAULT_PROFILE)/mdoc.exe \
+		MONO_PATH="$(topdir)/class/lib/$(DEFAULT_PROFILE)$(PLATFORM_PATH_SEPARATOR)$$MONO_PATH" $(RUNTIME) $(topdir)/class/lib/$(DEFAULT_PROFILE)/mdoc.exe \
 		update --delete -o Documentation/en $(the_lib)
 
 doc-update-local: $(the_libdir)/.doc-stamp

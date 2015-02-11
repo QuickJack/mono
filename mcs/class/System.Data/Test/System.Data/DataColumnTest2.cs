@@ -543,6 +543,23 @@ namespace MonoTests.System.Data
 		}
 
 		[Test]
+		public void Expression_Whitespace ()
+		{
+			DataColumn dc = new DataColumn ("ColName", typeof(string));
+
+			string plainWhitespace = "    ";
+			string surroundWhitespace = "  'abc'  ";
+
+			Assert.AreEqual (string.Empty, dc.Expression, "dce#1");
+
+			dc.Expression = plainWhitespace;
+			Assert.AreEqual (string.Empty, dc.Expression, "dce#2");
+
+			dc.Expression = surroundWhitespace;
+			Assert.AreEqual (surroundWhitespace, dc.Expression, "dce#3");
+		}
+
+		[Test]
 		public void Expression_Exceptions()
 		{
 			DataTable dt = DataProvider.CreateParentDataTable();
@@ -818,7 +835,6 @@ namespace MonoTests.System.Data
 			Assert.AreEqual (-1, ptable.Rows [1][1], "#2");
 		}
 
-#if NET_2_0
 		[Test]
 		public void DateTimeMode_DataType ()
 		{
@@ -909,7 +925,6 @@ namespace MonoTests.System.Data
 				Assert.Fail ("#10");
 			} catch (ArgumentOutOfRangeException e) { }
 		}
-#endif
 		[Test]
 		public void bug672113_MulpleColConstraint ()
 		{

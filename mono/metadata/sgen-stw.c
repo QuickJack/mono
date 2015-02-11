@@ -33,11 +33,11 @@
 #include "metadata/profiler-private.h"
 #include "utils/mono-time.h"
 #include "utils/dtrace.h"
+#include "utils/mono-counters.h"
 
 #define TV_DECLARE SGEN_TV_DECLARE
 #define TV_GETTIME SGEN_TV_GETTIME
 #define TV_ELAPSED SGEN_TV_ELAPSED
-#define TV_ELAPSED_MS SGEN_TV_ELAPSED_MS
 
 inline static void*
 align_pointer (void *ptr)
@@ -49,16 +49,16 @@ align_pointer (void *ptr)
 }
 
 #ifdef USE_MONO_CTX
-static MonoContext cur_thread_ctx = {0};
+static MonoContext cur_thread_ctx;
 #else
-static mword cur_thread_regs [ARCH_NUM_REGS] = {0};
+static mword cur_thread_regs [ARCH_NUM_REGS];
 #endif
 
 static void
 update_current_thread_stack (void *start)
 {
 	int stack_guard = 0;
-#ifndef USE_MONO_CTX
+#if !defined(USE_MONO_CTX)
 	void *reg_ptr = cur_thread_regs;
 #endif
 	SgenThreadInfo *info = mono_thread_info_current ();
@@ -91,11 +91,17 @@ is_ip_in_managed_allocator (MonoDomain *domain, gpointer ip)
 		return FALSE;
 	if (!sgen_has_critical_method ())
 		return FALSE;
-	ji = mono_jit_info_table_find (domain, ip);
+
+	/*
+	 * mono_jit_info_table_find is not async safe since it calls into the AOT runtime to load information for
+	 * missing methods (#13951). To work around this, we disable the AOT fallback. For this to work, the JIT needs
+	 * to register the jit info for all GC critical methods after they are JITted/loaded.
+	 */
+	ji = mono_jit_info_table_find_internal (domain, ip, FALSE);
 	if (!ji)
 		return FALSE;
 
-	return sgen_is_critical_method (ji->method);
+	return sgen_is_critical_method (mono_jit_info_get_method (ji));
 }
 
 static int
@@ -111,12 +117,12 @@ restart_threads_until_none_in_managed_allocator (void)
 		   allocator */
 		FOREACH_THREAD_SAFE (info) {
 			gboolean result;
-			if (info->skip || info->gc_disabled || !info->joined_stw)
+			if (info->skip || info->gc_disabled)
 				continue;
-			if (!info->thread_is_dying && (!info->stack_start || info->in_critical_region ||
+			if (mono_thread_info_run_state (info) == STATE_RUNNING && (!info->stack_start || info->in_critical_region || info->info.inside_critical_region ||
 					is_ip_in_managed_allocator (info->stopped_domain, info->stopped_ip))) {
 				binary_protocol_thread_restart ((gpointer)mono_thread_info_get_tid (info));
-				SGEN_LOG (3, "thread %p resumed.", (void*)info->info.native_handle);
+				SGEN_LOG (3, "thread %p resumed.", (void*) (size_t) info->info.native_handle);
 				result = sgen_resume_thread (info);
 				if (result) {
 					++restart_count;
@@ -141,11 +147,7 @@ restart_threads_until_none_in_managed_allocator (void)
 		sgen_wait_for_suspend_ack (restart_count);
 
 		if (sleep_duration < 0) {
-#ifdef HOST_WIN32
-			SwitchToThread ();
-#else
-			sched_yield ();
-#endif
+			mono_thread_info_yield ();
 			sleep_duration = 0;
 		} else {
 			g_usleep (sleep_duration);
@@ -190,32 +192,32 @@ release_gc_locks (void)
 }
 
 static void
-stw_bridge_process (void)
+count_cards (long long *major_total, long long *major_marked, long long *los_total, long long *los_marked)
 {
-	sgen_bridge_processing_stw_step ();
-}
-
-static void
-bridge_process (int generation)
-{
-	sgen_bridge_processing_finish (generation);
+	sgen_get_major_collector ()->count_cards (major_total, major_marked);
+	sgen_los_count_cards (los_total, los_marked);
 }
 
 static TV_DECLARE (stop_world_time);
 static unsigned long max_pause_usec = 0;
 
+static guint64 time_stop_world;
+static guint64 time_restart_world;
+
 /* LOCKING: assumes the GC lock is held */
 int
 sgen_stop_world (int generation)
 {
+	TV_DECLARE (end_handshake);
 	int count, dead;
-
-	/*XXX this is the right stop, thought might not be the nicest place to put it*/
-	sgen_process_togglerefs ();
 
 	mono_profiler_gc_event (MONO_GC_EVENT_PRE_STOP_WORLD, generation);
 	MONO_GC_WORLD_STOP_BEGIN ();
+	binary_protocol_world_stopping (sgen_timestamp ());
 	acquire_gc_locks ();
+
+	/* We start to scan after locks are taking, this ensures we won't be interrupted. */
+	sgen_process_togglerefs ();
 
 	update_current_thread_stack (&count);
 
@@ -231,8 +233,19 @@ sgen_stop_world (int generation)
 	SGEN_LOG (3, "world stopped %d thread(s)", count);
 	mono_profiler_gc_event (MONO_GC_EVENT_POST_STOP_WORLD, generation);
 	MONO_GC_WORLD_STOP_END ();
+	if (binary_protocol_is_enabled ()) {
+		long long major_total = -1, major_marked = -1, los_total = -1, los_marked = -1;
+		if (binary_protocol_is_heavy_enabled ())
+			count_cards (&major_total, &major_marked, &los_total, &los_marked);
+		binary_protocol_world_stopped (sgen_timestamp (), major_total, major_marked, los_total, los_marked);
+	}
+
+	TV_GETTIME (end_handshake);
+	time_stop_world += TV_ELAPSED (stop_world_time, end_handshake);
 
 	sgen_memgov_collection_start (generation);
+	if (sgen_need_bridge_processing ())
+		sgen_bridge_reset_data ();
 
 	return count;
 }
@@ -244,10 +257,19 @@ sgen_restart_world (int generation, GGTimingInfo *timing)
 	int count;
 	SgenThreadInfo *info;
 	TV_DECLARE (end_sw);
+	TV_DECLARE (start_handshake);
 	TV_DECLARE (end_bridge);
 	unsigned long usec, bridge_usec;
 
+	if (binary_protocol_is_enabled ()) {
+		long long major_total = -1, major_marked = -1, los_total = -1, los_marked = -1;
+		if (binary_protocol_is_heavy_enabled ())
+			count_cards (&major_total, &major_marked, &los_total, &los_marked);
+		binary_protocol_world_restarting (generation, sgen_timestamp (), major_total, major_marked, los_total, los_marked);
+	}
+
 	/* notify the profiler of the leftovers */
+	/* FIXME this is the wrong spot at we can STW for non collection reasons. */
 	if (G_UNLIKELY (mono_profiler_events & MONO_PROFILE_GC_MOVES))
 		sgen_gc_event_moves ();
 	mono_profiler_gc_event (MONO_GC_EVENT_PRE_START_WORLD, generation);
@@ -261,20 +283,33 @@ sgen_restart_world (int generation, GGTimingInfo *timing)
 #endif
 	} END_FOREACH_THREAD
 
-	stw_bridge_process ();
-	release_gc_locks ();
-
+	TV_GETTIME (start_handshake);
 	count = sgen_thread_handshake (FALSE);
 	TV_GETTIME (end_sw);
+	time_restart_world += TV_ELAPSED (start_handshake, end_sw);
 	usec = TV_ELAPSED (stop_world_time, end_sw);
 	max_pause_usec = MAX (usec, max_pause_usec);
 	SGEN_LOG (2, "restarted %d thread(s) (pause time: %d usec, max: %d)", count, (int)usec, (int)max_pause_usec);
 	mono_profiler_gc_event (MONO_GC_EVENT_POST_START_WORLD, generation);
 	MONO_GC_WORLD_RESTART_END (generation);
+	binary_protocol_world_restarted (generation, sgen_timestamp ());
 
-	mono_thread_hazardous_try_free_some ();
+	/*
+	 * We must release the thread info suspend lock after doing
+	 * the thread handshake.  Otherwise, if the GC stops the world
+	 * and a thread is in the process of starting up, but has not
+	 * yet registered (it's not in the thread_list), it is
+	 * possible that the thread does register while the world is
+	 * stopped.  When restarting the GC will then try to restart
+	 * said thread, but since it never got the suspend signal, it
+	 * cannot answer the restart signal, so a deadlock results.
+	 */
+	release_gc_locks ();
 
-	bridge_process (generation);
+	sgen_try_free_some_memory = TRUE;
+
+	if (sgen_need_bridge_processing ())
+		sgen_bridge_processing_finish (generation);
 
 	TV_GETTIME (end_bridge);
 	bridge_usec = TV_ELAPSED (end_sw, end_bridge);
@@ -287,6 +322,13 @@ sgen_restart_world (int generation, GGTimingInfo *timing)
 	sgen_memgov_collection_end (generation, timing, timing ? 2 : 0);
 
 	return count;
+}
+
+void
+sgen_init_stw (void)
+{
+	mono_counters_register ("World stop", MONO_COUNTER_GC | MONO_COUNTER_ULONG | MONO_COUNTER_TIME, &time_stop_world);
+	mono_counters_register ("World restart", MONO_COUNTER_GC | MONO_COUNTER_ULONG | MONO_COUNTER_TIME, &time_restart_world);
 }
 
 #endif

@@ -7,12 +7,13 @@
 //
 // Copyright (C) 2004-2007 Novell, Inc (http://www.novell.com)
 //
-#if !TARGET_JVM
 using NUnit.Framework;
 using System;
 using System.IO;
 using System.Reflection;
+#if !MOBILE
 using System.Reflection.Emit;
+#endif
 using System.Runtime.InteropServices;
 using System.Security;
 using System.Text;
@@ -27,7 +28,7 @@ namespace MonoTests.System.Runtime.InteropServices
 			public int field;
 		}
 
-		class ClsNoLayout {
+		public class ClsNoLayout {
 			public int field;
 		}
 
@@ -113,6 +114,13 @@ namespace MonoTests.System.Runtime.InteropServices
 		}
 
 		[Test]
+		public unsafe void Sizeof_Pointer ()
+		{
+			int size = Marshal.SizeOf (typeof (char*));
+			Assert.IsTrue (size == 4 || size == 8);
+		}
+
+		[Test]
 		public void PtrToStringWithNull ()
 		{
 			Assert.IsNull (Marshal.PtrToStringAnsi (IntPtr.Zero), "A");
@@ -165,12 +173,12 @@ namespace MonoTests.System.Runtime.InteropServices
 			Marshal.FreeHGlobal (ptr);
 		}
 
-		struct Foo {
-			int a;
-			static int b;
-			long c;
-			static char d;
-			int e;
+		public struct Foo {
+			public int a;
+			public static int b;
+			public long c;
+			public static char d;
+			public int e;
 		}
 
 		[Test]
@@ -188,7 +196,7 @@ namespace MonoTests.System.Runtime.InteropServices
 				Assert.AreEqual ("fieldName", ex.ParamName, "#5");
 			}
 		}
-
+#if !MOBILE
 		[Test]
 		public void GetHINSTANCE ()
 		{
@@ -243,7 +251,7 @@ namespace MonoTests.System.Runtime.InteropServices
 				Assert.AreEqual ("m", ex.ParamName, "#5");
 			}
 		}
-
+#endif
 		[Test] // bug #319009
 		public void StringToHGlobalUni ()
 		{
@@ -254,6 +262,61 @@ namespace MonoTests.System.Runtime.InteropServices
 			handle = Marshal.StringToHGlobalUni ("unicode data string");
 			s = Marshal.PtrToStringUni (handle);
 			Assert.AreEqual (19, s.Length, "#2");
+		}
+
+		[Test]
+		public void ReadIntByte ()
+		{
+			IntPtr ptr = Marshal.AllocHGlobal (4);
+			try {
+				Marshal.WriteByte (ptr, 0, 0x1);
+				Marshal.WriteByte (ptr, 1, 0x2);
+				Assert.AreEqual (0x1, Marshal.ReadByte (ptr));
+				Assert.AreEqual (0x1, Marshal.ReadByte (ptr, 0));
+				Assert.AreEqual (0x2, Marshal.ReadByte (ptr, 1));
+			} finally {
+				Marshal.FreeHGlobal (ptr);
+			}
+		}
+
+		[Test]
+		public void ReadInt16 ()
+		{
+			IntPtr ptr = Marshal.AllocHGlobal (64);
+			try {
+				Marshal.WriteInt16 (ptr, 0, 0x1234);
+				Marshal.WriteInt16 (ptr, 2, 0x4567);
+				Marshal.WriteInt16 (ptr, 5, 0x4567);
+				Assert.AreEqual (0x1234, Marshal.ReadInt16 (ptr));
+				Assert.AreEqual (0x1234, Marshal.ReadInt16 (ptr, 0));
+				Assert.AreEqual (0x4567, Marshal.ReadInt16 (ptr, 2));
+#if NET_4_5
+				Assert.AreEqual (0x4567, Marshal.ReadInt16 ((ptr + 5)));
+#endif
+				Assert.AreEqual (0x4567, Marshal.ReadInt16 (ptr, 5));
+			} finally {
+				Marshal.FreeHGlobal (ptr);
+			}
+		}
+
+		[Test]
+		public void ReadInt32 ()
+		{
+			IntPtr ptr = Marshal.AllocHGlobal (64);
+			try {
+				Marshal.WriteInt32 (ptr, 0, 0x12345678);
+				Marshal.WriteInt32 (ptr, 4, 0x77654321);
+				Marshal.WriteInt32 (ptr, 10, 0x77654321);
+				Assert.AreEqual (0x12345678, Marshal.ReadInt32 (ptr));
+				Assert.AreEqual (0x12345678, Marshal.ReadInt32 (ptr, 0));
+				Assert.AreEqual (0x77654321, Marshal.ReadInt32 (ptr, 4));
+#if NET_4_5
+				Assert.AreEqual (0x77654321, Marshal.ReadInt32 ((ptr + 10)));
+#endif
+				Assert.AreEqual (0x77654321, Marshal.ReadInt32 (ptr, 10));
+			} finally {
+				Marshal.FreeHGlobal (ptr);
+			}
 		}
 
 		[Test]
@@ -277,6 +340,22 @@ namespace MonoTests.System.Runtime.InteropServices
 		}
 
 		[Test]
+		public void ReadInt64 ()
+		{
+			IntPtr ptr = Marshal.AllocHGlobal (16);
+			try {
+				Marshal.WriteInt64 (ptr, 0, 0x12345678ABCDEFL);
+				Marshal.WriteInt64 (ptr, 8, 0x87654321ABCDEFL);
+				Assert.AreEqual (0x12345678ABCDEFL, Marshal.ReadInt64 (ptr));
+				Assert.AreEqual (0x12345678ABCDEFL, Marshal.ReadInt64 (ptr, 0));
+				Assert.AreEqual (0x87654321ABCDEFL, Marshal.ReadInt64 (ptr, 8));
+			} finally {
+				Marshal.FreeHGlobal (ptr);
+			}
+		}
+
+		[Test]
+		[Category ("MobileNotWorking")]
 		public void BSTR_Roundtrip ()
 		{
 			string s = "mono";
@@ -286,6 +365,7 @@ namespace MonoTests.System.Runtime.InteropServices
 		}
 
 		[Test]
+		[Category ("MobileNotWorking")]
 		public void StringToBSTRWithNullValues ()
 		{
 			int size = 128;
@@ -417,7 +497,6 @@ namespace MonoTests.System.Runtime.InteropServices
 				Marshal.FreeCoTaskMem (ptr);
 			}
 		}
-#if NET_2_0
 		private const string NotSupported = "Not supported before Windows 2000 Service Pack 3";
 		private static char[] PlainText = new char[] { 'a', 'b', 'c' };
 		private static byte[] AsciiPlainText = new byte[] { (byte) 'a', (byte) 'b', (byte) 'c' };
@@ -583,8 +662,8 @@ namespace MonoTests.System.Runtime.InteropServices
 				Assert.Ignore (NotSupported);
 			}
 		}
-#endif
 
+#if !NET_2_1
 		[Test]
 		public void TestGetComSlotForMethodInfo ()
 		{
@@ -607,11 +686,7 @@ namespace MonoTests.System.Runtime.InteropServices
 				Assert.AreEqual (typeof (ArgumentNullException), ex.GetType (), "#2");
 				Assert.IsNull (ex.InnerException, "#3");
 				Assert.IsNotNull (ex.Message, "#4");
-#if NET_2_0
 				Assert.AreEqual ("m", ex.ParamName, "#5");
-#else
-				Assert.IsNull (ex.ParamName, "#5");
-#endif
 			}
 		}
 
@@ -630,7 +705,7 @@ namespace MonoTests.System.Runtime.InteropServices
 				Assert.AreEqual ("m", ex.ParamName, "#5");
 			}
 		}
-
+#endif
 		[Test]
 		public void TestPtrToStringAuto ()
 		{
@@ -659,7 +734,7 @@ namespace MonoTests.System.Runtime.InteropServices
 				Marshal.FreeHGlobal (ptr);
 			}
 		}
-
+#if !MOBILE
 		[Test]
 		public void TestGenerateProgIdForType()
 		{
@@ -671,7 +746,7 @@ namespace MonoTests.System.Runtime.InteropServices
 			output = Marshal.GenerateProgIdForType(typeof(TestCoClassWithProgId));
 			Assert.AreEqual ("CoClassWithProgId", output, "#2");
 		}
-
+#endif
 		[Test]
 		public void TestGlobalAlloc ()
 		{
@@ -679,7 +754,30 @@ namespace MonoTests.System.Runtime.InteropServices
 			mem = Marshal.ReAllocHGlobal (mem, (IntPtr) 1000000);
 			Marshal.FreeHGlobal (mem);
 		}
-#if NET_2_0
+		
+		[Test]
+		public void FreeHGlobal ()
+		{
+			// clear user doubts on assistly #6749
+			for (int i = 0; i < 1024; i++) {
+				IntPtr p = Marshal.AllocHGlobal (1024 * 1024);
+				Assert.AreNotEqual (IntPtr.Zero, p, i.ToString ());
+				Marshal.FreeHGlobal (p);
+			}
+		}
+
+		[StructLayout (LayoutKind.Sequential)]
+		public struct SimpleStruct2 {
+			public int a;
+			public int b;
+		}
+
+		[Test]
+		public void PtrToStructureNull ()
+		{
+			Assert.IsNull (Marshal.PtrToStructure (IntPtr.Zero, typeof (SimpleStruct2)));
+		}
+		
 		[Test]
 		public void TestGetExceptionForHR ()
 		{
@@ -692,7 +790,6 @@ namespace MonoTests.System.Runtime.InteropServices
 			ex = Marshal.GetExceptionForHR (E_INVALIDARG);
 			Assert.AreEqual (typeof (ArgumentException), ex.GetType (), "E_INVALIDARG");
 		}
-#endif
 		bool RunningOnUnix {
 			get {
 				int p = (int) Environment.OSVersion.Platform;
@@ -712,7 +809,7 @@ namespace MonoTests.System.Runtime.InteropServices
 			int nSize
 		);
 	}
-
+#if !NET_2_1
 	[ComImport()]
 	[Guid("AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")]
 	interface ITestDefault
@@ -774,5 +871,5 @@ namespace MonoTests.System.Runtime.InteropServices
 		{
 		}
 	}
-}
 #endif
+}

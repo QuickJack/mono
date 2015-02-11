@@ -34,6 +34,10 @@ namespace System.Web
 	{
 		bool? headerCheckingEnabled;
 
+		public HttpHeaderCollection () : base (StringComparer.OrdinalIgnoreCase)
+		{
+		}
+
 		bool HeaderCheckingEnabled {
 			get {
 				if (headerCheckingEnabled == null)
@@ -60,11 +64,7 @@ namespace System.Web
 
 			string encName, encValue;
 			if (HeaderCheckingEnabled) {
-#if NET_4_0
 				HttpEncoder.Current.HeaderNameValueEncode (name, value, out encName, out encValue);
-#else
-				HttpEncoder.HeaderNameValueEncode (name, value, out encName, out encValue);
-#endif
 			} else {
 				encName = name;
 				encValue = value;

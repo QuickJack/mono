@@ -214,6 +214,96 @@ namespace MonoTests.System.Runtime.Serialization.Formatters.Binary
 		}
 	}
 
+	class Class
+	{
+		public string Name;
+
+		public virtual Instance NewInstance()
+		{
+			return new Instance { Class = this };
+		}
+	}
+
+	class Instance
+	{
+		public Class Class;
+	}
+
+
+	[Serializable]
+	class ClassSerializationProxy : IObjectReference
+	{
+		string className;
+
+		public ClassSerializationProxy (Class klass)
+		{
+			this.className = klass.Name;
+		}
+
+		public object GetRealObject(StreamingContext context)
+		{
+			return new Class { Name = className };
+		}
+	}
+
+	[Serializable]
+	class ObjectStreamClass : Class, IObjectReference, ISerializable
+	{
+		Class klass;
+
+		public ObjectStreamClass (Class klass)
+		{
+			this.klass = klass;
+		}
+
+		public ObjectStreamClass(SerializationInfo info, StreamingContext context)
+		{
+			klass = (Class)info.GetValue("0", typeof(object));
+		}
+
+		public object GetRealObject (StreamingContext context)
+		{
+			return this;
+		}
+
+		public void GetObjectData (SerializationInfo info, StreamingContext context)
+		{
+			info.AddValue ("0", new ClassSerializationProxy (klass));
+		}
+
+		public override Instance NewInstance()
+		{
+			return klass.NewInstance();
+		}
+	}
+
+	[Serializable]
+	class DynamicProxy: IObjectReference, ISerializable
+	{
+		Instance obj;
+
+		public DynamicProxy (Instance obj)
+		{
+			this.obj = obj;
+		}
+
+		public DynamicProxy (SerializationInfo info, StreamingContext context)
+		{
+			ObjectStreamClass osc = (ObjectStreamClass) info.GetValue("0", typeof(object));
+			obj = osc.NewInstance();
+		}
+
+		public object GetRealObject (StreamingContext context)
+		{
+			return obj;
+		}
+
+		public void GetObjectData (SerializationInfo info, StreamingContext context)
+		{
+			info.AddValue ("0", new ObjectStreamClass (obj.Class));
+		}
+	}
+
 	[TestFixture]
 	public class BinaryFormatterTest
 	{
@@ -221,11 +311,7 @@ namespace MonoTests.System.Runtime.Serialization.Formatters.Binary
 		public void Constructor_Default ()
 		{
 			BinaryFormatter bf = new BinaryFormatter ();
-#if NET_2_0
 			Assert.AreEqual (FormatterAssemblyStyle.Simple, bf.AssemblyFormat, "AssemblyFormat");
-#else
-			Assert.AreEqual (FormatterAssemblyStyle.Full, bf.AssemblyFormat, "AssemblyFormat");
-#endif
 			Assert.IsNull (bf.Binder, "Binder");
 			Assert.AreEqual (StreamingContextStates.All, bf.Context.State, "Context");
 			Assert.AreEqual (TypeFilterLevel.Full, bf.FilterLevel, "FilterLevel");
@@ -238,11 +324,7 @@ namespace MonoTests.System.Runtime.Serialization.Formatters.Binary
 		{
 			SurrogateSelector ss = new SurrogateSelector ();
 			BinaryFormatter bf = new BinaryFormatter (ss, new StreamingContext (StreamingContextStates.CrossMachine));
-#if NET_2_0
 			Assert.AreEqual (FormatterAssemblyStyle.Simple, bf.AssemblyFormat, "AssemblyFormat");
-#else
-			Assert.AreEqual (FormatterAssemblyStyle.Full, bf.AssemblyFormat, "AssemblyFormat");
-#endif
 			Assert.IsNull (bf.Binder, "Binder");
 			Assert.AreEqual (StreamingContextStates.CrossMachine, bf.Context.State, "Context");
 			Assert.AreEqual (TypeFilterLevel.Full, bf.FilterLevel, "FilterLevel");
@@ -450,6 +532,23 @@ namespace MonoTests.System.Runtime.Serialization.Formatters.Binary
 			Assert.AreEqual (666, o.Id);
 
 			ms.Close ();
+		}
+
+		[Test]
+		public void NestedObjectReferences ()
+		{
+			MemoryStream ms = new MemoryStream ();
+
+			var cls = new Class { Name = "MyClass" };
+			var ob = cls.NewInstance ();
+
+			BinaryFormatter bf = new BinaryFormatter();
+			bf.Serialize (ms, new DynamicProxy (ob));
+
+			ms.Position = 0;
+
+			Instance ins = (Instance) bf.Deserialize (ms);
+			Assert.AreEqual ("MyClass", ins.Class.Name);
 		}
 
 		class SimpleSerializationBinder2 : SerializationBinder

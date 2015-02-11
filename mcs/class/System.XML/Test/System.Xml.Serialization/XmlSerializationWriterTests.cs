@@ -13,7 +13,6 @@
 // 
 
 using System;
-using System.ComponentModel;
 using System.Globalization;
 using System.IO;
 using System.Xml;
@@ -131,11 +130,7 @@ namespace MonoTests.System.XmlSerialization
 		public void TestFromDateTime()
 		{
 			DateTime d = new DateTime();
-#if NET_2_0
 			Assert.AreEqual ("0001-01-01T00:00:00", FromDateTime (d));
-#else
-			Assert.AreEqual ("0001-01-01T00:00:00.0000000", FromDateTime (d).Substring (0, 27));
-#endif
 		}
 
 		[Test] // bug #77500
@@ -203,7 +198,6 @@ namespace MonoTests.System.XmlSerialization
 			long[] ids = {1, 2, 3, 4};
 			string[] values = {"one", "two", "three", "four"};
 
-#if NET_2_0
 			try {
 				FromEnum (8, values, ids);
 				Assert.Fail ("#A1");
@@ -213,11 +207,7 @@ namespace MonoTests.System.XmlSerialization
 				Assert.IsTrue (ex.Message.IndexOf ("'8'") != -1, "#A4");
 				Assert.IsNull (ex.InnerException, "#A5");
 			}
-#else
-			Assert.AreEqual ("8", FromEnum (8, values, ids), "#A6");
-#endif
 
-#if NET_2_0
 			try {
 				FromEnum (8, values, ids, "Some.Type.Name");
 				Assert.Fail ("#B1");
@@ -228,7 +218,6 @@ namespace MonoTests.System.XmlSerialization
 				Assert.IsTrue (ex.Message.IndexOf ("Some.Type.Name") != -1, "#B5");
 				Assert.IsNull (ex.InnerException, "#B6");
 			}
-#endif
 		}
 
 		[Test]
@@ -777,15 +766,9 @@ namespace MonoTests.System.XmlSerialization
 			xsw.ExecuteWriteTypedPrimitive ("x", ANamespace, dateTime, false);
 			// FIXME: This is a bad test case. The following switch
 			// should be applied to the entire test.
-#if NET_2_0
 			Assert.AreEqual (string.Format (CultureInfo.InvariantCulture,
 				"<x xmlns='{0}'>1973-08-13T00:00:00</x>", ANamespace),
 				xsw.Content, "#1");
-#else
-			Assert.AreEqual (string.Format (CultureInfo.InvariantCulture,
-				"<x xmlns='{0}'>{1}</x>", ANamespace, FromDateTime (dateTime)),
-				xsw.Content, "#1");
-#endif
 			xsw.Reset ();
 
 			xsw.ExecuteWriteTypedPrimitive ("x", string.Empty, dateTime, false);
@@ -1546,7 +1529,6 @@ namespace MonoTests.System.XmlSerialization
 		}
 
 
-#if NET_2_0
 		[Test]
 		public void TestFromEnum_Null_TypeName ()
 		{
@@ -1566,7 +1548,6 @@ namespace MonoTests.System.XmlSerialization
 			Assert.IsTrue (ex.Message.IndexOf ("AnInvalidValue") != -1, "#4");
 			Assert.IsTrue (ex.Message.IndexOf ("SomeType") != -1, "#5");
 		}
-#endif
 
 		[Test]
 		public void WriteCharacter ()
@@ -1581,7 +1562,7 @@ namespace MonoTests.System.XmlSerialization
 		[Serializable]
 		public class ToBeSerialized
 		{
-			[DefaultValue ('a')]
+			[global::System.ComponentModel.DefaultValue ('a')]
 			public char character = '\'';
 		}
 

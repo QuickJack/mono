@@ -181,7 +181,7 @@ namespace System.Net
 			}
 
 			value = header.Substring (beginQ, pos - beginQ);
-			pos += 2;
+			pos += useQuote ? 2 : 1;
 			return true;
 		}
 	}
@@ -250,7 +250,7 @@ namespace System.Net
 
 			// build the hash object (only MD5 is defined in RFC2617)
 			if ((parser.Algorithm == null) || (parser.Algorithm.ToUpper ().StartsWith ("MD5")))
-				hash = HashAlgorithm.Create ("MD5");
+				hash = MD5.Create ();
 
 			return true;
 		}

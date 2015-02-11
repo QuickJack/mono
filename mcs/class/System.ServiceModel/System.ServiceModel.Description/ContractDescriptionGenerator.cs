@@ -237,7 +237,6 @@ namespace System.ServiceModel.Description
 			
 			for (int i = 0; i < contractMethods.Length; ++i)
 			{
-
 				MethodInfo mi = contractMethods [i];
 				OperationContractAttribute oca = GetOperationContractAttribute (mi);
 				if (oca == null)
@@ -253,7 +252,7 @@ namespace System.ServiceModel.Description
 					if (GetOperationContractAttribute (end) != null)
 						throw new InvalidOperationException ("Async 'End' method must not have OperationContractAttribute. It is automatically treated as the EndMethod of the corresponding 'Begin' method.");
 				}
-				OperationDescription od = GetOrCreateOperation (cd, mi, serviceMethods [i], oca, end != null ? end.ReturnType : null, isCallback, givenServiceType);
+				OperationDescription od = GetOrCreateOperation (cd, mi, serviceMethods [i], oca, end, isCallback, givenServiceType);
 				if (end != null)
 					od.EndMethod = end;
 			}
@@ -263,7 +262,7 @@ namespace System.ServiceModel.Description
 		{
 			var l = new List<MethodInfo> ();
 			foreach (var t in GetAllInterfaceTypes (type)) {
-#if MONOTOUCH
+#if FULL_AOT_RUNTIME
 				// The MethodBase[] from t.GetMethods () is cast to a IEnumerable <MethodInfo>
 				// when passed to List<MethodInfo>.AddRange, which in turn casts it to 
 				// ICollection <MethodInfo>.  The full-aot compiler has no idea of this, so
@@ -286,7 +285,7 @@ namespace System.ServiceModel.Description
 		static OperationDescription GetOrCreateOperation (
 			ContractDescription cd, MethodInfo mi, MethodInfo serviceMethod,
 			OperationContractAttribute oca,
-			Type asyncReturnType,
+			MethodInfo endMethod,
 			bool isCallback,
 			Type givenServiceType)
 		{
@@ -302,18 +301,17 @@ namespace System.ServiceModel.Description
 				if (HasInvalidMessageContract (mi, oca.AsyncPattern))
 					throw new InvalidOperationException (String.Format ("The operation {0} contains more than one parameters and one or more of them are marked with MessageContractAttribute, but the attribute must be used within an operation that has only one parameter.", od.Name));
 
-#if !MOONLIGHT
 				var xfa = serviceMethod.GetCustomAttribute<XmlSerializerFormatAttribute> (false);
 				if (xfa != null)
 					od.Behaviors.Add (new XmlSerializerOperationBehavior (od, xfa));
-#endif
 				var dfa = serviceMethod.GetCustomAttribute<DataContractFormatAttribute> (false);
 				if (dfa != null)
 					od.Behaviors.Add (new DataContractSerializerOperationBehavior (od, dfa));
 
 				od.Messages.Add (GetMessage (od, mi, oca, true, isCallback, null));
 				if (!od.IsOneWay) {
-					var md = GetMessage (od, mi, oca, false, isCallback, asyncReturnType);
+					var asyncReturnType = endMethod != null ? endMethod.ReturnType : null;
+					var md = GetMessage (od, endMethod ?? mi, oca, false, isCallback, asyncReturnType);
 					od.Messages.Add (md);
 					var mpa = mi.ReturnParameter.GetCustomAttribute<MessageParameterAttribute> (true);
 					if (mpa != null) {
@@ -524,8 +522,12 @@ namespace System.ServiceModel.Description
 			int index = 0;
 			foreach (ParameterInfo pi in plist) {
 				// AsyncCallback and state are extraneous.
-				if (oca.AsyncPattern && pi.Position == plist.Length - 2)
-					break;
+				if (oca.AsyncPattern) {
+					if (isRequest && pi.Position == plist.Length - 2)
+						break;
+					if (!isRequest && pi.Position == plist.Length - 1)
+						break;
+				}
 
 				// They are ignored:
 				// - out parameter in request

@@ -30,6 +30,9 @@ using System.IO;
 using Microsoft.Build.BuildEngine;
 using NUnit.Framework;
 using System.Text;
+using Microsoft.Build.Tasks;
+using Microsoft.Build.Framework;
+using Microsoft.Build.Utilities;
 
 namespace MonoTests.Microsoft.Build.Tasks {
 
@@ -51,6 +54,18 @@ namespace MonoTests.Microsoft.Build.Tasks {
 		{
 			Directory.Delete (source_path, true);
 			Directory.Delete (target_path, true);
+		}
+
+		[Test]
+		public void TestCopy_MissingSourceFile ()
+		{
+			Copy copy = new Copy ();
+			copy.BuildEngine = new TestEngine ();
+			copy.SourceFiles = new ITaskItem [1];
+			copy.SourceFiles [0] = new TaskItem ("SourceDoesNotExist");
+			copy.DestinationFiles = new ITaskItem [1];
+			copy.DestinationFiles [0] = new TaskItem ("DestDoesNotExist");
+			Assert.IsFalse (copy.Execute ());
 		}
 
 		[Test]
@@ -288,7 +303,6 @@ namespace MonoTests.Microsoft.Build.Tasks {
 			Assert.AreEqual (FileAttributes.Normal, File.GetAttributes (target_file), "A3");					
 		}
 
-#if NET_3_5
 		[Test]
 		public void TestCopy_OverwriteReadOnlyTrue ()
 		{
@@ -304,7 +318,7 @@ namespace MonoTests.Microsoft.Build.Tasks {
 			Assert.AreEqual (FileAttributes.ReadOnly, File.GetAttributes (target_file), "A1");
 			
 			string documentString = @"
-				<Project xmlns=""http://schemas.microsoft.com/developer/msbuild/2003"" ToolsVersion=""3.5"">
+				<Project xmlns=""http://schemas.microsoft.com/developer/msbuild/2003"" ToolsVersion=""4.0"">
 					<PropertyGroup><DestFile>" + target_file + @"</DestFile></PropertyGroup>
 					<ItemGroup>
 						<SFiles Include='" + file_path + @"'><Md>1</Md></SFiles>
@@ -381,7 +395,6 @@ namespace MonoTests.Microsoft.Build.Tasks {
 			
 			File.SetAttributes (target_file, FileAttributes.Normal);
 		}
-#endif
 
 		void CheckCopyBuildItems (Project project, string [] source_files, string destination_folder, string prefix)
 		{

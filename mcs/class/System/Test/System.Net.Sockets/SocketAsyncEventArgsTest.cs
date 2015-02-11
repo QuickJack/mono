@@ -26,7 +26,6 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if NET_2_0
 
 using System;
 using System.Collections.Generic;
@@ -52,10 +51,12 @@ namespace MonoTests.System.Net.Sockets {
 			Assert.IsFalse (saea.DisconnectReuseSocket, "DisconnectReuseSocket");
 			Assert.AreEqual (SocketAsyncOperation.None, saea.LastOperation, "LastOperation");
 			Assert.AreEqual (0, saea.Offset, "Offset");
-			Assert.IsNotNull (saea.ReceiveMessageFromPacketInfo, "ReceiveMessageFromPacketInfo");
 			Assert.IsNull (saea.RemoteEndPoint, "RemoteEndPoint");
+#if !MOBILE
+			Assert.IsNotNull (saea.ReceiveMessageFromPacketInfo, "ReceiveMessageFromPacketInfo");
 			Assert.IsNull (saea.SendPacketsElements, "SendPacketsElements");
 			Assert.AreEqual (TransmitFileOptions.UseDefaultWorkerThread, saea.SendPacketsFlags, "SendPacketsFlags");
+#endif
 			Assert.AreEqual (-1, saea.SendPacketsSendSize, "SendPacketsSendSize");
 			Assert.AreEqual (SocketError.Success, saea.SocketError, "SocketError");
 			Assert.AreEqual (SocketFlags.None, saea.SocketFlags, "SocketFlags");
@@ -249,5 +250,4 @@ namespace MonoTests.System.Net.Sockets {
 	}
 }
 
-#endif
 

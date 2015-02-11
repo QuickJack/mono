@@ -50,10 +50,6 @@
 
 #include "jit-icalls.h"
 
-extern LPTOP_LEVEL_EXCEPTION_FILTER mono_old_win_toplevel_exception_filter;
-extern guint64 mono_win_chained_exception_filter_result;
-extern gboolean mono_win_chained_exception_filter_didrun;
-
 void
 mono_runtime_install_handlers (void)
 {
@@ -83,17 +79,11 @@ mono_runtime_cleanup_handlers (void)
  * was called, false otherwise.
  */
 gboolean
-SIG_HANDLER_SIGNATURE (mono_chain_signal)
+MONO_SIG_HANDLER_SIGNATURE (mono_chain_signal)
 {
-	int signal = _dummy;
-	GET_CONTEXT;
-
-	if (mono_old_win_toplevel_exception_filter) {
-		mono_win_chained_exception_filter_didrun = TRUE;
-		mono_win_chained_exception_filter_result = (*mono_old_win_toplevel_exception_filter)(info);
-		return TRUE;
-	}
-	return FALSE;
+	MonoJitTlsData *jit_tls = mono_native_tls_get_value (mono_jit_tls_id);
+	jit_tls->mono_win_chained_exception_needs_run = TRUE;
+	return TRUE;
 }
 
 static HANDLE win32_main_thread;
@@ -133,7 +123,7 @@ mono_runtime_setup_stat_profiler (void)
 	if (timeBeginPeriod (1) != TIMERR_NOERROR)
 		return;
 
-	if ((win32_timer = timeSetEvent (1, 0, win32_time_proc, 0, TIME_PERIODIC)) == 0) {
+	if ((win32_timer = timeSetEvent (1, 0, (LPTIMECALLBACK)win32_time_proc, (DWORD_PTR)NULL, TIME_PERIODIC)) == 0) {
 		timeEndPeriod (1);
 		return;
 	}
@@ -145,9 +135,67 @@ mono_runtime_shutdown_stat_profiler (void)
 }
 
 gboolean
-mono_thread_state_init_from_handle (MonoThreadUnwindState *tctx, MonoNativeThreadId thread_id, MonoNativeThreadHandle thread_handle)
+mono_thread_state_init_from_handle (MonoThreadUnwindState *tctx, MonoThreadInfo *info)
 {
-	g_error ("Windows systems haven't been ported to support mono_thread_state_init_from_handle");
-	return FALSE;
+	DWORD id = mono_thread_info_get_tid (info);
+	HANDLE handle;
+	CONTEXT context;
+	DWORD result;
+	MonoContext *ctx;
+	MonoJitTlsData *jit_tls;
+	void *domain;
+	MonoLMF *lmf = NULL;
+	gpointer *addr;
+
+	tctx->valid = FALSE;
+	tctx->unwind_data [MONO_UNWIND_DATA_DOMAIN] = NULL;
+	tctx->unwind_data [MONO_UNWIND_DATA_LMF] = NULL;
+	tctx->unwind_data [MONO_UNWIND_DATA_JIT_TLS] = NULL;
+
+	g_assert (id != GetCurrentThreadId ());
+
+	handle = OpenThread (THREAD_ALL_ACCESS, FALSE, id);
+	g_assert (handle);
+
+	context.ContextFlags = CONTEXT_INTEGER | CONTEXT_CONTROL;
+
+	if (!GetThreadContext (handle, &context)) {
+		CloseHandle (handle);
+		return FALSE;
+	}
+
+	g_assert (context.ContextFlags & CONTEXT_INTEGER);
+	g_assert (context.ContextFlags & CONTEXT_CONTROL);
+
+	ctx = &tctx->ctx;
+
+	memset (ctx, 0, sizeof (MonoContext));
+	mono_sigctx_to_monoctx (&context, ctx);
+
+	/* mono_set_jit_tls () sets this */
+	jit_tls = mono_thread_info_tls_get (info, TLS_KEY_JIT_TLS);
+	/* SET_APPDOMAIN () sets this */
+	domain = mono_thread_info_tls_get (info, TLS_KEY_DOMAIN);
+
+	/*Thread already started to cleanup, can no longer capture unwind state*/
+	if (!jit_tls || !domain)
+		return FALSE;
+
+	/*
+	 * The current LMF address is kept in a separate TLS variable, and its hard to read its value without
+	 * arch-specific code. But the address of the TLS variable is stored in another TLS variable which
+	 * can be accessed through MonoThreadInfo.
+	 */
+	/* mono_set_lmf_addr () sets this */
+	addr = mono_thread_info_tls_get (info, TLS_KEY_LMF_ADDR);
+	if (addr)
+		lmf = *addr;
+
+	tctx->unwind_data [MONO_UNWIND_DATA_DOMAIN] = domain;
+	tctx->unwind_data [MONO_UNWIND_DATA_JIT_TLS] = jit_tls;
+	tctx->unwind_data [MONO_UNWIND_DATA_LMF] = lmf;
+	tctx->valid = TRUE;
+
+	return TRUE;
 }
 

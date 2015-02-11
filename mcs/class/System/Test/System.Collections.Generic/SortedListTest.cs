@@ -29,7 +29,6 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if NET_2_0
 
 using System;
 using System.Collections;
@@ -39,6 +38,9 @@ using System.Text;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Formatters.Binary;
 using NUnit.Framework;
+#if !MOBILE
+using NUnit.Framework.SyntaxHelpers;
+#endif
 
 namespace MonoTests.System.Collections.Generic
 {
@@ -498,17 +500,9 @@ namespace MonoTests.System.Collections.Generic
 				list.Add (Math.E, 2);
 				Assert.Fail ("UC #1");
 			} catch (Exception ex) {
-#if NUNITLITE
 				Assert.That (ex, Is.TypeOf (typeof (InvalidOperationException)), "UC #2");
 				Assert.IsNotNull (ex.InnerException, "UC #3");
 				Assert.That (ex.InnerException, Is.TypeOf (typeof (DivideByZeroException)), "UC #4");
-#else
-				Assert.IsInstanceOfType (
-					typeof (InvalidOperationException), ex, "UC #2");
-				Assert.That (ex.InnerException != null, "UC #3");
-				Assert.IsInstanceOfType (
-					typeof (DivideByZeroException), ex.InnerException, "UC #4");
-#endif
 			}
 
 			try {
@@ -516,20 +510,19 @@ namespace MonoTests.System.Collections.Generic
 				list.TryGetValue (Math.E, out a);
 				Assert.Fail ("UC #5");
 			} catch (Exception ex) {
-#if NUNITLITE
 				Assert.That (ex, Is.TypeOf (typeof (InvalidOperationException)), "UC #6");
 				Assert.IsNotNull (ex.InnerException, "UC #7");
 				Assert.That (ex.InnerException, Is.TypeOf (typeof (DivideByZeroException)), "UC #8");
-#else
-				Assert.IsInstanceOfType (
-					typeof (InvalidOperationException), ex, "UC #5");
-				Assert.That (ex.InnerException != null, "UC #6");
-				Assert.IsInstanceOfType (
-					typeof (DivideByZeroException), ex.InnerException, "UC #7");
-#endif
 			}
+		}
+
+		[Test]
+		public void IDictionaryNullOnNonExistingKey ()
+		{
+			IDictionary list = new SortedList<long, string> ();
+			object val = list [1234L];
+			Assert.IsNull (val);
 		}
 	}
 }
 
-#endif

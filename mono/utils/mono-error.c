@@ -188,6 +188,16 @@ mono_error_set_assembly_load (MonoError *oerror, const char *assembly_name, cons
 	set_error_message ();
 }
 
+
+void
+mono_error_set_assembly_load_simple (MonoError *oerror, const char *assembly_name, gboolean refection_only)
+{
+	if (refection_only)
+		mono_error_set_assembly_load (oerror, assembly_name, "Cannot resolve dependency to assembly because it has not been preloaded. When using the ReflectionOnly APIs, dependent assemblies must be pre-loaded or loaded on demand through the ReflectionOnlyAssemblyResolve event.");
+	else
+		mono_error_set_assembly_load (oerror, assembly_name, "Could not load file or assembly or one of its dependencies.");
+}
+
 void
 mono_error_set_type_load_class (MonoError *oerror, MonoClass *klass, const char *msg_format, ...)
 {
@@ -199,6 +209,10 @@ mono_error_set_type_load_class (MonoError *oerror, MonoClass *klass, const char 
 	set_error_message ();
 }
 
+/*
+ * Different than other functions, this one here assumes that type_name and assembly_name to have been allocated just for us.
+ * Which means mono_error_cleanup will free them.
+ */
 void
 mono_error_set_type_load_name (MonoError *oerror, const char *type_name, const char *assembly_name, const char *msg_format, ...)
 {
@@ -208,6 +222,7 @@ mono_error_set_type_load_name (MonoError *oerror, const char *type_name, const c
 	error->error_code = MONO_ERROR_TYPE_LOAD;
 	mono_error_set_type_name (oerror, type_name);
 	mono_error_set_assembly_name (oerror, assembly_name);
+	mono_error_dup_strings (oerror, FALSE);
 	set_error_message ();
 }
 
@@ -273,9 +288,9 @@ mono_error_set_from_loader_error (MonoError *oerror)
 {
 	MonoLoaderError *loader_error = mono_loader_get_last_error ();
 	MonoErrorInternal *error = (MonoErrorInternal*)oerror;
+	gboolean dup_strings = TRUE;
 
 	mono_error_prepare (error);
-
 
 	if (!loader_error) {
 		mono_error_set_generic_error (oerror, "System", "ExecutionEngineException", "Runtime tried to produce a mono-error from an empty loader-error");
@@ -311,14 +326,12 @@ mono_error_set_from_loader_error (MonoError *oerror)
 		break;
 
 	case MONO_EXCEPTION_TYPE_LOAD:
-		mono_error_set_type_load_name (oerror, loader_error->class_name, loader_error->assembly_name, "Failed for unknown reasons.");
+		mono_error_set_type_load_name (oerror, g_strdup (loader_error->class_name), g_strdup (loader_error->assembly_name), "Failed for unknown reasons.");
+		dup_strings = FALSE;
 		break;
 	
 	case MONO_EXCEPTION_FILE_NOT_FOUND:
-		if (loader_error->ref_only)
-			mono_error_set_assembly_load (oerror, loader_error->assembly_name, "Cannot resolve dependency to assembly because it has not been preloaded. When using the ReflectionOnly APIs, dependent assemblies must be pre-loaded or loaded on demand through the ReflectionOnlyAssemblyResolve event.");
-		else
-			mono_error_set_assembly_load (oerror, loader_error->assembly_name, "Could not load file or assembly or one of its dependencies.");
+		mono_error_set_assembly_load_simple (oerror, loader_error->assembly_name, loader_error->ref_only);
 		break;
 
 	case MONO_EXCEPTION_METHOD_ACCESS:
@@ -347,8 +360,55 @@ mono_error_set_from_loader_error (MonoError *oerror)
 		break;
 	}
 
-	mono_error_dup_strings (oerror, TRUE);
+	mono_error_dup_strings (oerror, dup_strings);
 	mono_loader_clear_error ();
+}
+
+static const char*
+get_type_name (MonoErrorInternal *error)
+{
+	if (error->type_name)
+		return error->type_name;
+	if (error->klass)
+		return error->klass->name;
+	return "<unknown type>";
+}
+
+static const char*
+get_assembly_name (MonoErrorInternal *error)
+{
+	if (error->assembly_name)
+		return error->assembly_name;
+	if (error->klass && error->klass->image)
+		return error->klass->image->name;
+	return "<unknown assembly>";
+}
+
+void
+mono_loader_set_error_from_mono_error (MonoError *oerror)
+{
+	MonoErrorInternal *error = (MonoErrorInternal*)oerror;
+
+	switch (error->error_code) {
+	case MONO_ERROR_MISSING_METHOD:
+		mono_loader_set_error_method_load (get_type_name (error), error->member_name);
+		break;
+	case MONO_ERROR_MISSING_FIELD:
+		mono_loader_set_error_field_load (error->klass, error->member_name);
+		break;
+	case MONO_ERROR_TYPE_LOAD:
+		mono_loader_set_error_type_load (get_type_name (error), get_assembly_name (error));
+		break;
+	case MONO_ERROR_FILE_NOT_FOUND:
+		/* XXX can't recover if it's ref only or not */
+		mono_loader_set_error_assembly_load (get_assembly_name (error), FALSE);
+		break;
+	case MONO_ERROR_BAD_IMAGE:
+		mono_loader_set_error_bad_image (g_strdup (mono_internal_error_get_message (error)));
+		break;
+	default:
+		mono_loader_set_error_bad_image (g_strdup_printf ("Non translatable error: %s", mono_internal_error_get_message (error)));
+	}
 }
 
 void
@@ -383,9 +443,10 @@ mono_error_set_not_verifiable (MonoError *oerror, MonoMethod *method, const char
 	mono_error_prepare (error);
 
 	error->error_code = MONO_ERROR_NOT_VERIFIABLE;
-	mono_error_set_class (oerror, method->klass);
-	if (method)
+	if (method) {
+		mono_error_set_class (oerror, method->klass);
 		mono_error_set_member_name (oerror, mono_method_full_name (method, 1));
+	}
 
 	set_error_message ();
 }
@@ -575,20 +636,18 @@ mono_error_prepare_exception (MonoError *oerror, MonoError *error_out)
 }
 
 /*
-Raises the exception of @error.
-Does nothing if @error has a success error code.
-Aborts in case of a double fault. This happens when it can't recover from an error caused by trying
-to construct the first exception object.
-The error object @error is cleaned up. 
+Convert this MonoError to an exception if it's faulty or return NULL.
+The error object is cleant after.
 */
-void
-mono_error_raise_exception (MonoError *target_error)
+
+MonoException*
+mono_error_convert_to_exception (MonoError *target_error)
 {
 	MonoError error;
 	MonoException *ex;
 
 	if (mono_error_ok (target_error))
-		return;
+		return NULL;
 
 	ex = mono_error_prepare_exception (target_error, &error);
 	if (!mono_error_ok (&error)) {
@@ -600,6 +659,21 @@ mono_error_raise_exception (MonoError *target_error)
 		mono_error_cleanup (&error);
 	}
 	mono_error_cleanup (target_error);
+	return ex;
+}
 
-	mono_raise_exception (ex);	
+
+/*
+Raises the exception of @error.
+Does nothing if @error has a success error code.
+Aborts in case of a double fault. This happens when it can't recover from an error caused by trying
+to construct the first exception object.
+The error object @error is cleaned up. 
+*/
+void
+mono_error_raise_exception (MonoError *target_error)
+{
+	MonoException *ex = mono_error_convert_to_exception (target_error);
+	if (ex)
+		mono_raise_exception (ex);	
 }

@@ -3140,6 +3140,20 @@ namespace System.Windows.Forms {
 				InvalidateRow (i);
 		}
 
+		private void UpdateRowHeightInfo (DataGridViewRow row)
+		{
+			DataGridViewRowHeightInfoNeededEventArgs rowInfo =
+				new DataGridViewRowHeightInfoNeededEventArgs (row.Index, row.Height, row.MinimumHeight);
+			OnRowHeightInfoNeeded (rowInfo);
+
+			if (row.Height != rowInfo.Height || row.MinimumHeight != rowInfo.MinimumHeight) {
+				row.MinimumHeight = rowInfo.MinimumHeight;
+				row.Height = rowInfo.Height;
+				OnRowHeightInfoPushed (new DataGridViewRowHeightInfoPushedEventArgs (row.Index, rowInfo.Height,
+													rowInfo.MinimumHeight));
+			}
+		}
+
 		public void UpdateRowHeightInfo (int rowIndex, bool updateToEnd)
 		{
 			if (rowIndex < 0 && updateToEnd)
@@ -3159,33 +3173,12 @@ namespace System.Windows.Forms {
 
 			if (updateToEnd) {
 				for (int i = rowIndex; i < Rows.Count; i++) {
-					DataGridViewRow row = Rows[i];
-					if (!row.Visible)
-						continue;
-
-					DataGridViewRowHeightInfoNeededEventArgs rowInfo = 
-						new DataGridViewRowHeightInfoNeededEventArgs (row.Index, row.Height, row.MinimumHeight);
-					OnRowHeightInfoNeeded (rowInfo);
-
-					if (row.Height != rowInfo.Height || row.MinimumHeight != rowInfo.MinimumHeight) {
-						row.Height = rowInfo.Height;
-						row.MinimumHeight = rowInfo.MinimumHeight;
-						OnRowHeightInfoPushed (new DataGridViewRowHeightInfoPushedEventArgs (row.Index, rowInfo.Height, 
-														     rowInfo.MinimumHeight));
-					}
+					DataGridViewRow row = Rows [i];
+					if (row.Visible)
+						UpdateRowHeightInfo (row);
 				}
 			} else {
-				DataGridViewRow row = Rows[rowIndex];
-				DataGridViewRowHeightInfoNeededEventArgs rowInfo = 
-					new DataGridViewRowHeightInfoNeededEventArgs (row.Index, row.Height, row.MinimumHeight);
-				OnRowHeightInfoNeeded (rowInfo);
-
-				if (row.Height != rowInfo.Height || row.MinimumHeight != rowInfo.MinimumHeight) {
-					row.Height = rowInfo.Height;
-					row.MinimumHeight = rowInfo.MinimumHeight;
-					OnRowHeightInfoPushed (new DataGridViewRowHeightInfoPushedEventArgs (row.Index, rowInfo.Height, 
-													     rowInfo.MinimumHeight));
-				}
+				UpdateRowHeightInfo (Rows [rowIndex]);
 			}
 		}
 
@@ -3399,6 +3392,7 @@ namespace System.Windows.Forms {
 		protected override void Dispose (bool disposing) {
 			if (disposing) {
 				ClearSelection();
+				currentCell = null;
 				foreach (DataGridViewColumn column in Columns)
 					column.Dispose();
 				Columns.Clear();
@@ -5139,7 +5133,17 @@ namespace System.Windows.Forms {
 					SetSelectedRowCore (rowIndex, false);
 			}
 
-			if (Rows.Count - e.RowCount <= 0) {
+			int RowsLeft = Rows.Count - e.RowCount;
+			if (RowsLeft < 0)
+				RowsLeft = 0;
+
+			if (first_row_index > RowsLeft - 1)
+				first_row_index = RowsLeft - 1;
+
+			if (first_row_index < 0)
+				first_row_index = 0;
+
+			if (RowsLeft == 0) {
 				MoveCurrentCell (-1, -1, true, false, false, true);
 				hover_cell = null;
 			} else if (Columns.Count == 0) {
@@ -5147,8 +5151,8 @@ namespace System.Windows.Forms {
 				hover_cell = null;
 			} else if (currentCell != null && currentCell.RowIndex == e.RowIndex) {
 				int nextRowIndex = e.RowIndex;
-				if (nextRowIndex >= Rows.Count - e.RowCount)
-					nextRowIndex = Rows.Count - 1 - e.RowCount;
+				if (nextRowIndex >= RowsLeft)
+					nextRowIndex = RowsLeft - 1;
 				MoveCurrentCell (currentCell != null ? currentCell.ColumnIndex : 0, nextRowIndex, 
 						 true, false, false, true);
 				if (hover_cell != null && hover_cell.RowIndex >= e.RowIndex)
@@ -5467,7 +5471,7 @@ namespace System.Windows.Forms {
 			DataGridViewCell cell = CurrentCell;
 			
 			if (cell != null) {
-				if (cell.KeyEntersEditMode (new KeyEventArgs ((Keys)m.WParam.ToInt32 ())))
+				if (cell.KeyEntersEditMode (new KeyEventArgs (((Keys)m.WParam.ToInt32 ()) | XplatUI.State.ModifierKeys)))
 					BeginEdit (true);
 				if (EditingControl != null && ((Msg)m.Msg == Msg.WM_KEYDOWN || (Msg)m.Msg == Msg.WM_CHAR))
 					XplatUI.SendMessage (EditingControl.Handle, (Msg)m.Msg, m.WParam, m.LParam);
@@ -5479,7 +5483,7 @@ namespace System.Windows.Forms {
 		protected override bool ProcessKeyPreview (ref Message m)
 		{
 			if ((Msg)m.Msg == Msg.WM_KEYDOWN && (IsCurrentCellInEditMode || m.HWnd == horizontalScrollBar.Handle || m.HWnd == verticalScrollBar.Handle)) {
-				KeyEventArgs e = new KeyEventArgs ((Keys)m.WParam.ToInt32 ());
+				KeyEventArgs e = new KeyEventArgs (((Keys)m.WParam.ToInt32 ()) | XplatUI.State.ModifierKeys);
 			
 				IDataGridViewEditingControl ctrl = (IDataGridViewEditingControl)EditingControlInternal;
 				

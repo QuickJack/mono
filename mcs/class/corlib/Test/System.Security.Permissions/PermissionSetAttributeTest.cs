@@ -35,6 +35,9 @@ using System.Security.Permissions;
 namespace MonoTests.System.Security.Permissions {
 
 	[TestFixture]
+#if MOBILE
+	[Ignore]
+#endif
 	public class PermissionSetAttributeTest {
 
 		[Test]
@@ -42,9 +45,7 @@ namespace MonoTests.System.Security.Permissions {
 		{
 			PermissionSetAttribute a = new PermissionSetAttribute (SecurityAction.Assert);
 			Assert.IsNull (a.File, "File");
-#if NET_2_0
 			Assert.IsNull (a.Hex, "Hex");
-#endif
 			Assert.IsNull (a.Name, "Name");
 			Assert.IsNull (a.XML, "XML");
 			Assert.IsFalse (a.UnicodeEncoded, "UnicodeEncoded");
@@ -94,21 +95,16 @@ namespace MonoTests.System.Security.Permissions {
 			PermissionSetAttribute a = new PermissionSetAttribute (SecurityAction.Assert);
 			a.File = "mono";
 			Assert.AreEqual ("mono", a.File, "File");
-#if NET_2_0
 			Assert.IsNull (a.Hex, "Hex");
-#endif
 			Assert.IsNull (a.Name, "Name");
 			Assert.IsNull (a.XML, "XML");
 			a.File = null;
 			Assert.IsNull (a.File, "File");
-#if NET_2_0
 			Assert.IsNull (a.Hex, "Hex");
-#endif
 			Assert.IsNull (a.Name, "Name");
 			Assert.IsNull (a.XML, "XML");
 		}
 
-#if NET_2_0
 		[Test]
 		public void Hex ()
 		{
@@ -173,7 +169,6 @@ namespace MonoTests.System.Security.Permissions {
 			PermissionSet psbeu = a.CreatePermissionSet ();
 			Assert.IsTrue (ps.Equals (psbeu), "HEX-BIGENDIAN-UNICODE");
 		}
-#endif
 
 		[Test]
 		public void Name () 
@@ -181,16 +176,12 @@ namespace MonoTests.System.Security.Permissions {
 			PermissionSetAttribute a = new PermissionSetAttribute (SecurityAction.Assert);
 			a.Name = "mono";
 			Assert.IsNull (a.File, "File");
-#if NET_2_0
 			Assert.IsNull (a.Hex, "Hex");
-#endif
 			Assert.AreEqual ("mono", a.Name, "Name");
 			Assert.IsNull (a.XML, "XML");
 			a.Name = null;
 			Assert.IsNull (a.File, "File");
-#if NET_2_0
 			Assert.IsNull (a.Hex, "Hex");
-#endif
 			Assert.IsNull (a.Name, "Name");
 			Assert.IsNull (a.XML, "XML");
 		}
@@ -201,16 +192,12 @@ namespace MonoTests.System.Security.Permissions {
 			PermissionSetAttribute a = new PermissionSetAttribute (SecurityAction.Assert);
 			a.XML = "mono";
 			Assert.IsNull (a.File, "File");
-#if NET_2_0
 			Assert.IsNull (a.Hex, "Hex");
-#endif
 			Assert.IsNull (a.Name, "Name");
 			Assert.AreEqual ("mono", a.XML, "XML");
 			a.XML = null;
 			Assert.IsNull (a.File, "File");
-#if NET_2_0
 			Assert.IsNull (a.Hex, "Hex");
-#endif
 			Assert.IsNull (a.Name, "Name");
 			Assert.IsNull (a.XML, "XML");
 		}
@@ -231,9 +218,7 @@ namespace MonoTests.System.Security.Permissions {
 			PermissionSetAttribute a = new PermissionSetAttribute (SecurityAction.Assert);
 			a.Unrestricted = true;
 			Assert.IsNull (a.File, "File");
-#if NET_2_0
 			Assert.IsNull (a.Hex, "Hex");
-#endif
 			Assert.IsNull (a.Name, "Name");
 			Assert.IsNull (a.XML, "XML");
 

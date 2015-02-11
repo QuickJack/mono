@@ -36,10 +36,36 @@ class XX {
 	
 		const string s1 = null + (string)null;
 		const string s2 = (string)null + null;
-		
-		// csc does not compile this one
-		const string s3 = null + null;	
-	
+
+		string s;
+		s = (string)null + null;
+		if (s.Length != 0)
+			return 8;
+
+		s = null + (string)null;
+		if (s.Length != 0)
+			return 9;
+
+		s = (object)null + null;
+		if (s.Length != 0)
+			return 10;
+
+		s = null + (object)null;
+		if (s.Length != 0)
+			return 11;
+
+		s = (object)1 + null;
+		if (s != "1")
+			return 12;
+
+		s = (string)null + (object)null;
+		if (s.Length != 0)
+			return 13;
+
+		s = (object)null + (string)null;
+		if (s.Length != 0)
+			return 14;
+
 		System.Console.WriteLine ("test ok");
 		return 0;
 	}

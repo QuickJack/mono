@@ -28,7 +28,6 @@
 // WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 //
 
-#if NET_2_0
 
 using System;
 using System.Collections.Generic;
@@ -170,6 +169,7 @@ namespace MonoTests.System.ComponentModel
 			Assert.IsTrue (converter.CanConvertFrom (new TestTypeDescriptorContext (), typeof(string)), "#2");
 		}
 
+#if !MOBILE
 		[Test]
 		public void ConvertFrom ()
 		{
@@ -192,13 +192,6 @@ namespace MonoTests.System.ComponentModel
 			context = new TestTypeDescriptorContext ();
 			context.Container = container;
 			Assert.AreSame (component, converter.ConvertFrom (context, null, referenceName), "#3");
-		}
-
-		[Test]
-		public void CanConvertTo ()
-		{
-			ReferenceConverter converter = new ReferenceConverter (typeof(ITestInterface));
-			Assert.IsTrue (converter.CanConvertTo (new TestTypeDescriptorContext (), typeof(string)), "#1");
 		}
 
 		[Test]
@@ -228,6 +221,15 @@ namespace MonoTests.System.ComponentModel
 			Assert.AreEqual (referenceName, (string)converter.ConvertTo (context, null, component, typeof(string)), "#4");
 		}
 
+#endif
+		
+		[Test]
+		public void CanConvertTo ()
+		{
+			ReferenceConverter converter = new ReferenceConverter (typeof(ITestInterface));
+			Assert.IsTrue (converter.CanConvertTo (new TestTypeDescriptorContext (), typeof(string)), "#1");
+		}
+
 		[Test]
 		public void GetStandardValues ()
 		{
@@ -247,4 +249,3 @@ namespace MonoTests.System.ComponentModel
 		}
 	}
 }
-#endif

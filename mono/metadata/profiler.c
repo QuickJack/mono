@@ -103,9 +103,9 @@ struct _ProfilerDesc {
 
 static ProfilerDesc *prof_list = NULL;
 
-#define mono_profiler_coverage_lock() EnterCriticalSection (&profiler_coverage_mutex)
-#define mono_profiler_coverage_unlock() LeaveCriticalSection (&profiler_coverage_mutex)
-static CRITICAL_SECTION profiler_coverage_mutex;
+#define mono_profiler_coverage_lock() mono_mutex_lock (&profiler_coverage_mutex)
+#define mono_profiler_coverage_unlock() mono_mutex_unlock (&profiler_coverage_mutex)
+static mono_mutex_t profiler_coverage_mutex;
 
 /* this is directly accessible to other mono libs.
  * It is the ORed value of all the profiler's events.
@@ -128,7 +128,7 @@ mono_profiler_install (MonoProfiler *prof, MonoProfileFunc callback)
 {
 	ProfilerDesc *desc = g_new0 (ProfilerDesc, 1);
 	if (!prof_list)
-		InitializeCriticalSection (&profiler_coverage_mutex);
+		mono_mutex_init_recursive (&profiler_coverage_mutex);
 	desc->profiler = prof;
 	desc->shutdown_callback = callback;
 	desc->next = prof_list;
@@ -273,12 +273,46 @@ mono_profiler_install_monitor  (MonoProfileMonitorFunc callback)
 	prof_list->monitor_event_cb = callback;
 }
 
+static MonoProfileSamplingMode sampling_mode = MONO_PROFILER_STAT_MODE_PROCESS;
+static int64_t sampling_frequency = 1000; //1ms
+
+/**
+ * mono_profiler_set_statistical_mode:
+ * @mode the sampling mode used.
+ * @sample_frequency_is_us the sampling frequency in microseconds.
+ *
+ * Set the sampling parameters for the profiler. Sampling mode affects the effective sampling rate as in samples/s you'll witness.
+ * The default sampling mode is process mode, which only reports samples when there's activity in the process.
+ *
+ * Sampling frequency should be interpreted as a suggestion that can't always be honored due to how most kernels expose alarms.
+ *
+ * Said that, when using statistical sampling, always assume variable rate sampling as all sort of external factors can interfere.
+ */
+void
+mono_profiler_set_statistical_mode (MonoProfileSamplingMode mode, int64_t sampling_frequency_is_us)
+{
+	sampling_mode = mode;
+	sampling_frequency = sampling_frequency_is_us;
+}
+
 void 
 mono_profiler_install_statistical (MonoProfileStatFunc callback)
 {
 	if (!prof_list)
 		return;
 	prof_list->statistical_cb = callback;
+}
+
+int64_t
+mono_profiler_get_sampling_rate (void)
+{
+	return sampling_frequency;
+}
+
+MonoProfileSamplingMode
+mono_profiler_get_sampling_mode (void)
+{
+	return sampling_mode;
 }
 
 void 
@@ -902,11 +936,11 @@ mono_profiler_install_iomap (MonoProfileIomapFunc callback)
 }
 
 void
-mono_profiler_code_buffer_new (gpointer buffer, int size, MonoProfilerCodeBufferType type, void *data) {
+mono_profiler_code_buffer_new (gpointer buffer, int size, MonoProfilerCodeBufferType type, gconstpointer data) {
 	ProfilerDesc *prof;
 	for (prof = prof_list; prof; prof = prof->next) {
 		if (prof->code_buffer_new)
-			prof->code_buffer_new (prof->profiler, buffer, size, type, data);
+			prof->code_buffer_new (prof->profiler, buffer, size, type, (void*)data);
 	}
 }
 
@@ -1093,6 +1127,17 @@ load_profiler_from_directory (const char *directory, const char *libname, const 
 	return FALSE;
 }
 
+static gboolean
+load_profiler_from_mono_instalation (const char *libname, const char *desc)
+{
+	char *err = NULL;
+	MonoDl *pmodule = mono_dl_open_runtime_lib (libname, MONO_DL_LAZY, &err);
+	g_free (err);
+	if (pmodule)
+		return load_profiler (pmodule, desc, INITIALIZER_NAME);
+	return FALSE;
+}
+
 /**
  * mono_profiler_load:
  * @desc: arguments to configure the profiler
@@ -1156,6 +1201,9 @@ mono_profiler_load (const char *desc)
 #if defined (MONO_ASSEMBLIES)
 				res = load_profiler_from_directory (mono_assembly_getrootdir (), libname, desc);
 #endif
+				if (!res)
+					res = load_profiler_from_mono_instalation (libname, desc);
+
 				if (!res)
 					g_warning ("The '%s' profiler wasn't found in the main executable nor could it be loaded from '%s'.", mname, libname);
 			}

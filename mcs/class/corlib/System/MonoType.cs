@@ -6,9 +6,11 @@
 // 	Paolo Molaro (lupus@ximian.com)
 // 	Patrik Torstensson (patrik.torstensson@labs2.com)
 //	Gonzalo Paniagua (gonzalo@ximian.com)
+//  Marek Safar (marek.safar@gmail.com)
 //
 // (c) 2001-2003 Ximian, Inc.
 // Copyright (C) 2003-2005 Novell, Inc (http://www.novell.com)
+// Copyright (C) 2013 Xamarin Inc (http://www.xamarin.com)
 //
 // Permission is hereby granted, free of charge, to any person obtaining
 // a copy of this software and associated documentation files (the
@@ -44,12 +46,17 @@ namespace System
 	[StructLayout (LayoutKind.Sequential)]
 	internal class MonoTypeInfo {
 		public string full_name;
-		public ConstructorInfo default_ctor;
+		public MonoCMethod default_ctor;
 	}
 		
+	abstract class RuntimeType : TypeInfo
+	{
+
+	}
+
 	[Serializable]
 	[StructLayout (LayoutKind.Sequential)]
-	internal class MonoType : Type, ISerializable
+	sealed class MonoType : RuntimeType, ISerializable
 	{
 		[NonSerialized]
 		MonoTypeInfo type_info;
@@ -68,15 +75,24 @@ namespace System
 		[MethodImplAttribute(MethodImplOptions.InternalCall)]
 		private static extern TypeAttributes get_attributes (Type type);
 
-		internal ConstructorInfo GetDefaultConstructor () {
-			ConstructorInfo ctor = null;
+		public MonoCMethod GetDefaultConstructor ()
+		{
+			MonoCMethod ctor = null;
 			
 			if (type_info == null)
 				type_info = new MonoTypeInfo ();
-			if ((ctor = type_info.default_ctor) == null) {
-				const BindingFlags flags = BindingFlags.Public | BindingFlags.Instance | BindingFlags.NonPublic;
-	
-				ctor = type_info.default_ctor = GetConstructor (flags,  null, CallingConventions.Any, Type.EmptyTypes, null);
+			else
+				ctor = type_info.default_ctor;
+
+			if (ctor == null) {
+				var ctors = GetConstructors (BindingFlags.Public | BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
+
+				for (int i = 0; i < ctors.Length; ++i) {
+					if (ctors [i].GetParametersCount () == 0) {
+						type_info.default_ctor = ctor = (MonoCMethod) ctors [i];
+						break;
+					}
+				}
 			}
 
 			return ctor;
@@ -199,6 +215,28 @@ namespace System
 
 		[MethodImplAttribute(MethodImplOptions.InternalCall)]
 		public extern override Type[] GetInterfaces();
+
+		public override InterfaceMapping GetInterfaceMap (Type interfaceType)
+		{
+			if (!IsSystemType)
+				throw new NotSupportedException ("Derived classes must provide an implementation.");
+			if (interfaceType == null)
+				throw new ArgumentNullException ("interfaceType");
+			if (!interfaceType.IsSystemType)
+				throw new ArgumentException ("interfaceType", "Type is an user type");
+			InterfaceMapping res;
+			if (!interfaceType.IsInterface)
+				throw new ArgumentException (Locale.GetText ("Argument must be an interface."), "interfaceType");
+			if (IsInterface)
+				throw new ArgumentException ("'this' type cannot be an interface itself");
+			res.TargetType = this;
+			res.InterfaceType = interfaceType;
+			GetInterfaceMapData (this, interfaceType, out res.TargetMethods, out res.InterfaceMethods);
+			if (res.TargetMethods == null)
+				throw new ArgumentException (Locale.GetText ("Interface not found"), "interfaceType");
+
+			return res;
+		}
 		
 		public override MemberInfo[] GetMembers( BindingFlags bindingAttr)
 		{
@@ -389,22 +427,10 @@ namespace System
 				invokeAttr |= BindingFlags.Static|BindingFlags.Instance;
 
 			if (binder == null)
-				binder = Binder.DefaultBinder;
+				binder = DefaultBinder;
+
 			if ((invokeAttr & BindingFlags.CreateInstance) != 0) {
-				/* the name is ignored */
-				invokeAttr |= BindingFlags.DeclaredOnly;
-				ConstructorInfo[] ctors = GetConstructors (invokeAttr);
-				object state = null;
-				MethodBase ctor = binder.BindToMethod (invokeAttr, ctors, ref args, modifiers, culture, namedParameters, out state);
-				if (ctor == null) {
-					if (this.IsValueType && args == null)
-						return Activator.CreateInstanceInternal (this);
-					
-					throw new MissingMethodException ("Constructor on type '" + FullName + "' not found.");
-				}
-				object result = ctor.Invoke (target, invokeAttr, binder, args, culture);
-				binder.ReorderArgumentArray (ref args, state);
-				return result;
+				return Activator.CreateInstance (this, invokeAttr, binder, args, culture);
 			}
 			if (name == String.Empty && Attribute.IsDefined (this, typeof (DefaultMemberAttribute))) {
 				DefaultMemberAttribute attr = (DefaultMemberAttribute) Attribute.GetCustomAttribute (this, typeof (DefaultMemberAttribute));
@@ -418,7 +444,7 @@ namespace System
 				MethodInfo[] methods = GetMethodsByName (name, invokeAttr, ignoreCase, this);
 				object state = null;
 				if (args == null)
-					args = new object [0];
+					args = EmptyArray<object>.Value;
 				MethodBase m = binder.BindToMethod (invokeAttr, methods, ref args, modifiers, culture, namedParameters, out state);
 				if (m == null) {
 					if (methods.Length > 0)
@@ -426,7 +452,7 @@ namespace System
 					else
 						throwMissingMethodDescription = "Cannot find method " + name + ".";
 				} else {
-					ParameterInfo[] parameters = m.GetParameters();
+					ParameterInfo[] parameters = m.GetParametersInternal();
 					for (int i = 0; i < parameters.Length; ++i) {
 						if (System.Reflection.Missing.Value == args [i] && (parameters [i].Attributes & ParameterAttributes.HasDefault) != ParameterAttributes.HasDefault)
 							throw new ArgumentException ("Used Missing.Value for argument without default value", "parameters");
@@ -677,7 +703,6 @@ namespace System
 			return res;
 		}
 
-#if NET_4_0
 		public override IList<CustomAttributeData> GetCustomAttributesData () {
 			return CustomAttributeData.GetCustomAttributes (this);
 		}
@@ -689,7 +714,6 @@ namespace System
 
 			return Enum.GetValues (this);
 		}
-#endif
 
 		static MethodBase CheckMethodSecurity (MethodBase mb)
 		{
@@ -709,7 +733,6 @@ namespace System
 #endif
 		}
 
-#if NET_4_0
 		//seclevel { transparent = 0, safe-critical = 1, critical = 2}
 		[MethodImplAttribute(MethodImplOptions.InternalCall)]
 		public extern int get_core_clr_security_level ();
@@ -734,11 +757,16 @@ namespace System
 				return GetStructLayoutAttribute ();
 			}
 		}
-#endif
 
 		internal override bool IsUserType {
 			get {
 				return false;
+			}
+		}
+
+		public override bool IsConstructedGenericType {
+			get {
+				return IsGenericType && !ContainsGenericParameters;
 			}
 		}
 	}

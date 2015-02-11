@@ -104,20 +104,25 @@ namespace System.Reflection.Emit
 			if (!instantiation.IsCreated)
 				throw new NotSupportedException ();
 
+			return GetParametersInternal ();
+		}
+
+		internal override ParameterInfo[] GetParametersInternal ()
+		{
 			ParameterInfo [] res;
 			if (cb is ConstructorBuilder) {
 				ConstructorBuilder cbuilder = (ConstructorBuilder)cb;
 				res = new ParameterInfo [cbuilder.parameters.Length];
 				for (int i = 0; i < cbuilder.parameters.Length; i++) {
 					Type type = instantiation.InflateType (cbuilder.parameters [i]);
-					res [i] = new ParameterInfo (cbuilder.pinfo == null ? null : cbuilder.pinfo [i], type, this, i + 1);
+					res [i] = ParameterInfo.New (cbuilder.pinfo == null ? null : cbuilder.pinfo [i], type, this, i + 1);
 				}
 			} else {
 				ParameterInfo[] parms = cb.GetParameters ();
 				res = new ParameterInfo [parms.Length];
 				for (int i = 0; i < parms.Length; i++) {
 					Type type = instantiation.InflateType (parms [i].ParameterType);
-					res [i] = new ParameterInfo (parms [i], type, this, i + 1);
+					res [i] = ParameterInfo.New (parms [i], type, this, i + 1);
 				}
 			}
 			return res;
@@ -129,9 +134,9 @@ namespace System.Reflection.Emit
 			}
 		}
 
-		internal override int GetParameterCount ()
+		internal override int GetParametersCount ()
 		{
-			return cb.GetParameterCount ();
+			return cb.GetParametersCount ();
 		}
 
 		public override Object Invoke (Object obj, BindingFlags invokeAttr, Binder binder, Object[] parameters, CultureInfo culture)

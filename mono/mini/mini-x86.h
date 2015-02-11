@@ -48,7 +48,7 @@ struct sigcontext {
 #endif /* __HAIKU__ */
 
 #if defined( __linux__) || defined(__sun) || defined(__APPLE__) || defined(__NetBSD__) || \
-       defined(__FreeBSD__) || defined(__OpenBSD__)
+       defined(__FreeBSD__) || defined(__FreeBSD_kernel__) || defined(__OpenBSD__)
 #define MONO_ARCH_USE_SIGACTION
 #endif
 
@@ -134,9 +134,6 @@ struct sigcontext {
  * reproduceable results for benchmarks */
 #define MONO_ARCH_CODE_ALIGNMENT 32
 
-#define MONO_ARCH_RETREG1 X86_EAX
-#define MONO_ARCH_RETREG2 X86_EDX
-
 /*This is the max size of the locals area of a given frame. I think 1MB is a safe default for now*/
 #define MONO_ARCH_MAX_FRAME_SIZE 0x100000
 
@@ -201,33 +198,32 @@ typedef struct {
 /* Enables OP_LSHL, OP_LSHL_IMM, OP_LSHR, OP_LSHR_IMM, OP_LSHR_UN, OP_LSHR_UN_IMM */
 #define MONO_ARCH_NO_EMULATE_LONG_SHIFT_OPS
 
-#define MONO_ARCH_BIGMUL_INTRINS 1
 #define MONO_ARCH_NEED_DIV_CHECK 1
 #define MONO_ARCH_HAVE_IS_INT_OVERFLOW 1
 #define MONO_ARCH_HAVE_INVALIDATE_METHOD 1
 #define MONO_ARCH_NEED_GOT_VAR 1
+#ifndef HOST_WIN32
+/* X86 uses jit_tls->lmf (See emit_push_lmf ()) */
 #define MONO_ARCH_ENABLE_MONO_LMF_VAR 1
+#endif
 #define MONO_ARCH_HAVE_CREATE_DELEGATE_TRAMPOLINE 1
-#define MONO_ARCH_HAVE_ATOMIC_ADD 1
-#define MONO_ARCH_HAVE_ATOMIC_EXCHANGE 1
-#define MONO_ARCH_HAVE_ATOMIC_CAS 1
-#define MONO_ARCH_HAVE_IMT 1
 #define MONO_ARCH_HAVE_TLS_GET (mono_x86_have_tls_get ())
 #define MONO_ARCH_IMT_REG X86_EDX
 #define MONO_ARCH_VTABLE_REG X86_EDX
 #define MONO_ARCH_RGCTX_REG MONO_ARCH_IMT_REG
 #define MONO_ARCH_HAVE_GENERALIZED_IMT_THUNK 1
 #define MONO_ARCH_HAVE_LIVERANGE_OPS 1
-#define MONO_ARCH_HAVE_XP_UNWIND 1
 #define MONO_ARCH_HAVE_SIGCTX_TO_MONOCTX 1
 #if defined(__linux__) || defined (__APPLE__)
 #define MONO_ARCH_MONITOR_OBJECT_REG X86_EAX
+#define MONO_ARCH_MONITOR_LOCK_TAKEN_REG X86_EDX
 #endif
 #if !defined(__native_client_codegen__)
 #define MONO_ARCH_HAVE_FULL_AOT_TRAMPOLINES 1
 #endif
 #define MONO_ARCH_GOT_REG X86_EBX
 #define MONO_ARCH_HAVE_GET_TRAMPOLINES 1
+#define MONO_ARCH_HAVE_GENERAL_RGCTX_LAZY_FETCH_TRAMPOLINE 1
 
 #define MONO_ARCH_HAVE_CMOV_OPS 1
 
@@ -241,12 +237,9 @@ typedef struct {
 #define MONO_ARCH_AOT_SUPPORTED 1
 #endif
 
-#define MONO_ARCH_ENABLE_MONITOR_IL_FASTPATH 1
-
 #define MONO_ARCH_GSHARED_SUPPORTED 1
 #define MONO_ARCH_HAVE_LLVM_IMT_TRAMPOLINE 1
 #define MONO_ARCH_LLVM_SUPPORTED 1
-#define MONO_ARCH_THIS_AS_FIRST_ARG 1
 
 #if defined(MONO_ARCH_USE_SIGACTION) || defined(TARGET_WIN32)
 #define MONO_ARCH_SOFT_DEBUG_SUPPORTED 1
@@ -261,11 +254,10 @@ typedef struct {
 #define MONO_ARCH_HAVE_CONTEXT_SET_INT_REG 1
 #define MONO_ARCH_HAVE_SETUP_ASYNC_CALLBACK 1
 #define MONO_ARCH_GSHAREDVT_SUPPORTED 1
-
-gboolean
-mono_x86_tail_call_supported (MonoMethodSignature *caller_sig, MonoMethodSignature *callee_sig) MONO_INTERNAL;
-
-#define MONO_ARCH_USE_OP_TAIL_CALL(caller_sig, callee_sig) mono_x86_tail_call_supported (caller_sig, callee_sig)
+#define MONO_ARCH_HAVE_OP_TAIL_CALL 1
+#define MONO_ARCH_HAVE_TRANSLATE_TLS_OFFSET 1
+#define MONO_ARCH_HAVE_TLS_GET_REG 1
+#define MONO_ARCH_HAVE_DUMMY_INIT 1
 
 /* Used for optimization, not complete */
 #define MONO_ARCH_IS_OP_MEMBASE(opcode) ((opcode) == OP_X86_PUSH_MEMBASE)
@@ -297,7 +289,8 @@ typedef enum {
 	GSHAREDVT_RET_I1 = 5,
 	GSHAREDVT_RET_U1 = 6,
 	GSHAREDVT_RET_I2 = 7,
-	GSHAREDVT_RET_U2 = 8
+	GSHAREDVT_RET_U2 = 8,
+	GSHAREDVT_RET_IREG = 9
 } GSharedVtRetMarshal;
 
 typedef struct {
@@ -322,6 +315,9 @@ typedef struct {
 guint8*
 mono_x86_emit_tls_get (guint8* code, int dreg, int tls_offset) MONO_INTERNAL;
 
+guint8*
+mono_x86_emit_tls_get_reg (guint8* code, int dreg, int offset_reg) MONO_INTERNAL;
+
 guint32
 mono_x86_get_this_arg_offset (MonoGenericSharingContext *gsctx, MonoMethodSignature *sig) MONO_INTERNAL;
 
@@ -339,8 +335,8 @@ mono_x86_throw_corlib_exception (mgreg_t *regs, guint32 ex_token_index,
 void 
 mono_x86_patch (unsigned char* code, gpointer target) MONO_INTERNAL;
 
-void
-mono_x86_start_gsharedvt_call (GSharedVtCallInfo *info, gpointer *caller, gpointer *callee) MONO_INTERNAL;
+gpointer
+mono_x86_start_gsharedvt_call (GSharedVtCallInfo *info, gpointer *caller, gpointer *callee, gpointer mrgctx_reg) MONO_INTERNAL;
 
 #endif /* __MONO_MINI_X86_H__ */  
 
